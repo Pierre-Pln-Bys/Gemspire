@@ -4,6 +4,34 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.0.0] - 2026-11-20
+
+### Ajouté
+- Nouvelle interface graphique en **raylib**, livrée en exécutable unique
+  pour Windows (`splendor-windows.exe`) et Linux (`splendor-linux`), sans
+  rien à installer.
+- Écrans d'accueil et de nouvelle partie dessinés dans le jeu (nom, couleur
+  et type de chaque joueur).
+- Journal de la partie (`J`), infobulles « il manque ... » au survol des
+  cartes et des nobles, raccourcis clavier (1 à 5, Entrée, R, Échap,
+  Ctrl+S).
+- Écran de passage entre deux joueurs humains en partie classique.
+- Symbole propre à chaque gemme (daltonisme).
+- Animations : jetons qui glissent, cartes qui partent vers le joueur, carte
+  qui se retourne en arrivant sur le plateau.
+- Police DejaVu Sans intégrée (accents) ; bouton « Menu » qui sauvegarde la
+  partie en cours.
+
+### Modifié
+- `enum class Color` devient `enum class Gem` (raylib a déjà un type
+  `Color`).
+- Releases : `splendor-windows.exe` / `splendor-linux` sont maintenant les
+  versions graphiques ; les versions console s'appellent
+  `splendor-console-*`.
+
+### Supprimé
+- Interface GTK 3 (remplacée par raylib) et dépendance à GTK.
+
 ## [2.4.0] - 2026-11-20
 
 ### Ajouté

@@ -1,8 +1,8 @@
 # Roadmap vers la v3
 
-Point de départ : **v2.1.0** (20/11/2026). Le jeu est complet et jouable en
-console et en fenêtre (GTK), en mode rapide et classique, à plusieurs sur le
-même écran. Les exécutables sont publiés automatiquement.
+Point de départ : v2.1.0 (20/11/2026). **Fait depuis** : v2.2 (fondations),
+v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome).
+**Prochaine étape** : v3.1 (serveur, comptes, parties en ligne).
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -67,13 +67,13 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v3.0 — Interface portable (raylib) — version majeure
 
-- [ ] Bibliothèques dans `third_party/` (raylib), build Linux et Windows.
-- [ ] Réécriture de l'interface en raylib : même plateau, même placement
+- [x] Bibliothèques dans `third_party/` (raylib), build Linux et Windows.
+- [x] Réécriture de l'interface en raylib : même plateau, même placement
   (`*_rect`), écrans d'accueil et de nouvelle partie dessinés dans le jeu.
-- [ ] Confort : historique des actions, survol (« il manque 2 Rouge »),
+- [x] Confort : historique des actions, survol (« il manque 2 Rouge »),
   raccourcis clavier, écran de passage entre joueurs, symbole par gemme
   (daltonisme), petites animations.
-- [ ] Release : `splendor-windows.exe` et `splendor-linux` graphiques et
+- [x] Release : `splendor-windows.exe` et `splendor-linux` graphiques et
   autonomes, plus les versions console. GTK est retiré.
 
 ## v3.1 — Serveur, comptes et parties en ligne

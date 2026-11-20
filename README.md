@@ -10,30 +10,38 @@ avec deux modes :
 
 ## Télécharger
 
-Chaque version majeure est publiée sur la page
+Chaque version est publiée sur la page
 [Releases](https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases), avec
-les exécutables à télécharger directement (pas de zip) :
+les exécutables à télécharger directement (pas de zip, rien à installer) :
 
-| Fichier               | Système | Remarque                                      |
-|-----------------------|---------|-----------------------------------------------|
-| `splendor-windows.exe`| Windows | version console, double-cliquer pour jouer   |
-| `splendor-linux`      | Linux   | version console, aucune dépendance            |
-| `splendor-gui-linux`  | Linux   | version graphique, nécessite GTK 3 (présent sur la plupart des bureaux) |
+| Fichier | Système | Contenu |
+|---|---|---|
+| `splendor-windows.exe` | Windows | **jeu graphique**, double-cliquer pour jouer |
+| `splendor-linux` | Linux x86_64 | **jeu graphique** |
+| `splendor-console-windows.exe` | Windows | version console |
+| `splendor-console-linux` | Linux x86_64 | version console |
 
 Sous Linux, rendre le fichier exécutable une fois :
 
 ```bash
-chmod +x splendor-gui-linux
+chmod +x splendor-linux
 ```
 
 ## Compilation
 
+raylib (bibliothèque graphique) est incluse dans `third_party/` et compilée
+automatiquement au premier `make`. Sous Linux, il faut les en-têtes X11 et
+OpenGL :
+
 ```bash
-sudo apt install libgtk-3-dev   # uniquement pour la version graphique
-make                            # construit ./splendor et ./splendor-gui
-make splendor                   # version console seule
-make test                       # lance les tests de la logique
-make clean
+sudo apt install build-essential libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+```
+
+```bash
+make            # construit ./splendor-gui (fenêtre) et ./splendor (console)
+make splendor   # version console seule (aucune dépendance)
+make test       # lance les tests de la logique
+make clean      # make clean-all supprime aussi la raylib compilée
 ```
 
 ## Version graphique
@@ -42,12 +50,22 @@ make clean
 ./splendor-gui
 ```
 
-Tout se joue à la souris : cliquer des jetons de la réserve puis « Prendre »,
-ou une carte (ou une pioche) puis « Acheter » / « Réserver ». Contour doré =
-carte achetable, contour blanc = sélection. Chaque joueur choisit sa couleur à
-la création de la partie : son panneau en est entouré pendant son tour, et ses
-cartes réservées en prennent le bord. Pour défausser, cliquer ses propres jetons. Échap annule la
-sélection.
+- **Accueil** : nouvelle partie, reprise de la sauvegarde, quitter.
+- **Nouvelle partie** : mode, nombre de joueurs, puis pour chacun son nom, sa
+  couleur (Violet, Orange, Turquoise, Rose, Marron) et qui le joue (humain,
+  ordinateur facile ou moyen).
+- **Plateau** : cliquer des jetons de la réserve puis « Prendre », ou une
+  carte (ou une pioche) puis « Acheter » / « Réserver ». Contour doré = carte
+  achetable, contour blanc = sélection. Le survol d'une carte indique ce
+  qu'il manque. Pour défausser, cliquer ses propres jetons.
+- **Clavier** : `1` à `5` choisissent les jetons, Entrée valide, `R` réserve,
+  Échap annule, `J` ouvre le journal, Ctrl+S sauvegarde.
+- **Sauvegarde** : bouton « Sauvegarder » (fichier `partie.splendor`) ;
+  « Menu » sauvegarde aussi la partie en cours avant de revenir à l'accueil.
+- En partie classique avec plusieurs humains, un écran de passage cache les
+  cartes réservées entre deux joueurs.
+- Chaque gemme a son symbole (cercle, losange, triangle, carré, hexagone, étoile
+  pour l'or) en plus de sa couleur.
 
 ## Version console
 
@@ -59,12 +77,11 @@ sélection.
 ```
 
 Sauvegarde : `s` (ou `s fichier.splendor`) pendant la partie, puis
-`./splendor --charger partie.splendor` pour la reprendre. Dans la fenêtre :
-boutons « Sauvegarder » / « Ouvrir… » de la barre de titre (Ctrl+S / Ctrl+O).
+`./splendor --charger partie.splendor` pour la reprendre (même format que la
+version graphique).
 
 Pour chaque joueur, on choisit aussi qui le joue : humain (Entrée),
-ordinateur facile (`f`) ou ordinateur moyen (`m`). Dans la fenêtre, c'est la
-colonne « Joué par » de la fenêtre de nouvelle partie.
+ordinateur facile (`f`) ou ordinateur moyen (`m`).
 
 Le plateau tient dans un terminal de 80 colonnes. Variable `NO_COLOR=1` pour
 désactiver les couleurs.
@@ -109,17 +126,18 @@ Les cartes achetables par le joueur courant sont marquées d'une `*`.
 2. Créer le tag et le pousser :
 
 ```bash
-git tag -a v2.0.0 -m "Version 2.0.0"
+git tag -a v4.0.0 -m "Version 4.0.0"
 ```
 
 ```bash
-git push origin main v2.0.0
+git push origin main v4.0.0
 ```
 
-Un tag majeur (`vX.0.0`) lance le workflow qui publie les exécutables.
+Un tag majeur (`vX.0.0`) lance le workflow qui publie les exécutables. Pour
+une version mineure : `gh workflow run release.yml -f tag=vX.Y.Z`.
 
 ## Suite du projet
 
-Voir [ROADMAP.md](ROADMAP.md) pour les étapes prévues jusqu'à la v3.
+Voir [ROADMAP.md](ROADMAP.md) pour la suite (v3.1 en ligne, v3.2 Discord, v4).
 
 Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki).

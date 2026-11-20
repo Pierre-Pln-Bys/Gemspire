@@ -41,7 +41,7 @@ src/gui_font.o: CFLAGS += $(GUI_CFLAGS)
 
 $(RAYLIB_LIB):
 	mkdir -p build/raylib
-	$(MAKE) -C $(RAYLIB_DIR) PLATFORM=PLATFORM_DESKTOP RAYLIB_RELEASE_PATH=$(CURDIR)/build/raylib CFLAGS= CXXFLAGS=
+	$(MAKE) -C $(RAYLIB_DIR) PLATFORM=PLATFORM_DESKTOP RAYLIB_RELEASE_PATH=$(CURDIR)/build/raylib
 
 # Régénère les polices intégrées (src/font_*.h) à partir des fichiers .ttf
 font: $(RAYLIB_LIB)
