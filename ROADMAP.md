@@ -97,16 +97,19 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
   « Rejoindre » depuis le profil Discord (secret de partie Rich Presence).
 - [ ] Partage dans un serveur Discord : un webhook configuré par le serveur
   publie « Alice ouvre une partie classique (2/4) — code ABCD ».
-- [ ] Déploiement du serveur (hébergeur à choisir) et documentation.
+- [ ] Bot Discord « Crée ta partie » : rejoindre ce salon vocal crée un salon
+  temporaire ; si le compte lié a le jeu ouvert, le jeu propose de créer la
+  partie (mode, places) ; le salon est limité au nombre de places et supprimé
+  quand il est vide.
+- [ ] Déploiement du serveur sur le Raspberry Pi du projet (HTTPS, démarrage
+  automatique) et documentation.
 
 ## v4 — Communauté (idées validées, à détailler)
 
 - [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
   mise en sourdine d'un joueur, réactions rapides.
-- [ ] Bot Discord « Crée ta partie » : rejoindre ce salon vocal crée un salon
-  temporaire ; si le compte lié a le jeu ouvert, le jeu propose de créer la
-  partie (mode, places) ; le salon est limité au nombre de places et supprimé
-  quand il est vide.
+- [ ] Audit de sécurité complet (tests d'intrusion autorisés) du serveur, du
+  Raspberry Pi et de l'application, puis corrections.
 - [ ] Commandes du bot : `/classement`, `/stats @joueur`, `/defi @joueur`.
 - [ ] Mode spectateur et rediffusion des parties (historique d'événements).
 - [ ] Saisons classées (Elo remis partiellement à zéro, badges).
@@ -133,4 +136,5 @@ place :
   qui recevra les invitations.
 - **Google** : créer un identifiant OAuth « Application de bureau » dans
   Google Cloud Console.
-- **Hébergement** du serveur (v3.2) : choisir l'hébergeur et créer le compte.
+- **Hébergement** du serveur (v3.2) : le Raspberry Pi du projet ; donner un
+  accès SSH par clé et un nom de domaine (ou tunnel) pour le HTTPS.
