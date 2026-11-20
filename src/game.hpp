@@ -2,6 +2,7 @@
 #define SPLENDOR_GAME_HPP
 
 #include <array>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -135,6 +136,9 @@ private:
 
     // Les tests peuvent préparer des situations précises
     friend struct GameTester;
+    // La sauvegarde lit et écrit tout l'état (voir save.hpp)
+    friend std::string save_game(const Game& game);
+    friend std::string load_game(const std::string& text, std::unique_ptr<Game>& game);
 
     Player& current();
     bool valid_position(int level, int position) const;

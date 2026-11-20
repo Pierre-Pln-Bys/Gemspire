@@ -58,6 +58,10 @@ sélection.
 ./splendor --version        # affiche la version
 ```
 
+Sauvegarde : `s` (ou `s fichier.splendor`) pendant la partie, puis
+`./splendor --charger partie.splendor` pour la reprendre. Dans la fenêtre :
+boutons « Sauvegarder » / « Ouvrir… » de la barre de titre (Ctrl+S / Ctrl+O).
+
 Pour chaque joueur, on choisit aussi qui le joue : humain (Entrée),
 ordinateur facile (`f`) ou ordinateur moyen (`m`). Dans la fenêtre, c'est la
 colonne « Joué par » de la fenêtre de nouvelle partie.

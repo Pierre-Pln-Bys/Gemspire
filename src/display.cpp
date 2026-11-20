@@ -450,7 +450,8 @@ void show_help(Mode mode)
                   << "  r 2 4     réserver la carte 4 du niveau 2 (+1 or s'il en reste)\n"
                   << "  r 3 p     réserver la carte du dessus de la pioche du niveau 3\n";
     }
-    std::cout << "  ?         afficher cette aide\n"
+    std::cout << "  s         sauvegarder la partie (s fichier.splendor pour choisir le nom)\n"
+              << "  ?         afficher cette aide\n"
               << "  q         quitter la partie\n"
               << "Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir";
     if (mode == Mode::Classic) {

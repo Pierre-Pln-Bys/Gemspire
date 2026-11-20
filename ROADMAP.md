@@ -60,10 +60,10 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v2.4 — Sauvegarde
 
-- [ ] Format texte `.splendor` (mode, joueurs, pioches, plateau, mains).
-- [ ] Console : `s` pour sauvegarder, `--charger fichier`. Fenêtre :
+- [x] Format texte `.splendor` (mode, joueurs, pioches, plateau, mains).
+- [x] Console : `s` pour sauvegarder, `--charger fichier`. Fenêtre :
   Sauvegarder / Ouvrir.
-- [ ] Test : sauvegarder puis recharger donne la même partie.
+- [x] Test : sauvegarder puis recharger donne la même partie.
 
 ## v3.0 — Interface portable (raylib) — version majeure
 

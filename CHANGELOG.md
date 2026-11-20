@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [2.4.0] - 2026-11-20
+
+### Ajouté
+- Sauvegarde et reprise d'une partie (fichiers texte `.splendor`) : commande
+  `s` et option `--charger` dans la console, boutons « Sauvegarder » /
+  « Ouvrir… » (Ctrl+S / Ctrl+O) dans la fenêtre.
+- Tests : une partie rechargée se termine exactement comme l'originale ;
+  les fichiers invalides sont refusés proprement.
+
 ## [2.3.0] - 2026-11-20
 
 ### Ajouté

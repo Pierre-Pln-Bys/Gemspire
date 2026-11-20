@@ -12,6 +12,7 @@
 #include "display.hpp"
 #include "gui.hpp"
 #include "rules.hpp"
+#include "save.hpp"
 #include "version.hpp"
 
 // Widgets de la boîte de dialogue « Nouvelle partie »
@@ -384,9 +385,78 @@ static gboolean on_click(GtkWidget* area, GdkEventButton* event, gpointer data)
     return TRUE;
 }
 
+// ---------------------------------------------------------------- Sauvegarde
+
+static void on_save_clicked(GtkWidget* widget, gpointer data)
+{
+    App& app = *static_cast<App*>(data);
+    if (!app.game) {
+        return;
+    }
+    GtkWidget* dialog = gtk_file_chooser_dialog_new("Sauvegarder la partie",
+                                                    GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+                                                    GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                    "_Annuler", GTK_RESPONSE_CANCEL,
+                                                    "_Sauvegarder", GTK_RESPONSE_ACCEPT, nullptr);
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), "partie.splendor");
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char* path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        std::string error = save_game_to_file(*app.game, path);
+        if (error.empty()) {
+            set_message(app, std::string("Partie sauvegardée dans ") + path + ".", false);
+        } else {
+            set_message(app, error, true);
+        }
+        g_free(path);
+    }
+    gtk_widget_destroy(dialog);
+    gtk_widget_queue_draw(app.area);
+}
+
+static void on_open_clicked(GtkWidget* widget, gpointer data)
+{
+    App& app = *static_cast<App*>(data);
+    GtkWidget* dialog = gtk_file_chooser_dialog_new("Ouvrir une partie",
+                                                    GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+                                                    GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                    "_Annuler", GTK_RESPONSE_CANCEL,
+                                                    "_Ouvrir", GTK_RESPONSE_ACCEPT, nullptr);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char* path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        std::unique_ptr<Game> loaded;
+        std::string error = load_game_from_file(path, loaded);
+        if (error.empty()) {
+            app.game = std::move(loaded);
+            // Les couleurs des joueurs ne sont pas dans la sauvegarde : couleurs par défaut
+            app.player_colors.clear();
+            for (int i = 0; i < static_cast<int>(app.game->players().size()); i++) {
+                app.player_colors.push_back(i);
+            }
+            app.shown_events = 0;
+            clear_selection(app);
+            set_message(app, std::string("Partie chargée. À ") + app.game->current_player().name + " de jouer.", false);
+            schedule_ai(app);
+        } else {
+            set_message(app, error, true);
+        }
+        g_free(path);
+    }
+    gtk_widget_destroy(dialog);
+    gtk_widget_queue_draw(app.area);
+}
+
 static gboolean on_key(GtkWidget* window, GdkEventKey* event, gpointer data)
 {
     App& app = *static_cast<App*>(data);
+    if ((event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_s) {
+        on_save_clicked(window, data);
+        return TRUE;
+    }
+    if ((event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_o) {
+        on_open_clicked(window, data);
+        return TRUE;
+    }
     if (event->keyval == GDK_KEY_Escape && app.game && app.game->step() == TurnStep::Action) {
         clear_selection(app);
         gtk_widget_queue_draw(window);
@@ -415,6 +485,20 @@ int main(int argc, char* argv[])
     std::string title = std::string("Splendor ") + SPLENDOR_VERSION;
     gtk_window_set_title(GTK_WINDOW(window), title.c_str());
     gtk_window_set_default_size(GTK_WINDOW(window), 1280, 800);
+
+    // Barre de titre avec les boutons de sauvegarde
+    GtkWidget* bar = gtk_header_bar_new();
+    gtk_header_bar_set_title(GTK_HEADER_BAR(bar), title.c_str());
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(bar), TRUE);
+    GtkWidget* open_button = gtk_button_new_with_label("Ouvrir…");
+    GtkWidget* save_button = gtk_button_new_with_label("Sauvegarder");
+    gtk_widget_set_tooltip_text(open_button, "Ouvrir une partie sauvegardée (Ctrl+O)");
+    gtk_widget_set_tooltip_text(save_button, "Sauvegarder la partie (Ctrl+S)");
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(bar), open_button);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(bar), save_button);
+    gtk_window_set_titlebar(GTK_WINDOW(window), bar);
+    g_signal_connect(open_button, "clicked", G_CALLBACK(on_open_clicked), &app);
+    g_signal_connect(save_button, "clicked", G_CALLBACK(on_save_clicked), &app);
 
     GtkWidget* area = gtk_drawing_area_new();
     gtk_widget_add_events(area, GDK_BUTTON_PRESS_MASK);

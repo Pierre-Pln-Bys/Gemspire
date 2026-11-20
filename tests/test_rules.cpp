@@ -1,5 +1,6 @@
 // Tests de la logique du jeu (rules et game). Lancer avec : make test
 #include <cassert>
+#include <cstdio>
 #include <iostream>
 #include <random>
 
@@ -7,6 +8,7 @@
 #include "../src/data.hpp"
 #include "../src/game.hpp"
 #include "../src/rules.hpp"
+#include "../src/save.hpp"
 
 static void test_data()
 {
@@ -342,6 +344,52 @@ static void test_ai_tournament()
     assert(medium_wins > easy_wins * 3 / 2);
 }
 
+// Sauvegarde : aller-retour identique, et une partie rechargée se termine
+// exactement comme l'originale
+static void test_save()
+{
+    for (int g = 0; g < 50; g++) {
+        Game game({"Alice Martin", "Bob", "Chloé"}, 500 + g, g % 2 ? Mode::Classic : Mode::Quick);
+        for (int i = 0; i < 3; i++) {
+            game.set_controller(i, i % 2 ? Controller::AiMedium : Controller::AiEasy);
+        }
+        // On avance un peu la partie, puis on sauvegarde
+        for (int step = 0; step < 10 + g && !game.is_over(); step++) {
+            assert(ai_play(game).empty());
+        }
+        std::string text = save_game(game);
+        std::unique_ptr<Game> copy;
+        assert(load_game(text, copy).empty());
+        assert(save_game(*copy) == text);
+        assert(copy->players()[0].name == "Alice Martin");
+
+        // Les deux parties continuent avec les mêmes coups
+        while (!game.is_over()) {
+            assert(ai_play(game).empty());
+            assert(ai_play(*copy).empty());
+        }
+        assert(copy->is_over());
+        assert(save_game(*copy) == save_game(game));
+    }
+
+    // Fichiers invalides : un message d'erreur, pas de plantage
+    std::unique_ptr<Game> broken;
+    assert(!load_game("", broken).empty());
+    assert(!load_game("SPLENDOR 2\n", broken).empty());
+    Game game({"A", "B"}, 1, Mode::Quick);
+    std::string text = save_game(game);
+    assert(!load_game(text.substr(0, text.size() / 2), broken).empty());
+    assert(!broken);
+
+    // Fichier sur le disque
+    assert(save_game_to_file(game, "tests/test.splendor").empty());
+    std::unique_ptr<Game> from_file;
+    assert(load_game_from_file("tests/test.splendor", from_file).empty());
+    assert(save_game(*from_file) == text);
+    std::remove("tests/test.splendor");
+    assert(!load_game_from_file("tests/absent.splendor", from_file).empty());
+}
+
 int main()
 {
     test_data();
@@ -353,6 +401,7 @@ int main()
     test_turn_flow();
     test_random_games();
     test_ai_tournament();
+    test_save();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

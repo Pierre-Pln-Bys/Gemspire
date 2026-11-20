@@ -5,3 +5,4 @@ splendor
 tests/test_rules
 splendor-gui
 *.exe
+*.splendor

@@ -10,6 +10,7 @@
 #include "ai.hpp"
 #include "display.hpp"
 #include "game.hpp"
+#include "save.hpp"
 #include "version.hpp"
 
 // Lit une ligne sur l'entrée standard après avoir affiché `prompt`.
@@ -125,6 +126,15 @@ static bool play_action(Game& game)
         } else if (command == "?" || command.empty()) {
             show_help(game.mode());
             continue;
+        } else if (command == "s") {
+            std::string path = "partie.splendor";
+            input >> path;
+            error = save_game_to_file(game, path);
+            if (error.empty()) {
+                std::cout << "Partie sauvegardée dans " << path
+                          << " (reprendre avec --charger " << path << ").\n";
+                continue;
+            }
         } else if (command == "j") {
             Resources wanted;
             error = parse_colors(input, wanted);
@@ -222,10 +232,62 @@ static void wait_before_exit()
 static void print_usage(const char* program)
 {
     std::cerr << "Usage : " << program << " [--rapide | --classique] [graine]\n"
+              << "       " << program << " --charger fichier.splendor\n"
               << "       " << program << " --version\n"
               << "  --rapide     partie rapide : sans or ni réservation\n"
               << "  --classique  règles classiques : avec or et réservation\n"
               << "  graine       nombre pour rejouer la même partie\n";
+}
+
+// Nouvelle partie : demande le mode (si besoin), les joueurs et qui les joue.
+// Retourne false si le joueur quitte.
+static bool create_game(std::unique_ptr<Game>& game, unsigned seed, bool mode_chosen, Mode mode)
+{
+    if (!mode_chosen) {
+        std::cout << "  1) Partie rapide   (sans or ni réservation)\n"
+                  << "  2) Partie classique (avec or et réservation)\n";
+        int choice = 0;
+        if (!ask_number("Mode de jeu (1-2) : ", 1, 2, choice)) {
+            return false;
+        }
+        mode = choice == 2 ? Mode::Classic : Mode::Quick;
+    }
+
+    int player_count = 0;
+    if (!ask_number("Nombre de joueurs (2-4) : ", 2, 4, player_count)) {
+        return false;
+    }
+    std::vector<std::string> names;
+    std::vector<Controller> controllers;
+    for (int i = 1; i <= player_count; i++) {
+        std::string name;
+        if (!read_line("Nom du joueur " + std::to_string(i) + " : ", name)) {
+            return false;
+        }
+        if (name.empty()) {
+            name = "Joueur " + std::to_string(i);
+        }
+        names.push_back(name);
+
+        // Humain par défaut (Entrée), sinon ordinateur facile ou moyen
+        std::string answer;
+        if (!read_line("  Joué par : Entrée = humain, f = ordinateur facile, m = ordinateur moyen : ", answer)) {
+            return false;
+        }
+        if (answer == "f") {
+            controllers.push_back(Controller::AiEasy);
+        } else if (answer == "m") {
+            controllers.push_back(Controller::AiMedium);
+        } else {
+            controllers.push_back(Controller::Human);
+        }
+    }
+
+    game.reset(new Game(names, seed, mode));
+    for (int i = 0; i < player_count; i++) {
+        game->set_controller(i, controllers[i]);
+    }
+    return true;
 }
 
 int main(int argc, char* argv[])
@@ -234,6 +296,7 @@ int main(int argc, char* argv[])
     unsigned seed = std::random_device{}();
     bool mode_chosen = false;
     Mode mode = Mode::Quick;
+    std::string load_path;
 
     for (int i = 1; i < argc; i++) {
         std::string argument = argv[i];
@@ -241,6 +304,8 @@ int main(int argc, char* argv[])
         if (argument == "--version") {
             std::cout << "splendor " << SPLENDOR_VERSION << "\n";
             return 0;
+        } else if (argument == "--charger" && i + 1 < argc) {
+            load_path = argv[++i];
         } else if (argument == "--rapide") {
             mode = Mode::Quick;
             mode_chosen = true;
@@ -254,51 +319,19 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "=== SPLENDOR " << SPLENDOR_VERSION << " ===\n";
-    if (!mode_chosen) {
-        std::cout << "  1) Partie rapide   (sans or ni réservation)\n"
-                  << "  2) Partie classique (avec or et réservation)\n";
-        int choice = 0;
-        if (!ask_number("Mode de jeu (1-2) : ", 1, 2, choice)) {
-            return 0;
+    std::unique_ptr<Game> game_holder;
+    if (!load_path.empty()) {
+        std::string error = load_game_from_file(load_path, game_holder);
+        if (!error.empty()) {
+            std::cerr << error << "\n";
+            return 1;
         }
-        mode = choice == 2 ? Mode::Classic : Mode::Quick;
-    }
-
-    int player_count = 0;
-    if (!ask_number("Nombre de joueurs (2-4) : ", 2, 4, player_count)) {
+        std::cout << "Partie chargée depuis " << load_path << ".\n";
+    } else if (!create_game(game_holder, seed, mode_chosen, mode)) {
         return 0;
     }
-    std::vector<std::string> names;
-    std::vector<Controller> controllers;
-    for (int i = 1; i <= player_count; i++) {
-        std::string name;
-        if (!read_line("Nom du joueur " + std::to_string(i) + " : ", name)) {
-            return 0;
-        }
-        if (name.empty()) {
-            name = "Joueur " + std::to_string(i);
-        }
-        names.push_back(name);
-
-        // Humain par défaut (Entrée), sinon ordinateur facile ou moyen
-        std::string answer;
-        if (!read_line("  Joué par : Entrée = humain, f = ordinateur facile, m = ordinateur moyen : ", answer)) {
-            return 0;
-        }
-        if (answer == "f") {
-            controllers.push_back(Controller::AiEasy);
-        } else if (answer == "m") {
-            controllers.push_back(Controller::AiMedium);
-        } else {
-            controllers.push_back(Controller::Human);
-        }
-    }
-
-    Game game(names, seed, mode);
-    for (int i = 0; i < player_count; i++) {
-        game.set_controller(i, controllers[i]);
-    }
-    show_help(mode);
+    Game& game = *game_holder;
+    show_help(game.mode());
 
     int shown_events = 0;
     while (!game.is_over()) {
