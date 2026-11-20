@@ -3,3 +3,5 @@
 CLAUDE.md
 splendor
 tests/test_rules
+splendor-gui
+*.exe

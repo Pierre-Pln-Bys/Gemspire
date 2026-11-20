@@ -1,4 +1,7 @@
 #include <iostream>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <random>
 #include <sstream>
 #include <string>
@@ -187,6 +190,31 @@ static bool noble_visit(Game& game)
     return true;
 }
 
+// Sous Windows : console en UTF-8 et codes couleur ANSI activés
+static void prepare_console()
+{
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    if (GetConsoleMode(output, &mode)) {
+        SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+#endif
+}
+
+// Sous Windows, la console se ferme dès la fin du programme quand on l'a
+// lancé par double-clic : on attend Entrée pour laisser lire le résultat.
+static void wait_before_exit()
+{
+#ifdef _WIN32
+    std::string line;
+    std::cout << "\nAppuyez sur Entrée pour quitter..." << std::flush;
+    std::getline(std::cin, line);
+#endif
+}
+
 static void print_usage(const char* program)
 {
     std::cerr << "Usage : " << program << " [--rapide | --classique] [graine]\n"
@@ -198,6 +226,7 @@ static void print_usage(const char* program)
 
 int main(int argc, char* argv[])
 {
+    prepare_console();
     unsigned seed = std::random_device{}();
     bool mode_chosen = false;
     Mode mode = Mode::Quick;
@@ -269,5 +298,6 @@ int main(int argc, char* argv[])
     }
 
     show_results(game);
+    wait_before_exit();
     return 0;
 }

@@ -2,20 +2,52 @@
 
 Swann PROUTEAU
 
-Splendor en C++17, dans le terminal, avec deux modes :
+Splendor en C++17, en version graphique (fenêtre) ou dans le terminal,
+avec deux modes :
 
 - **partie rapide** : sans jetons or ni réservation ;
 - **partie classique** : règles complètes, avec or et réservation.
 
+## Télécharger
+
+Chaque version majeure est publiée sur la page
+[Releases](https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases), avec
+les exécutables à télécharger directement (pas de zip) :
+
+| Fichier               | Système | Remarque                                      |
+|-----------------------|---------|-----------------------------------------------|
+| `splendor-windows.exe`| Windows | version console, double-cliquer pour jouer   |
+| `splendor-linux`      | Linux   | version console, aucune dépendance            |
+| `splendor-gui-linux`  | Linux   | version graphique, nécessite GTK 3 (présent sur la plupart des bureaux) |
+
+Sous Linux, rendre le fichier exécutable une fois :
+
+```bash
+chmod +x splendor-gui-linux
+```
+
 ## Compilation
 
 ```bash
-make          # construit ./splendor
-make test     # lance les tests de la logique
+sudo apt install libgtk-3-dev   # uniquement pour la version graphique
+make                            # construit ./splendor et ./splendor-gui
+make splendor                   # version console seule
+make test                       # lance les tests de la logique
 make clean
 ```
 
-## Lancer
+## Version graphique
+
+```bash
+./splendor-gui
+```
+
+Tout se joue à la souris : cliquer des jetons de la réserve puis « Prendre »,
+ou une carte (ou une pioche) puis « Acheter » / « Réserver ». Contour vert =
+carte achetable. Pour défausser, cliquer ses propres jetons. Échap annule la
+sélection.
+
+## Version console
 
 ```bash
 ./splendor                  # le mode est demandé au lancement
@@ -60,3 +92,18 @@ Les cartes achetables par le joueur courant sont marquées d'une `*`.
   la partie s'arrête.
 - Fin : dès 15 points, on finit le tour de table. Gagnant : plus de points,
   puis le moins de cartes ; sinon égalité.
+
+## Publier une version
+
+1. Mettre à jour `src/version.hpp` et `CHANGELOG.md`, commiter sur `main`.
+2. Créer le tag et le pousser :
+
+```bash
+git tag -a v2.0.0 -m "Version 2.0.0"
+```
+
+```bash
+git push origin main v2.0.0
+```
+
+Un tag majeur (`vX.0.0`) lance le workflow qui publie les exécutables.
