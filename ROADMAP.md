@@ -1,128 +1,120 @@
 # Roadmap vers la v3
 
 Point de départ : **v2.1.0** (20/11/2026). Le jeu est complet et jouable en
-console et en fenêtre (GTK), en mode rapide et classique, avec publication
-automatique des exécutables aux versions majeures.
+console et en fenêtre (GTK), en mode rapide et classique, à plusieurs sur le
+même écran. Les exécutables sont publiés automatiquement.
 
-Ce qui manque encore pour une v3 « complète » :
+Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects)
+(une issue par case ci-dessous, un jalon GitHub par version).
 
-- **Pas de version graphique pour Windows.** GTK impose des dizaines de DLL, il
-  n'existe donc qu'un `.exe` console.
-- **La version graphique Linux dépend de GTK 3** installé sur la machine.
-- **On ne peut jouer qu'à plusieurs, sur le même écran.** Il n'y a ni
-  adversaire contrôlé par l'ordinateur ni sauvegarde.
-- **L'enchaînement d'un tour est écrit deux fois.** On le trouve dans `main.cpp`
-  (défausse, nobles) et dans `gui_main.cpp` (`next_turn`, `after_discard`), et
-  il n'est pas testé.
-- **La CI ne tourne qu'aux releases.** Un commit qui casse la compilation
-  Windows n'est vu qu'au moment de publier.
+## Ce que vise la v3
 
-## Définition de « v3 complète »
+1. Un **exécutable graphique unique** se lance sans rien installer, sous
+   Windows **et** sous Linux.
+2. On peut jouer **seul contre l'ordinateur**, ou **en ligne** contre
+   d'autres joueurs.
+3. **Comptes sans mot de passe** (Google ou Discord), avec un pseudo choisi à
+   la création du compte.
+4. **Classement Elo** des parties en ligne et leaderboard public.
+5. **Discord** : Rich Presence (« En partie classique — tour 7 »), invitations
+   à rejoindre une partie en un clic, partage dans un serveur Discord.
+6. Une partie locale peut être **sauvegardée et reprise**.
+7. Les règles sont **testées à chaque push** (Linux et Windows), et la
+   console, la fenêtre et le serveur partagent **le même code de jeu**.
 
-La v3.0.0 est prête quand tout ceci est vrai :
+## Choix techniques (décidés)
 
-1. Un **exécutable graphique unique** se télécharge et se lance, sans rien
-   installer, sous Windows **et** sous Linux.
-2. On peut jouer **seul contre l'ordinateur** (1 à 3 adversaires).
-3. Une partie peut être **sauvegardée et reprise**.
-4. Les règles sont **testées automatiquement à chaque push**, sur Linux et
-   Windows.
-5. La console et l'interface graphique partagent **le même code de
-   déroulement du tour**.
+| Sujet | Choix | Pourquoi |
+|---|---|---|
+| Interface graphique | **raylib** (liée statiquement) | un seul `.exe` / binaire Linux, pensée pour les jeux |
+| Serveur | **C++ maison** (`server/`) | réutilise `game.cpp` / `rules.cpp` : le serveur arbitre les parties, pas de triche, Elo calculé côté serveur |
+| HTTP | **cpp-httplib** | un seul en-tête, client et serveur |
+| JSON | **nlohmann/json** | un seul en-tête |
+| Base de données | **SQLite** (amalgamation) | un seul fichier, rien à installer |
+| Connexion | **OAuth Google et Discord** uniquement | pas de mot de passe stocké ; pseudo choisi au premier login |
+| Synchronisation des parties | requêtes HTTP + attente longue (*long polling*) | jeu au tour par tour : pas besoin de WebSocket |
+| Discord | Rich Presence par l'IPC local de Discord | pas de SDK à télécharger ni à lier |
+| Bibliothèques | copiées dans `third_party/` | builds autonomes, rien à installer |
+| Console | conservée | utile pour tester et jouer sans fenêtre |
 
 ---
 
-## v2.2 — Fondations (qualité, sans changement visible)
+## v2.2 — Fondations
 
-Objectif : rendre les étapes suivantes sûres.
+- [ ] CI à chaque push et pull request : console + GUI sous Linux, console
+  sous Windows, `make test`.
+- [ ] Mise à jour des actions GitHub (avertissement Node.js 20).
+- [ ] Déroulement du tour dans la logique (`turn.cpp`) : action → défausse
+  → noble (choix) → joueur suivant, passes automatiques. Console et fenêtre
+  l'utilisent.
+- [ ] Tests du déroulement : défausse avec or, deux nobles, passes en
+  chaîne, partie bloquée, dernier tour.
+- [ ] Couleurs de joueurs dans la console.
 
-- [ ] **CI à chaque push et pull request** : compilation console + GUI sous
-  Linux, console sous Windows, `make test`. Un échec bloque la fusion.
-- [ ] **Mettre à jour les actions GitHub** (`checkout`, `upload-artifact`,
-  `download-artifact`, `action-gh-release`) : avertissement « Node.js 20
-  obsolète » vu sur les releases 2.0.0 et 2.1.0.
-- [ ] **Extraire le déroulement du tour** dans la logique (`game.cpp` ou un
-  nouveau `turn.cpp`) : après l'action → défausse obligatoire → visite de
-  noble (choix si plusieurs) → joueur suivant, avec les passes automatiques.
-  `main.cpp` et `gui_main.cpp` ne font plus qu'afficher et demander.
-- [ ] **Tests de ce déroulement** : défausse avec or, deux nobles possibles,
-  passes en chaîne, partie bloquée, dernier tour à 15 points.
-- [ ] **Tests de l'interface graphique sans écran** : rendu Cairo dans un PNG
-  (déjà utilisé à la main) pour vérifier qu'un plateau se dessine sans
-  planter, dans chaque phase.
+## v2.3 — Adversaires ordinateur
 
-## v2.3 — Confort de jeu
+- [ ] IA « facile » et « moyenne » (logique pure, testable).
+- [ ] Choix humain / ordinateur par joueur (console et fenêtre).
+- [ ] Tournoi automatique de 1 000 parties dans les tests (aucun plantage,
+  aucun jeton perdu, la moyenne bat la facile).
 
-- [ ] **Historique des actions** (panneau ou ligne déroulante) : « Alice prend
-  Blanc, Vert, Rouge », « Bob achète une carte Bleu (2 pts) »…
-- [ ] **Survol** dans la fenêtre : afficher ce qu'il manque pour acheter une
-  carte (« il manque 2 Rouge »), et quel noble est proche.
-- [ ] **Raccourcis clavier** dans la fenêtre (1 à 5 pour les jetons, Entrée
-  pour valider) en plus de la souris.
-- [ ] **Écran entre deux joueurs** (« Au tour de Bob — cliquez pour
-  continuer ») pour ne pas voir les cartes réservées cachées des autres
-  quand on joue sur le même écran.
-- [ ] **Couleurs de joueurs dans la console** (nom et tableau), comme dans la
-  fenêtre.
-- [ ] **Accessibilité daltonisme** : un symbole différent par gemme (en plus
-  de la couleur) sur les jetons et les cartes.
+## v2.4 — Sauvegarde
 
-## v2.4 — Jouer contre l'ordinateur
+- [ ] Format texte `.splendor` (mode, joueurs, pioches, plateau, mains).
+- [ ] Console : `s` pour sauvegarder, `--charger fichier`. Fenêtre :
+  Sauvegarder / Ouvrir.
+- [ ] Test : sauvegarder puis recharger donne la même partie.
 
-- [ ] **Adversaire « facile »** : achète la carte la plus chère possible,
-  sinon prend les jetons qui le rapprochent d'une carte visible.
-- [ ] **Adversaire « moyen »** : vise les nobles et les cartes à points, et
-  réserve (en classique) les cartes qu'un autre joueur va acheter.
-- [ ] Choix humain / ordinateur pour chaque joueur à la création de la
-  partie, dans la console comme dans la fenêtre. Petite pause visible entre
-  les coups de l'ordinateur dans la fenêtre.
-- [ ] **Tournoi automatique** dans les tests : 1 000 parties ordinateur
-  contre ordinateur. Le « moyen » doit gagner nettement plus souvent que le
-  « facile », et aucune partie ne doit planter ni perdre de jeton.
+## v3.0 — Interface portable (raylib) — version majeure
 
-## v2.5 — Sauvegarde
+- [ ] Bibliothèques dans `third_party/` (raylib), build Linux et Windows.
+- [ ] Réécriture de l'interface en raylib : même plateau, même placement
+  (`*_rect`), écrans d'accueil et de nouvelle partie dessinés dans le jeu.
+- [ ] Confort : historique des actions, survol (« il manque 2 Rouge »),
+  raccourcis clavier, écran de passage entre joueurs, symbole par gemme
+  (daltonisme), petites animations.
+- [ ] Release : `splendor-windows.exe` et `splendor-linux` graphiques et
+  autonomes, plus les versions console. GTK est retiré.
 
-- [ ] Format texte simple et lisible (`.splendor`) : mode, graine, joueurs,
-  pioches, plateau, réserve, mains.
-- [ ] Console : commandes `s` (sauvegarder) et `--charger fichier`. Fenêtre :
-  menu Sauvegarder / Ouvrir.
-- [ ] Tests : sauvegarder puis recharger donne exactement la même partie.
+## v3.1 — Serveur, comptes et parties en ligne
 
-## v3.0 — Interface graphique portable (version majeure)
+- [ ] `splendor-server` (C++) : API HTTP, SQLite, arbitre les parties avec
+  `Game`.
+- [ ] Connexion Google / Discord par OAuth (navigateur + retour local), sans
+  mot de passe ; choix d'un pseudo unique à la création du compte.
+- [ ] Salons : créer une partie (mode, 2 à 4 places), code d'invitation,
+  rejoindre, lancer.
+- [ ] Parties en ligne dans le client : coups envoyés au serveur, plateau
+  mis à jour par attente longue, reconnexion après coupure.
+- [ ] Elo (K = 32, adapté à 2 à 4 joueurs par duels deux à deux) et
+  leaderboard (écran dans le jeu + `GET /leaderboard`).
+- [ ] Tests du serveur : faux coups refusés, Elo, partie complète à 2 clients.
 
-C'est le changement qui justifie le passage à la v3 : il remplace la
-bibliothèque graphique.
+## v3.2 — Discord
 
-- [ ] **Remplacer GTK par une bibliothèque liable statiquement**, pour obtenir
-  un seul fichier exécutable par système. Décision à prendre :
+- [ ] Rich Presence : écran, mode, tour, score, places libres du salon.
+- [ ] Invitations : bouton « Inviter » (lien `splendor://join/CODE` copié) et
+  « Rejoindre » depuis le profil Discord (secret de partie Rich Presence).
+- [ ] Partage dans un serveur Discord : un webhook configuré par le serveur
+  publie « Alice ouvre une partie classique (2/4) — code ABCD ».
+- [ ] Déploiement du serveur (hébergeur à choisir) et documentation.
 
-  | Option | Pour | Contre |
-  |---|---|---|
-  | **raylib** (recommandée) | très simple, pensée pour les jeux, un seul `.exe` facile | moins de widgets (le dialogue de nouvelle partie est à redessiner) |
-  | SDL2 + SDL_ttf | très répandue, un seul `.exe` possible | plus de code pour le texte et les formes |
-  | Garder GTK + AppImage (Linux) / installateur (Windows) | aucun code à réécrire | sous Windows, ce n'est plus « juste l'exécutable » |
+## Plus tard
 
-  Comme le placement (`*_rect`) et l'état (`App`) sont déjà séparés du
-  dessin, seuls `gui_draw.cpp` et `gui_main.cpp` changent.
-- [ ] **Release** : `splendor-windows.exe` (graphique), `splendor-linux`
-  (graphique), plus les versions console. Tous autonomes.
-- [ ] **Petites animations** : jeton qui glisse vers la main, carte qui se
-  retourne quand elle remplace une carte achetée.
-- [ ] Mettre à jour README, CLAUDE.md, CHANGELOG, puis tag `v3.0.0` : le
-  workflow publie les exécutables.
-
-## Plus tard (après la v3, si le temps le permet)
-
-- Partie en réseau local (deux ordinateurs).
 - Version macOS.
-- Extensions de règles (score de victoire réglable, variantes).
-- Statistiques de fin de partie (jetons pris, cartes par niveau…).
+- Variantes de règles (score de victoire réglable).
+- Statistiques de fin de partie et historique des parties en ligne.
 
-## Questions à trancher
+## À faire par le propriétaire du projet
 
-- **Bibliothèque graphique de la v3** : raylib, SDL2 ou garder GTK
-  (voir le tableau ci-dessus).
-- **Les adversaires ordinateur passent-ils avant la sauvegarde ?** (ordre
-  v2.4 / v2.5 interchangeable).
-- **Version console** : est-elle conservée en v3 à côté de la version
-  graphique, ou devient-elle un simple mode de débogage ?
+Ces étapes demandent votre compte et ne peuvent pas être faites à votre
+place :
+
+- **Wiki** : créer la première page sur GitHub (une seule fois).
+- **Discord** : créer une application sur le [portail développeur](https://discord.com/developers/applications)
+  (identifiant client pour la connexion et la Rich Presence, secret client
+  pour le serveur, adresse de retour OAuth). Créer un webhook dans le salon
+  qui recevra les invitations.
+- **Google** : créer un identifiant OAuth « Application de bureau » dans
+  Google Cloud Console.
+- **Hébergement** du serveur (v3.2) : choisir l'hébergeur et créer le compte.
