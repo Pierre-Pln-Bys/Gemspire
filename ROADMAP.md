@@ -1,8 +1,9 @@
 # Roadmap vers la v3
 
 Point de départ : v2.1.0 (20/11/2026). **Fait depuis** : v2.2 (fondations),
-v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome).
-**Prochaine étape** : v3.1 (serveur, comptes, parties en ligne).
+v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome),
+v3.1 (serveur, comptes, parties en ligne, Elo).
+**Prochaine étape** : v3.2 (Discord, bot vocal, déploiement sur le Raspberry Pi).
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -78,17 +79,17 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v3.1 — Serveur, comptes et parties en ligne
 
-- [ ] `splendor-server` (C++) : API HTTP, SQLite, arbitre les parties avec
+- [x] `splendor-server` (C++) : API HTTP, SQLite, arbitre les parties avec
   `Game`.
-- [ ] Connexion Google / Discord par OAuth (navigateur + retour local), sans
+- [x] Connexion Google / Discord par OAuth (navigateur + retour local), sans
   mot de passe ; choix d'un pseudo unique à la création du compte.
-- [ ] Salons : créer une partie (mode, 2 à 4 places), code d'invitation,
+- [x] Salons : créer une partie (mode, 2 à 4 places), code d'invitation,
   rejoindre, lancer.
-- [ ] Parties en ligne dans le client : coups envoyés au serveur, plateau
+- [x] Parties en ligne dans le client : coups envoyés au serveur, plateau
   mis à jour par attente longue, reconnexion après coupure.
-- [ ] Elo (K = 32, adapté à 2 à 4 joueurs par duels deux à deux) et
+- [x] Elo (K = 32, adapté à 2 à 4 joueurs par duels deux à deux) et
   leaderboard (écran dans le jeu + `GET /leaderboard`).
-- [ ] Tests du serveur : faux coups refusés, Elo, partie complète à 2 clients.
+- [x] Tests du serveur : faux coups refusés, Elo, partie complète à 2 clients.
 
 ## v3.2 — Discord
 

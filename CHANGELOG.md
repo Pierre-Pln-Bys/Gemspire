@@ -4,6 +4,26 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.1.0] - 2026-11-20
+
+### Ajouté
+- **Jeu en ligne** : connexion avec Discord ou Google (sans mot de passe),
+  choix d'un pseudo unique, salons avec code, parties arbitrées par le
+  serveur, classement **Elo** et leaderboard.
+- `splendor-server` (C++ : cpp-httplib, SQLite, OpenSSL) qui réutilise la
+  logique du jeu ; chaque joueur ne reçoit que ce qu'il a le droit de voir
+  (pioches et réservées des autres cachées) ; jetons de session stockés en
+  empreinte SHA-256.
+- Écrans connexion, pseudo, menu en ligne, salon, classement ; résultats
+  avec variation d'Elo.
+- `make test-server` : deux joueurs jouent une partie complète en ligne
+  (coups invalides refusés, Elo, classement, informations cachées).
+
+### Modifié
+- Format de coup commun (`Move`) pour la fenêtre, l'IA et le serveur ;
+  l'IA choisit un coup (`ai_choose`) sans le jouer.
+- La version graphique Linux utilise l'OpenSSL du système (libssl3).
+
 ## [3.0.0] - 2026-11-20
 
 ### Ajouté
