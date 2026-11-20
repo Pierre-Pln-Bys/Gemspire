@@ -113,3 +113,5 @@ Un tag majeur (`vX.0.0`) lance le workflow qui publie les exécutables.
 ## Suite du projet
 
 Voir [ROADMAP.md](ROADMAP.md) pour les étapes prévues jusqu'à la v3.
+
+Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki).

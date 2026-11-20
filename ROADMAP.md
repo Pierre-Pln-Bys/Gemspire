@@ -4,7 +4,7 @@ Point de départ : **v2.1.0** (20/11/2026). Le jeu est complet et jouable en
 console et en fenêtre (GTK), en mode rapide et classique, à plusieurs sur le
 même écran. Les exécutables sont publiés automatiquement.
 
-Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects)
+Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
 
 ## Ce que vise la v3
@@ -110,7 +110,7 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 Ces étapes demandent votre compte et ne peuvent pas être faites à votre
 place :
 
-- **Wiki** : créer la première page sur GitHub (une seule fois).
+- ~~**Wiki** : créer la première page sur GitHub~~ (fait).
 - **Discord** : créer une application sur le [portail développeur](https://discord.com/developers/applications)
   (identifiant client pour la connexion et la Rich Presence, secret client
   pour le serveur, adresse de retour OAuth). Créer un webhook dans le salon
