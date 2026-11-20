@@ -42,6 +42,8 @@ public:
 
     // Compte associé à cette identité ; il est créé s'il n'existe pas
     int find_or_create_account(const std::string& provider, const std::string& provider_id);
+    // Compte associé à cette identité, sans le créer (0 si aucun)
+    int find_account(const std::string& provider, const std::string& provider_id);
     bool get_account(int id, Account& account);
     // Choisit le pseudo (unique, 3 à 16 caractères). Retourne "" ou l'erreur.
     std::string set_pseudo(int id, const std::string& pseudo);

@@ -153,6 +153,15 @@ int Store::find_or_create_account(const std::string& provider, const std::string
     return static_cast<int>(sqlite3_last_insert_rowid(db_));
 }
 
+int Store::find_account(const std::string& provider, const std::string& provider_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT id FROM accounts WHERE provider = ? AND provider_id = ?");
+    find.bind(1, provider);
+    find.bind(2, provider_id);
+    return find.row() ? find.integer(0) : 0;
+}
+
 bool Store::get_account(int id, Account& account)
 {
     std::lock_guard<std::mutex> lock(mutex_);

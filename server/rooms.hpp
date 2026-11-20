@@ -32,6 +32,7 @@ struct Lobby {
     std::vector<Seat> members;
     int game_id = 0;      // partie lancée (0 : pas encore)
     long version = 1;     // augmente à chaque changement (attente longue)
+    std::string voice_channel;  // salon vocal Discord lié (bot « Crée ta partie »), "" sinon
 };
 
 // Partie en ligne : le serveur garde la seule vraie partie et arbitre les coups
@@ -52,7 +53,8 @@ class Rooms {
 public:
     explicit Rooms(Store& store);
 
-    std::string create_lobby(const Seat& me, Mode mode, int seats, std::string& code);
+    std::string create_lobby(const Seat& me, Mode mode, int seats, std::string& code,
+                             const std::string& voice_channel = "");
     std::string join_lobby(const std::string& code, const Seat& me);
     std::string leave_lobby(const std::string& code, int account);
     std::string start_lobby(const std::string& code, int account, int& game_id);
@@ -62,6 +64,17 @@ public:
     std::string play(int game_id, int account, const Move& move);
     // false si la partie n'existe pas
     bool game_json(int game_id, int account, long since, nlohmann::json& out);
+
+    // --- Présence : un joueur est « en jeu » s'il a contacté le serveur récemment
+    void touch(int account);
+    bool is_online(int account);
+
+    // --- Notifications vers le jeu d'un joueur (ex. proposition du bot Discord)
+    void notify(int account, nlohmann::json notification);
+    void notifications_json(int account, long since, nlohmann::json& out);
+
+    // --- Événements pour le bot Discord : salons liés à un salon vocal
+    void bot_events_json(long since, nlohmann::json& out);
 
     void set_wait_seconds(int seconds);
     // Appelée quand un salon est créé (annonce Discord, v3.2)
@@ -77,7 +90,14 @@ private:
     int wait_seconds_ = 25;
     std::mt19937 random_;
 
+    std::map<int, long long> last_seen_;
+    std::map<int, std::vector<nlohmann::json>> notifications_;
+    long next_notification_ = 1;
+    std::vector<nlohmann::json> bot_events_;
+    long next_bot_event_ = 1;
+
     std::string new_code();
+    void lobby_changed(const Lobby& lobby, bool closed);
     void remove_from_lobbies(int account);
     void finish_game(OnlineGame& online);
     void wait_for_change(std::unique_lock<std::mutex>& lock, const std::function<long()>& version, long since);

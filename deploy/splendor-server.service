@@ -1,0 +1,25 @@
+[Unit]
+Description=Serveur Splendor en ligne
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=splendor
+Group=splendor
+EnvironmentFile=/etc/splendor/splendor.env
+WorkingDirectory=/var/lib/splendor
+ExecStart=/opt/splendor/splendor-server
+Restart=on-failure
+RestartSec=3
+# Durcissement : le service ne peut écrire que dans sa base
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/splendor
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

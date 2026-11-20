@@ -13,3 +13,5 @@ build/
 session.txt
 splendor-server
 tests/test_server
+tests/test_discord
+__pycache__/

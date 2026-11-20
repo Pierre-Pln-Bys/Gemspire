@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <sstream>
+#include <thread>
 
 #include "../src/move_json.hpp"
 
@@ -28,6 +29,7 @@ ServerConfig config_from_environment()
     config.google_client_id = env("GOOGLE_CLIENT_ID");
     config.google_client_secret = env("GOOGLE_CLIENT_SECRET");
     config.discord_webhook = env("DISCORD_WEBHOOK_URL");
+    config.bot_key = env("SPLENDOR_BOT_KEY");
     config.dev_login = env("SPLENDOR_DEV_LOGIN") == "1";
     return config;
 }
@@ -158,6 +160,43 @@ static std::string oauth_identity(const ServerConfig& config, const std::string&
 ServerApp::ServerApp(const ServerConfig& config) : config_(config), store_(config.database), rooms_(store_)
 {
     rooms_.set_wait_seconds(config.wait_seconds);
+    rooms_.on_lobby_created = [this](const Lobby& lobby) { announce_lobby(lobby); };
+}
+
+// Annonce un nouveau salon dans le salon Discord du webhook (dans un fil :
+// la requête ne doit pas retarder la réponse au joueur)
+void ServerApp::announce_lobby(const Lobby& lobby)
+{
+    const std::string prefix = "https://discord.com/api/webhooks/";
+    if (config_.discord_webhook.compare(0, prefix.size(), prefix) != 0 || !lobby.voice_channel.empty()) {
+        return;
+    }
+    std::string path = config_.discord_webhook.substr(std::string("https://discord.com").size());
+    std::string text = "**" + lobby.members[0].pseudo + "** ouvre une partie "
+                       + (lobby.mode == Mode::Classic ? "classique" : "rapide") + " (1/" + std::to_string(lobby.seats)
+                       + ") — code **" + lobby.code + "** à taper dans Splendor (Jouer en ligne > Rejoindre).";
+    std::string body = json({{"content", text}, {"allowed_mentions", {{"parse", json::array()}}}}).dump();
+    std::thread([path, body]() {
+        httplib::SSLClient client("discord.com");
+        client.set_connection_timeout(5);
+        client.Post(path, body, "application/json");
+    }).detach();
+}
+
+// Le bot Discord s'identifie avec la clé partagée SPLENDOR_BOT_KEY
+bool ServerApp::bot_allowed(const httplib::Request& request) const
+{
+    std::string given = request.get_header_value("X-Bot-Key");
+    const std::string& expected = config_.bot_key;
+    if (expected.empty() || given.size() != expected.size()) {
+        return false;
+    }
+    // Comparaison en temps constant
+    unsigned char difference = 0;
+    for (size_t i = 0; i < expected.size(); i++) {
+        difference |= static_cast<unsigned char>(given[i] ^ expected[i]);
+    }
+    return difference == 0;
 }
 
 bool ServerApp::ok() const
@@ -172,7 +211,11 @@ int ServerApp::authenticate(const httplib::Request& request)
     if (header.compare(0, prefix.size(), prefix) != 0) {
         return 0;
     }
-    return store_.account_for_token(header.substr(prefix.size()));
+    int account = store_.account_for_token(header.substr(prefix.size()));
+    if (account != 0) {
+        rooms_.touch(account);  // présence : le jeu de ce joueur est ouvert
+    }
+    return account;
 }
 
 // Place d'un joueur connecté ; il doit avoir choisi son pseudo
@@ -273,12 +316,14 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_page(response, "Connexion impossible", "La connexion de test est désactivée.");
             return;
         }
+        // as=discord : simule un compte Discord (tests du bot), toujours en mode test
+        std::string provider = request.get_param_value("as") == "discord" ? "discord" : "dev";
         {
             std::lock_guard<std::mutex> lock(logins_mutex_);
-            logins_[login].provider = "dev";
+            logins_[login].provider = provider;
             logins_[login].created = std::time(nullptr);
         }
-        finish_login(login, "dev", name, "");
+        finish_login(login, provider, name, "");
         reply_page(response, "Connexion de test réussie", "Vous pouvez revenir dans Splendor.");
     });
 
@@ -322,6 +367,24 @@ void ServerApp::setup_routes(httplib::Server& server)
                               {"elo", account.elo}, {"games", account.games}, {"wins", account.wins}});
     });
 
+    // Notifications du jeu (attente longue) ; elles servent aussi de présence
+    server.Get("/me/notifications", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Non connecté.");
+            return;
+        }
+        json body;
+        long since = request.has_param("since") ? std::atol(request.get_param_value("since").c_str()) : -1;
+        rooms_.notifications_json(id, since, body);
+        reply(response, 200, body);
+    });
+
+    // Réglages publics utiles au jeu (identifiant public de l'application Discord)
+    server.Get("/config", [this](const httplib::Request&, httplib::Response& response) {
+        reply(response, 200, {{"discord_app_id", config_.discord_client_id}});
+    });
+
     server.Post("/me/pseudo", [this](const httplib::Request& request, httplib::Response& response) {
         int id = authenticate(request);
         json body;
@@ -361,8 +424,16 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         Mode mode = body.value("mode", std::string("classique")) == "rapide" ? Mode::Quick : Mode::Classic;
         int seats = body.contains("seats") && body["seats"].is_number_integer() ? body["seats"].get<int>() : 2;
+        // Salon vocal Discord lié (proposition du bot) : seulement des chiffres
+        std::string voice = body.contains("voice_channel") && body["voice_channel"].is_string()
+                                ? body["voice_channel"].get<std::string>()
+                                : "";
+        if (voice.size() > 25 || voice.find_first_not_of("0123456789") != std::string::npos) {
+            reply_error(response, 400, "Salon vocal invalide.");
+            return;
+        }
         std::string code;
-        error = rooms_.create_lobby(seat, mode, seats, code);
+        error = rooms_.create_lobby(seat, mode, seats, code, voice);
         if (!error.empty()) {
             reply_error(response, 400, error);
             return;
@@ -449,6 +520,52 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         reply(response, 200, {{"status", "ok"}});
+    });
+
+    // --- API du bot Discord (en-tête X-Bot-Key)
+    server.Get("/bot/presence", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        int account = store_.find_account("discord", request.get_param_value("discord_id"));
+        Account data;
+        bool linked = account != 0 && store_.get_account(account, data);
+        reply(response, 200, {{"linked", linked},
+                              {"online", linked && rooms_.is_online(account)},
+                              {"pseudo", linked ? data.pseudo : ""}});
+    });
+
+    server.Post("/bot/offer", [this](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        if (!parse_body(request, body) || !body.contains("discord_id") || !body["discord_id"].is_string()
+            || !body.contains("voice_channel") || !body["voice_channel"].is_string()) {
+            reply_error(response, 400, "Requête mal formée.");
+            return;
+        }
+        int account = store_.find_account("discord", body["discord_id"].get<std::string>());
+        if (account == 0 || !rooms_.is_online(account)) {
+            reply(response, 200, {{"offered", false}});
+            return;
+        }
+        rooms_.notify(account, {{"type", "voice_offer"},
+                                {"voice_channel", body["voice_channel"]},
+                                {"channel_name", body.value("channel_name", std::string("Discord"))}});
+        reply(response, 200, {{"offered", true}});
+    });
+
+    server.Get("/bot/events", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        json body;
+        rooms_.bot_events_json(since_parameter(request), body);
+        reply(response, 200, body);
     });
 
     // --- Classement

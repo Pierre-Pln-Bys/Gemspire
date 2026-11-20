@@ -21,7 +21,8 @@ struct ServerConfig {
     std::string discord_client_secret;
     std::string google_client_id;
     std::string google_client_secret;
-    std::string discord_webhook;   // annonces de salons (v3.2)
+    std::string discord_webhook;   // annonces de salons dans un salon Discord
+    std::string bot_key;           // clé partagée avec le bot Discord (SPLENDOR_BOT_KEY)
     bool dev_login = false;        // connexion sans OAuth, pour les tests en local
     int wait_seconds = 25;         // durée maximale d'une attente longue
 };
@@ -52,6 +53,8 @@ private:
     std::map<std::string, PendingLogin> logins_;
 
     int authenticate(const httplib::Request& request);
+    bool bot_allowed(const httplib::Request& request) const;
+    void announce_lobby(const Lobby& lobby);
     bool seat_for(int account, Seat& seat, std::string& error);
     void finish_login(const std::string& login, const std::string& provider, const std::string& provider_id,
                       const std::string& error);

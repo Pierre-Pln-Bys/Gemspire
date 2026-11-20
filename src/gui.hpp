@@ -7,6 +7,7 @@
 
 #include "raylib.h"
 
+#include "discord_rpc.hpp"
 #include "game.hpp"
 #include "net.hpp"
 #include "types.hpp"
@@ -33,6 +34,7 @@ enum class ButtonId {
     // En ligne
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
+    Invite, OfferCreate, OfferIgnore,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -125,6 +127,11 @@ struct OnlineState {
     std::vector<std::string> log;    // historique envoyé par le serveur
     std::vector<int> seat_elos;
     std::vector<int> elo_changes;
+    long notification_last = -1;     // dernière notification vue (-1 : pas encore demandé)
+    bool notification_poll_running = false;
+    std::string offer_channel;       // proposition du bot Discord : salon vocal à lier
+    std::string offer_name;
+    std::string pending_join;        // code reçu de Discord (« Rejoindre ») en attente de connexion
     std::vector<std::string> board_names;  // classement
     std::vector<int> board_elos;
     std::vector<int> board_games;
@@ -153,6 +160,9 @@ struct App {
     bool quit = false;
     NetClient net;
     OnlineState online;
+    DiscordPresence discord;
+    long long screen_start = 0;            // pour le chronomètre de la Rich Presence
+    Screen presence_screen = Screen::Home; // écran affiché lors du dernier calcul de présence
 
     Font font = {};
     Font bold = {};

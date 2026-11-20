@@ -20,6 +20,8 @@ jobs:
         run: make test
       - name: Serveur et test en ligne
         run: make splendor-server test-server
+      - name: Discord (faux Discord local) et bot Python
+        run: make test-discord test-bot
 
   windows:
     runs-on: windows-latest

@@ -1,10 +1,12 @@
 // Interface graphique de Splendor (raylib).
 // Ce fichier gère la fenêtre, les écrans, la souris, le clavier et
 // l'enchaînement des coups. Le dessin est dans gui_draw.cpp.
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <functional>
@@ -187,7 +189,9 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet };
+
+const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest";
 
 const char* const SESSION_FILE = "session.txt";   // jeton de connexion
 const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
@@ -513,6 +517,41 @@ static void handle_responses(App& app)
         nlohmann::json body = nlohmann::json::parse(response.body, nullptr, false);
         bool ok = response.status == 200 && body.is_object();
         switch (response.tag) {
+        case TagMeQuiet:
+            // Au démarrage : session encore valide ? (sans changer d'écran)
+            if (ok) {
+                online.account = body.value("id", 0);
+                online.pseudo = body.value("pseudo", std::string());
+                online.elo = body.value("elo", 1000);
+            } else if (response.status == 401) {
+                save_session("");
+                app.net.set_token("");
+            }
+            break;
+        case TagConfig:
+            if (ok && body.value("discord_app_id", std::string()) != "") {
+                app.discord.start(body.value("discord_app_id", std::string()));
+            }
+            break;
+        case TagNotes:
+            online.notification_poll_running = false;
+            if (!ok) {
+                online.next_game_poll = std::max(online.next_game_poll, GetTime() + 5);
+                break;
+            }
+            if (online.notification_last >= 0) {
+                for (const nlohmann::json& note : body["notifications"]) {
+                    if (note.value("type", std::string()) == "voice_offer") {
+                        online.offer_channel = note.value("voice_channel", std::string());
+                        online.offer_name = note.value("channel_name", std::string("Discord"));
+                        if (!online.in_game) {
+                            app.screen = Screen::Online;
+                        }
+                    }
+                }
+            }
+            online.notification_last = body.value("last", 0L);
+            break;
         case TagMe:
             if (ok) {
                 online.account = body.value("id", 0);
@@ -523,6 +562,11 @@ static void handle_responses(App& app)
                 if (online.pseudo.empty()) {
                     app.screen = Screen::Pseudo;
                     online.focus = 1;
+                } else if (!online.pending_join.empty()) {
+                    // Invitation acceptée dans Discord avant la connexion
+                    online.code_input = online.pending_join;
+                    online.pending_join.clear();
+                    app.net.send(TagJoin, "POST", "/lobbies/" + online.code_input + "/join");
                 } else if (app.screen != Screen::Board && app.screen != Screen::Lobby) {
                     app.screen = Screen::Online;
                 }
@@ -757,6 +801,24 @@ static void press_online_button(App& app, const Button& button)
     case ButtonId::CopyCode:
         SetClipboardText(online.lobby_code.c_str());
         set_message(app, "Code copié.", false);
+        break;
+    case ButtonId::Invite: {
+        std::string invitation = "Rejoins ma partie de Splendor ! Code : " + online.lobby_code
+                                 + " (Jouer en ligne > Rejoindre). Télécharger le jeu : " + DOWNLOAD_URL;
+        SetClipboardText(invitation.c_str());
+        set_message(app, "Invitation copiée : collez-la dans Discord.", false);
+        break;
+    }
+    case ButtonId::OfferCreate: {
+        nlohmann::json body = {{"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"},
+                               {"seats", online.create_seats},
+                               {"voice_channel", online.offer_channel}};
+        online.offer_channel.clear();
+        app.net.send(TagCreate, "POST", "/lobbies", body.dump());
+        break;
+    }
+    case ButtonId::OfferIgnore:
+        online.offer_channel.clear();
         break;
     case ButtonId::LobbyStart:
         app.net.send(TagStart, "POST", "/lobbies/" + online.lobby_code + "/start");
@@ -1030,10 +1092,60 @@ static void update_board(App& app, Vector2 mouse)
     }
 }
 
+// Ce que montre la Rich Presence Discord selon l'écran
+static void update_presence(App& app)
+{
+    const OnlineState& online = app.online;
+    PresenceInfo info;
+    info.start = app.screen_start;
+    if (app.screen == Screen::Lobby) {
+        info.details = "Dans un salon (" + online.lobby_mode + ")";
+        info.state = "En attente de joueurs";
+        info.party_id = online.lobby_code;
+        info.party_size = static_cast<int>(online.lobby_members.size());
+        info.party_max = online.lobby_seats;
+        if (info.party_size < info.party_max) {
+            info.join_secret = online.lobby_code;  // les amis peuvent rejoindre depuis Discord
+        }
+    } else if (app.screen == Screen::Board && app.game) {
+        const Game& game = *app.game;
+        std::string mode = game.mode() == Mode::Classic ? "classique" : "rapide";
+        info.details = (online.in_game ? "Partie en ligne (" : "Partie " + std::string("locale (")) + mode + ")";
+        int seat = viewer_seat(app);
+        info.state = game.is_over() ? "Partie terminée"
+                                    : "Tour " + std::to_string(game.round()) + " · "
+                                          + std::to_string(game.players()[seat].score()) + " pts";
+    } else if (app.screen == Screen::Online || app.screen == Screen::Leaderboard) {
+        info.details = "En ligne";
+        info.state = online.pseudo.empty() ? "" : "Elo " + std::to_string(online.elo);
+    } else {
+        info.details = "Dans les menus";
+    }
+    app.discord.update(info);
+}
+
 static void update(App& app, Vector2 mouse)
 {
     OnlineState& online = app.online;
     handle_responses(app);
+    // Nouvel écran : le chronomètre de la Rich Presence repart
+    if (app.screen != app.presence_screen) {
+        app.presence_screen = app.screen;
+        app.screen_start = static_cast<long long>(std::time(nullptr));
+    }
+    update_presence(app);
+    // « Rejoindre » cliqué dans Discord : le secret est le code du salon
+    std::string join_code;
+    if (app.discord.take_join(join_code) && join_code.size() == 5) {
+        online.pending_join = join_code;
+        online.in_game = false;
+        go_online(app);
+    }
+    // Connecté : on attend les notifications (sert aussi de présence pour le bot)
+    if (online.account != 0 && !online.notification_poll_running && GetTime() >= online.next_game_poll) {
+        online.notification_poll_running = true;
+        app.net.send(TagNotes, "GET", "/me/notifications?since=" + std::to_string(online.notification_last));
+    }
     // Connexion en cours : on demande au serveur si le navigateur a fini
     if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
         online.next_login_poll = GetTime() + 1.5;
@@ -1128,6 +1240,11 @@ int main()
 
     App app;
     configure_network(app);
+    app.screen_start = static_cast<long long>(std::time(nullptr));
+    app.net.send(TagConfig, "GET", "/config");
+    if (!read_first_line(SESSION_FILE).empty()) {
+        app.net.send(TagMeQuiet, "GET", "/me");
+    }
     app.font = load_font_regular();
     app.bold = load_font_bold();
     prepare_font(app.font);

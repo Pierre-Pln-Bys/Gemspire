@@ -187,6 +187,18 @@ static std::vector<Button> online_buttons(const App& app)
 {
     const OnlineState& online = app.online;
     std::vector<Button> buttons;
+    // Proposition du bot Discord : seule la fenêtre de proposition est active
+    if (!online.offer_channel.empty()) {
+        add(buttons, ButtonId::CreateMode, "Rapide", {410, 380, 150, 40}, 0, true, online.create_mode == Mode::Quick);
+        add(buttons, ButtonId::CreateMode, "Classique", {570, 380, 150, 40}, 1, true, online.create_mode == Mode::Classic);
+        for (int seats = 2; seats <= 4; seats++) {
+            add(buttons, ButtonId::CreateSeats, std::to_string(seats) + " joueurs", {410.0f + (seats - 2) * 155, 440, 145, 40},
+                seats, true, online.create_seats == seats);
+        }
+        add(buttons, ButtonId::OfferCreate, "Créer la partie", {410, 510, 230, 50}, 0, app.net.pending() <= 2);
+        add(buttons, ButtonId::OfferIgnore, "Ignorer", {650, 510, 220, 50});
+        return buttons;
+    }
     // Créer une partie
     add(buttons, ButtonId::CreateMode, "Rapide", {200, 330, 150, 40}, 0, true, online.create_mode == Mode::Quick);
     add(buttons, ButtonId::CreateMode, "Classique", {360, 330, 150, 40}, 1, true, online.create_mode == Mode::Classic);
@@ -212,7 +224,8 @@ static std::vector<Button> lobby_buttons(const App& app)
 {
     const OnlineState& online = app.online;
     std::vector<Button> buttons;
-    add(buttons, ButtonId::CopyCode, "Copier le code", {540, 250, 200, 40});
+    add(buttons, ButtonId::CopyCode, "Copier le code", {430, 250, 200, 40});
+    add(buttons, ButtonId::Invite, "Copier une invitation", {650, 250, 200, 40});
     if (online.lobby_host == online.account) {
         add(buttons, ButtonId::LobbyStart, "Lancer la partie", {440, 600, 400, 54}, 0,
             online.lobby_members.size() >= 2 && app.net.pending() == 0);
@@ -739,7 +752,8 @@ static void draw_button(const App& app, const Button& button, Vector2 mouse)
                || button.id == ButtonId::PlayOnline || button.id == ButtonId::LoginDiscord
                || button.id == ButtonId::LoginGoogle || button.id == ButtonId::PseudoOk
                || button.id == ButtonId::CreateLobby || button.id == ButtonId::JoinLobby
-               || button.id == ButtonId::LobbyStart || button.id == ButtonId::ReturnToGame) {
+               || button.id == ButtonId::LobbyStart || button.id == ButtonId::ReturnToGame
+               || button.id == ButtonId::OfferCreate) {
         fill = hover ? mix(GOLD_UI, {255, 255, 255, 255}, 0.3f) : GOLD_UI;
         ink = DARK_TEXT;
     } else {
@@ -1124,6 +1138,21 @@ static void draw_online(const App& app, Vector2 mouse)
     text(app, std::to_string(online.games) + " parties, " + std::to_string(online.wins) + " victoires", card.x + 20,
          card.y + 80, 15, false, SOFT_TEXT);
 
+    if (!online.offer_channel.empty()) {
+        // Fenêtre de proposition : le bot a créé un salon vocal pour ce joueur
+        Rectangle box = {380, 240, 520, 350};
+        rounded(box, 16, {31, 77, 54, 250});
+        outline(box, 16, 3, GOLD_UI, 0);
+        text_centered(app, "Discord", 640, 275, 18, false, SOFT_TEXT);
+        float size = 24;
+        text_centered(app, fit(app, "Salon vocal « " + online.offer_name + " »", 480, size, 14), 640, 310, size, true,
+                      GOLD_UI);
+        text_centered(app, "Choisissez la partie : le salon sera limité au nombre de joueurs.", 640, 348, 15, false,
+                      WHITE_TEXT);
+        draw_buttons_of(app, online_buttons(app), mouse);
+        draw_message_line(app, 640);
+        return;
+    }
     text(app, "Créer une partie", 200, 270, 22, true, WHITE_TEXT);
     text(app, "Rejoindre avec un code", 770, 270, 22, true, WHITE_TEXT);
     draw_buttons_of(app, online_buttons(app), mouse);

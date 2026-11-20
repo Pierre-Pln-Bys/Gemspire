@@ -42,9 +42,10 @@ static json post(httplib::Client& client, const std::string& path, const std::st
 }
 
 // Connexion de test : comme le jeu, on ouvre /auth/dev/start puis on interroge /auth/poll
-static std::string login(httplib::Client& client, const std::string& name, const std::string& login_id)
+static std::string login(httplib::Client& client, const std::string& name, const std::string& login_id,
+                         const std::string& as = "")
 {
-    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name);
+    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name + (as.empty() ? "" : "&as=" + as));
     assert(page && page->status == 200);
     json poll = get(client, "/auth/poll?login=" + login_id, "");
     assert(poll["status"] == "done");
@@ -61,6 +62,7 @@ int main()
     config.database = "tests/test_server.db";
     config.dev_login = true;
     config.wait_seconds = 1;
+    config.bot_key = "cle-de-test-du-bot";
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -157,6 +159,45 @@ int main()
         count++;
     }
     assert(count > 0);
+
+    // --- Discord : présence, proposition du bot, salon lié au vocal
+    httplib::Headers bot = {{"X-Bot-Key", "cle-de-test-du-bot"}};
+    httplib::Headers bad_bot = {{"X-Bot-Key", "mauvaise-cle-du-bot"}};
+    auto refused = client.Get("/bot/presence?discord_id=123456", bad_bot);
+    assert(refused && refused->status == 403);
+    auto unknown = client.Get("/bot/presence?discord_id=123456", bot);
+    assert(unknown && json::parse(unknown->body)["linked"] == false);
+
+    std::string carol = login(client, "123456", "cccccccccccccccccccccccc", "discord");
+    post(client, "/me/pseudo", carol, {{"pseudo", "Carole"}});
+    json first_notes = get(client, "/me/notifications", carol);  // présence, sans attendre
+    long last_note = first_notes["last"];
+    auto presence = client.Get("/bot/presence?discord_id=123456", bot);
+    json presence_body = json::parse(presence->body);
+    assert(presence_body["linked"] == true && presence_body["online"] == true && presence_body["pseudo"] == "Carole");
+
+    auto offer = client.Post("/bot/offer", bot,
+                             json({{"discord_id", "123456"}, {"voice_channel", "987654321"}, {"channel_name", "Partie de Carole"}}).dump(),
+                             "application/json");
+    assert(offer && json::parse(offer->body)["offered"] == true);
+    json notes = get(client, "/me/notifications?since=" + std::to_string(last_note), carol);
+    assert(notes["notifications"].size() == 1);
+    assert(notes["notifications"][0]["type"] == "voice_offer");
+    assert(notes["notifications"][0]["voice_channel"] == "987654321");
+
+    post(client, "/lobbies", carol, {{"mode", "classique"}, {"seats", 3}, {"voice_channel", "abc"}}, 400);
+    std::string voice_code = post(client, "/lobbies", carol,
+                                  {{"mode", "classique"}, {"seats", 3}, {"voice_channel", "987654321"}})["code"];
+    auto events = client.Get("/bot/events?since=0", bot);
+    json events_body = json::parse(events->body);
+    assert(!events_body["events"].empty());
+    json last_event = events_body["events"].back();
+    assert(last_event["code"] == voice_code && last_event["voice_channel"] == "987654321");
+    assert(last_event["seats"] == 3 && last_event["players"] == 1 && last_event["closed"] == false);
+    post(client, "/lobbies/" + voice_code + "/leave", carol, json::object());
+    events = client.Get("/bot/events?since=" + std::to_string(events_body["last"].get<long>()), bot);
+    assert(json::parse(events->body)["events"].back()["closed"] == true);
+    assert(get(client, "/config", "")["discord_app_id"] == "");
 
     // Déconnexion
     post(client, "/auth/logout", alice, json::object());

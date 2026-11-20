@@ -13,7 +13,8 @@ GUI_TARGET = splendor-gui
 LOGIC_OBJS = src/data.o src/rules.o src/game.o src/move.o src/ai.o src/save.o src/elo.o
 # Liste des fichiers nécessaires à chaque exécutable
 OBJS = src/main.o src/display.o $(LOGIC_OBJS)
-GUI_OBJS = src/gui_main.o src/gui_draw.o src/gui_font.o src/net.o src/move_json.o src/display.o $(LOGIC_OBJS)
+GUI_OBJS = src/gui_main.o src/gui_draw.o src/gui_font.o src/net.o src/discord_rpc.o src/move_json.o src/display.o \
+           $(LOGIC_OBJS)
 
 # raylib est compilée une fois, depuis third_party/, dans build/raylib
 RAYLIB_DIR = third_party/raylib/src
@@ -85,8 +86,20 @@ tests/test_server.o: CXXFLAGS += $(SERVER_CFLAGS)
 test-server: tests/test_server
 	./tests/test_server
 
+tests/test_discord: tests/test_discord.o src/discord_rpc.o
+	$(CXX) $(LDFLAGS) -o $@ $^ -lpthread
+
+tests/test_discord.o src/discord_rpc.o: CXXFLAGS += -isystem third_party/json
+
+test-discord: tests/test_discord
+	./tests/test_discord
+
+# Bot Discord (Python) : logique, client du serveur, intégration avec splendor-server
+test-bot: $(SERVER_TARGET)
+	python3 -m unittest bot/test_bot.py bot/test_integration.py
+
 clean:
-	$(RM) $(TARGET) $(GUI_TARGET) $(SERVER_TARGET) $(TARGET).exe $(GUI_TARGET).exe tests/test_rules tests/test_server \
+	$(RM) $(TARGET) $(GUI_TARGET) $(SERVER_TARGET) $(TARGET).exe $(GUI_TARGET).exe tests/test_rules tests/test_server tests/test_discord \
 	      src/*.o tests/*.o server/*.o
 clean-deps: clean
 	$(RM) src/*.d tests/*.d server/*.d
@@ -98,4 +111,4 @@ clean-all: clean-deps
 # Injecte les dépendances si présentes
 -include src/*.d tests/*.d server/*.d
 
-.PHONY: all clean clean-deps clean-all test test-server font
+.PHONY: all clean clean-deps clean-all test test-server test-discord test-bot font

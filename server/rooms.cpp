@@ -1,6 +1,7 @@
 #include "rooms.hpp"
 
 #include <chrono>
+#include <ctime>
 
 #include "../src/display.hpp"
 #include "../src/elo.hpp"
@@ -41,12 +42,14 @@ void Rooms::remove_from_lobbies(int account)
                 }
             }
             if (lobby.members.empty()) {
+                lobby_changed(lobby, true);
                 it = lobbies_.erase(it);
                 continue;
             }
             if (lobby.host == account) {
                 lobby.host = lobby.members[0].account;
             }
+            lobby_changed(lobby, false);
         }
         ++it;
     }
@@ -62,7 +65,26 @@ void Rooms::wait_for_change(std::unique_lock<std::mutex>& lock, const std::funct
 
 // ---------------------------------------------------------------- Salons
 
-std::string Rooms::create_lobby(const Seat& me, Mode mode, int seats, std::string& code)
+// Le bot Discord suit les salons liés à un salon vocal (places, lancement)
+void Rooms::lobby_changed(const Lobby& lobby, bool closed)
+{
+    if (lobby.voice_channel.empty()) {
+        return;
+    }
+    nlohmann::json event = {{"id", next_bot_event_++},
+                            {"code", lobby.code},
+                            {"voice_channel", lobby.voice_channel},
+                            {"seats", lobby.seats},
+                            {"players", lobby.members.size()},
+                            {"started", lobby.game_id != 0},
+                            {"closed", closed}};
+    bot_events_.push_back(event);
+    if (bot_events_.size() > 200) {
+        bot_events_.erase(bot_events_.begin());
+    }
+}
+
+std::string Rooms::create_lobby(const Seat& me, Mode mode, int seats, std::string& code, const std::string& voice_channel)
 {
     if (seats < 2 || seats > 4) {
         return "Une partie se joue à 2, 3 ou 4.";
@@ -77,7 +99,9 @@ std::string Rooms::create_lobby(const Seat& me, Mode mode, int seats, std::strin
         lobby.host = me.account;
         lobby.mode = mode;
         lobby.seats = seats;
+        lobby.voice_channel = voice_channel;
         lobby.members.push_back(me);
+        lobby_changed(lobby, false);
         created = lobby;
     }
     changed_.notify_all();
@@ -114,6 +138,7 @@ std::string Rooms::join_lobby(const std::string& code, const Seat& me)
         }
         found->second.members.push_back(me);
         found->second.version++;
+        lobby_changed(found->second, false);
     }
     changed_.notify_all();
     return "";
@@ -161,6 +186,7 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
         online.seats = lobby.members;
         lobby.game_id = next_game_;
         lobby.version++;
+        lobby_changed(lobby, false);
         game_id = next_game_;
         next_game_++;
     }
@@ -274,4 +300,72 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
         out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo}});
     }
     return true;
+}
+
+// ---------------------------------------------------------------- Présence et notifications
+
+void Rooms::touch(int account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    last_seen_[account] = std::time(nullptr);
+}
+
+bool Rooms::is_online(int account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto found = last_seen_.find(account);
+    // Le jeu interroge ses notifications au moins toutes les 30 secondes
+    return found != last_seen_.end() && std::time(nullptr) - found->second < 70;
+}
+
+void Rooms::notify(int account, nlohmann::json notification)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        notification["id"] = next_notification_++;
+        std::vector<nlohmann::json>& list = notifications_[account];
+        list.push_back(notification);
+        if (list.size() > 20) {
+            list.erase(list.begin());
+        }
+    }
+    changed_.notify_all();
+}
+
+void Rooms::notifications_json(int account, long since, nlohmann::json& out)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    auto newest = [&]() -> long {
+        const std::vector<nlohmann::json>& list = notifications_[account];
+        return list.empty() ? 0 : list.back()["id"].get<long>();
+    };
+    // since = -1 : juste l'identifiant le plus récent, sans attendre
+    if (since >= 0) {
+        changed_.wait_for(lock, std::chrono::seconds(wait_seconds_), [&]() { return newest() > since; });
+    }
+    out = nlohmann::json::object();
+    out["last"] = newest();
+    out["notifications"] = nlohmann::json::array();
+    if (since >= 0) {
+        for (const nlohmann::json& notification : notifications_[account]) {
+            if (notification["id"].get<long>() > since) {
+                out["notifications"].push_back(notification);
+            }
+        }
+    }
+}
+
+void Rooms::bot_events_json(long since, nlohmann::json& out)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    auto newest = [&]() -> long { return bot_events_.empty() ? 0 : bot_events_.back()["id"].get<long>(); };
+    changed_.wait_for(lock, std::chrono::seconds(wait_seconds_), [&]() { return newest() > since; });
+    out = nlohmann::json::object();
+    out["last"] = newest();
+    out["events"] = nlohmann::json::array();
+    for (const nlohmann::json& event : bot_events_) {
+        if (event["id"].get<long>() > since) {
+            out["events"].push_back(event);
+        }
+    }
 }
