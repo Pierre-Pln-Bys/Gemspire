@@ -108,10 +108,9 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
         }
         app.game.reset(new Game(names, std::random_device{}(), mode));
         app.player_colors = colors;
-        app.phase = Phase::Action;
+        app.shown_events = 0;
         app.selection = {0, 0, 0, 0, 0};
         app.target = Target::None;
-        app.noble_choices.clear();
         app.message = "À " + app.game->current_player().name + " de jouer.";
         app.message_is_error = false;
         accepted = true;
@@ -135,71 +134,24 @@ static void set_message(App& app, const std::string& message, bool is_error)
     app.message_is_error = is_error;
 }
 
-// Passe au joueur suivant ; ceux qui ne peuvent rien faire passent leur tour
-static void next_turn(App& app)
+// Met dans la ligne d'état ce qui vient de se passer (événements de Game),
+// puis ce que le joueur doit faire maintenant.
+static void show_new_events(App& app)
 {
-    Game& game = *app.game;
-    game.end_turn();
-    while (!game.is_over() && !game.can_play()) {
-        app.message += " " + game.current_player().name + " ne peut rien faire et passe.";
-        game.pass_turn();
-        game.end_turn();
+    const Game& game = *app.game;
+    std::string text;
+    for (; app.shown_events < static_cast<int>(game.events().size()); app.shown_events++) {
+        text += describe_event(game, game.events()[app.shown_events]) + " ";
     }
-    if (game.is_over()) {
-        app.phase = Phase::Over;
-    } else {
-        app.phase = Phase::Action;
-        app.message += " À " + game.current_player().name + " de jouer.";
+    if (game.step() == TurnStep::Discard) {
+        text += "Plus de 10 jetons : cliquez sur vos jetons pour en défausser "
+                + std::to_string(game.tokens_to_discard()) + ".";
+    } else if (game.step() == TurnStep::ChooseNoble) {
+        text += "Plusieurs nobles veulent venir : cliquez sur celui de votre choix.";
+    } else if (game.step() == TurnStep::Action) {
+        text += "À " + game.current_player().name + " de jouer.";
     }
-}
-
-static void receive_noble(App& app, int noble_index)
-{
-    Game& game = *app.game;
-    app.message += " " + game.nobles()[noble_index].name + " rend visite à "
-                   + game.current_player().name + " (+3 pts) !";
-    game.receive_noble(noble_index);
-    app.noble_choices.clear();
-    next_turn(app);
-}
-
-// Après la défausse : visite éventuelle d'un noble, puis fin du tour
-static void after_discard(App& app)
-{
-    std::vector<int> candidates = app.game->visiting_nobles();
-    if (candidates.size() == 1) {
-        receive_noble(app, candidates[0]);
-    } else if (candidates.size() > 1) {
-        app.phase = Phase::ChooseNoble;
-        app.noble_choices = candidates;
-        app.message += " Plusieurs nobles veulent venir : cliquez sur celui de votre choix.";
-    } else {
-        next_turn(app);
-    }
-}
-
-// L'action du joueur est faite : défausse si nécessaire, puis la suite
-static void finish_action(App& app, const std::string& description)
-{
-    clear_selection(app);
-    set_message(app, description, false);
-    if (app.game->must_discard()) {
-        app.phase = Phase::Discard;
-        int extra = app.game->current_player().token_count() - MAX_TOKENS_IN_HAND;
-        app.message += " Plus de 10 jetons : cliquez sur vos jetons pour en défausser "
-                       + std::to_string(extra) + ".";
-    } else {
-        after_discard(app);
-    }
-}
-
-static std::string card_text(const Card& card)
-{
-    std::string text = "une carte " + color_name(card.provides);
-    if (card.points > 0) {
-        text += " (" + std::to_string(card.points) + " pts)";
-    }
-    return text;
+    set_message(app, text, false);
 }
 
 // ---------------------------------------------------------------- Boutons
@@ -207,44 +159,22 @@ static std::string card_text(const Card& card)
 static void press_button(App& app, ButtonId id, GtkWidget* window)
 {
     Game& game = *app.game;
-    std::string name = game.current_player().name;
     std::string error;
 
     switch (id) {
     case ButtonId::Take:
         error = game.take_tokens(app.selection);
-        if (error.empty()) {
-            finish_action(app, name + " prend " + std::to_string(total(app.selection)) + " jeton(s).");
-        }
         break;
     case ButtonId::Buy:
         if (app.target == Target::Visible) {
-            Card card = game.visible(app.target_level)[app.target_index];
             error = game.buy_card(app.target_level, app.target_index + 1);
-            if (error.empty()) {
-                finish_action(app, name + " achète " + card_text(card) + ".");
-            }
         } else if (app.target == Target::Reserved) {
-            Card card = game.current_player().reserved[app.target_index];
             error = game.buy_reserved(app.target_index + 1);
-            if (error.empty()) {
-                finish_action(app, name + " achète sa carte réservée, " + card_text(card) + ".");
-            }
         }
         break;
-    case ButtonId::Reserve: {
-        int position = app.target == Target::Deck ? 0 : app.target_index + 1;
-        int gold_before = game.current_player().gold;
-        error = game.reserve_card(app.target_level, position);
-        if (error.empty()) {
-            std::string text = name + " réserve une carte";
-            if (game.current_player().gold > gold_before) {
-                text += " et prend un jeton or";
-            }
-            finish_action(app, text + ".");
-        }
+    case ButtonId::Reserve:
+        error = game.reserve_card(app.target_level, app.target == Target::Deck ? 0 : app.target_index + 1);
         break;
-    }
     case ButtonId::Cancel:
         clear_selection(app);
         set_message(app, "", false);
@@ -258,6 +188,9 @@ static void press_button(App& app, ButtonId id, GtkWidget* window)
     }
     if (!error.empty()) {
         set_message(app, error, true);
+    } else if (id == ButtonId::Take || id == ButtonId::Buy || id == ButtonId::Reserve) {
+        clear_selection(app);
+        show_new_events(app);
     }
 }
 
@@ -341,12 +274,8 @@ static void click_discard_phase(App& app, double x, double y)
         std::string error = c == GOLD_INDEX ? game.discard_gold() : game.discard(color_at(c));
         if (!error.empty()) {
             set_message(app, error, true);
-        } else if (!game.must_discard()) {
-            set_message(app, "Défausse terminée.", false);
-            after_discard(app);
         } else {
-            int extra = game.current_player().token_count() - MAX_TOKENS_IN_HAND;
-            set_message(app, "Encore " + std::to_string(extra) + " jeton(s) à défausser.", false);
+            show_new_events(app);
         }
         return;
     }
@@ -354,10 +283,10 @@ static void click_discard_phase(App& app, double x, double y)
 
 static void click_noble_phase(App& app, double x, double y)
 {
-    for (int choice : app.noble_choices) {
+    for (int choice : app.game->noble_choices()) {
         if (noble_rect(choice).contains(x, y)) {
-            set_message(app, "", false);
-            receive_noble(app, choice);
+            app.game->choose_noble(choice);
+            show_new_events(app);
             return;
         }
     }
@@ -384,11 +313,12 @@ static gboolean on_click(GtkWidget* area, GdkEventButton* event, gpointer data)
         }
     }
     if (!button_pressed) {
-        if (app.phase == Phase::Action) {
+        TurnStep step = app.game->step();
+        if (step == TurnStep::Action) {
             click_action_phase(app, x, y);
-        } else if (app.phase == Phase::Discard) {
+        } else if (step == TurnStep::Discard) {
             click_discard_phase(app, x, y);
-        } else if (app.phase == Phase::ChooseNoble) {
+        } else if (step == TurnStep::ChooseNoble) {
             click_noble_phase(app, x, y);
         }
     }
@@ -401,7 +331,7 @@ static gboolean on_click(GtkWidget* area, GdkEventButton* event, gpointer data)
 static gboolean on_key(GtkWidget* window, GdkEventKey* event, gpointer data)
 {
     App& app = *static_cast<App*>(data);
-    if (event->keyval == GDK_KEY_Escape && app.phase == Phase::Action) {
+    if (event->keyval == GDK_KEY_Escape && app.game && app.game->step() == TurnStep::Action) {
         clear_selection(app);
         gtk_widget_queue_draw(window);
         return TRUE;

@@ -3,6 +3,6 @@
 
 // Version du jeu (versionnage sémantique : MAJEUR.MINEUR.CORRECTIF).
 // À mettre à jour avec CHANGELOG.md et le tag git à chaque nouvelle version.
-const char* const SPLENDOR_VERSION = "2.1.0";
+const char* const SPLENDOR_VERSION = "2.2.0";
 
 #endif

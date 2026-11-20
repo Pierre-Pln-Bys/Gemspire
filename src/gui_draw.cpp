@@ -40,12 +40,12 @@ std::vector<Button> visible_buttons(const App& app)
     }
     const Game& game = *app.game;
 
-    if (app.phase == Phase::Over) {
+    if (app.game->step() == TurnStep::Over) {
         buttons.push_back({ButtonId::Replay, "Rejouer", true, {490, 520, 140, 44}});
         buttons.push_back({ButtonId::Quit, "Quitter", true, {650, 520, 140, 44}});
         return buttons;
     }
-    if (app.phase != Phase::Action) {
+    if (app.game->step() != TurnStep::Action) {
         return buttons;
     }
 
@@ -416,8 +416,8 @@ static void draw_nobles(cairo_t* cr, const App& app)
     const std::vector<Noble>& nobles = app.game->nobles();
     for (int i = 0; i < static_cast<int>(nobles.size()); i++) {
         bool highlighted = false;
-        for (int choice : app.noble_choices) {
-            if (choice == i && app.phase == Phase::ChooseNoble) {
+        for (int choice : app.game->noble_choices()) {
+            if (choice == i && app.game->step() == TurnStep::ChooseNoble) {
                 highlighted = true;
             }
         }
@@ -428,7 +428,7 @@ static void draw_nobles(cairo_t* cr, const App& app)
 static void draw_cards(cairo_t* cr, const App& app)
 {
     const Game& game = *app.game;
-    bool my_turn = app.phase == Phase::Action;
+    bool my_turn = app.game->step() == TurnStep::Action;
     for (int level = 1; level <= LEVEL_COUNT; level++) {
         bool deck_selected = app.target == Target::Deck && app.target_level == level;
         draw_deck(cr, level, game.deck_size(level), deck_selected);
@@ -468,7 +468,7 @@ static void draw_players(cairo_t* cr, const App& app)
     bool classic = game.mode() == Mode::Classic;
     for (int p = 0; p < static_cast<int>(game.players().size()); p++) {
         const Player& player = game.players()[p];
-        bool current = p == game.current_index() && app.phase != Phase::Over;
+        bool current = p == game.current_index() && app.game->step() != TurnStep::Over;
         Rect r = player_rect(p);
 
         Rgb own = player_rgb(app, p);
@@ -541,7 +541,7 @@ static void draw_players(cairo_t* cr, const App& app)
         }
         draw_text(cr, info, r.x + 17, r.y + 167, 12, false, {0.85, 0.9, 0.85});
 
-        if (current && app.phase == Phase::Discard) {
+        if (current && app.game->step() == TurnStep::Discard) {
             draw_outline(cr, {r.x + 85, r.y + 98, 52.0 * token_kinds, 48}, 8, {1, 0.45, 0.4}, 2);
         }
     }
@@ -550,7 +550,7 @@ static void draw_players(cairo_t* cr, const App& app)
 static void draw_reserved(cairo_t* cr, const App& app)
 {
     const Game& game = *app.game;
-    if (game.mode() != Mode::Classic || app.phase == Phase::Over) {
+    if (game.mode() != Mode::Classic || app.game->step() == TurnStep::Over) {
         return;
     }
     // Les cartes réservées prennent la couleur du joueur dont c'est le tour
@@ -567,7 +567,7 @@ static void draw_reserved(cairo_t* cr, const App& app)
             // Sélection ou carte achetable : un second contour, plus large
             if (app.target == Target::Reserved && app.target_index == i) {
                 draw_outline(cr, r, 8, SELECTED, 3, 7);
-            } else if (app.phase == Phase::Action && game.can_buy_reserved(i + 1)) {
+            } else if (app.game->step() == TurnStep::Action && game.can_buy_reserved(i + 1)) {
                 draw_buyable_outline(cr, r, 7);
             }
         } else {
@@ -606,9 +606,9 @@ static void draw_action_panel(cairo_t* cr, const App& app)
     cairo_fill(cr);
 
     std::string title;
-    if (app.phase == Phase::Discard) {
+    if (app.game->step() == TurnStep::Discard) {
         title = "Défaussez vos jetons en trop";
-    } else if (app.phase == Phase::ChooseNoble) {
+    } else if (app.game->step() == TurnStep::ChooseNoble) {
         title = "Choisissez un noble";
     } else if (total(app.selection) > 0) {
         title = "Jetons choisis :";
@@ -629,7 +629,7 @@ static void draw_action_panel(cairo_t* cr, const App& app)
                 k++;
             }
         }
-    } else if (app.phase == Phase::Action && app.target == Target::None) {
+    } else if (app.game->step() == TurnStep::Action && app.target == Target::None) {
         draw_text(cr, "Cliquez des jetons de la réserve,", r.x + 12, r.y + 50, 12, false, {0.85, 0.9, 0.85});
         draw_text(cr, "une carte ou une pioche.", r.x + 12, r.y + 68, 12, false, {0.85, 0.9, 0.85});
         draw_text(cr, "Contour doré = carte achetable", r.x + 12, r.y + 96, 12, false, BUYABLE);
@@ -708,7 +708,7 @@ void draw_board(cairo_t* cr, App& app, double width, double height)
         draw_bank(cr, app);
         draw_players(cr, app);
         draw_reserved(cr, app);
-        if (app.phase == Phase::Over) {
+        if (app.game->step() == TurnStep::Over) {
             draw_results(cr, app);
         } else {
             draw_action_panel(cr, app);

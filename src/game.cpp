@@ -75,7 +75,10 @@ const std::vector<Card>& Game::visible(int level) const { return visible_[level 
 int Game::deck_size(int level) const { return static_cast<int>(decks_[level - 1].size()); }
 const std::vector<Noble>& Game::nobles() const { return nobles_; }
 bool Game::is_last_round() const { return last_round_; }
-bool Game::is_over() const { return over_; }
+TurnStep Game::step() const { return step_; }
+bool Game::is_over() const { return step_ == TurnStep::Over; }
+const std::vector<Event>& Game::events() const { return events_; }
+const std::vector<int>& Game::noble_choices() const { return noble_choices_; }
 bool Game::is_blocked() const { return consecutive_passes_ >= static_cast<int>(players_.size()); }
 
 bool Game::valid_position(int level, int position) const
@@ -155,8 +158,14 @@ bool Game::can_play() const
 
 // ---------------------------------------------------------------- Actions
 
+// Message d'erreur commun quand une action arrive à la mauvaise étape
+static const char* const WRONG_STEP = "Ce n'est pas le moment de faire cette action.";
+
 std::string Game::take_tokens(const Resources& wanted)
 {
+    if (step_ != TurnStep::Action) {
+        return WRONG_STEP;
+    }
     std::string error = check_pick(wanted, bank_);
     if (!error.empty()) {
         return error;
@@ -165,7 +174,10 @@ std::string Game::take_tokens(const Resources& wanted)
         bank_[c] -= wanted[c];
         current().tokens[c] += wanted[c];
     }
-    consecutive_passes_ = 0;
+    Event event(EventType::TakeTokens, current_);
+    event.tokens = wanted;
+    events_.push_back(event);
+    after_action();
     return "";
 }
 
@@ -202,6 +214,9 @@ Card Game::take_visible(int level, int position)
 
 std::string Game::buy_card(int level, int position)
 {
+    if (step_ != TurnStep::Action) {
+        return WRONG_STEP;
+    }
     if (!valid_position(level, position)) {
         return "Cette carte n'existe pas.";
     }
@@ -212,12 +227,18 @@ std::string Game::buy_card(int level, int position)
     pay_for(card);
     take_visible(level, position);
     current().cards.push_back(card);
-    consecutive_passes_ = 0;
+    Event event(EventType::BuyCard, current_);
+    event.card = card;
+    events_.push_back(event);
+    after_action();
     return "";
 }
 
 std::string Game::buy_reserved(int index)
 {
+    if (step_ != TurnStep::Action) {
+        return WRONG_STEP;
+    }
     std::vector<Card>& reserved = current().reserved;
     if (index < 1 || index > static_cast<int>(reserved.size())) {
         return "Vous n'avez pas de carte réservée à cette position.";
@@ -229,12 +250,18 @@ std::string Game::buy_reserved(int index)
     pay_for(card);
     reserved.erase(reserved.begin() + (index - 1));
     current().cards.push_back(card);
-    consecutive_passes_ = 0;
+    Event event(EventType::BuyReserved, current_);
+    event.card = card;
+    events_.push_back(event);
+    after_action();
     return "";
 }
 
 std::string Game::reserve_card(int level, int position)
 {
+    if (step_ != TurnStep::Action) {
+        return WRONG_STEP;
+    }
     if (mode_ != Mode::Classic) {
         return "La réservation n'existe pas en partie rapide.";
     }
@@ -261,12 +288,17 @@ std::string Game::reserve_card(int level, int position)
     }
 
     current().reserved.push_back(card);
+    Event event(EventType::Reserve, current_);
+    event.card = card;
+    event.from_deck = position == 0;
     // On gagne un jeton or s'il en reste
     if (bank_gold_ > 0) {
         bank_gold_--;
         current().gold++;
+        event.gold = 1;
     }
-    consecutive_passes_ = 0;
+    events_.push_back(event);
+    after_action();
     return "";
 }
 
@@ -277,24 +309,48 @@ bool Game::must_discard() const
     return current_player().token_count() > MAX_TOKENS_IN_HAND;
 }
 
+int Game::tokens_to_discard() const
+{
+    int extra = current_player().token_count() - MAX_TOKENS_IN_HAND;
+    return extra > 0 ? extra : 0;
+}
+
 std::string Game::discard(Color color)
 {
+    if (step_ != TurnStep::Discard) {
+        return WRONG_STEP;
+    }
     int c = index_of(color);
     if (current().tokens[c] == 0) {
         return "Vous n'avez pas de jeton de cette couleur.";
     }
     current().tokens[c]--;
     bank_[c]++;
+    Event event(EventType::Discard, current_);
+    event.tokens[c] = 1;
+    events_.push_back(event);
+    if (!must_discard()) {
+        after_discard();
+    }
     return "";
 }
 
 std::string Game::discard_gold()
 {
+    if (step_ != TurnStep::Discard) {
+        return WRONG_STEP;
+    }
     if (current().gold == 0) {
         return "Vous n'avez pas de jeton or.";
     }
     current().gold--;
     bank_gold_++;
+    Event event(EventType::Discard, current_);
+    event.gold = 1;
+    events_.push_back(event);
+    if (!must_discard()) {
+        after_discard();
+    }
     return "";
 }
 
@@ -312,33 +368,88 @@ std::vector<int> Game::visiting_nobles() const
 
 void Game::receive_noble(int noble_index)
 {
+    Event event(EventType::NobleVisit, current_);
+    event.noble = nobles_[noble_index].name;
+    events_.push_back(event);
     current().nobles.push_back(nobles_[noble_index]);
     nobles_.erase(nobles_.begin() + noble_index);
 }
 
-void Game::pass_turn()
+std::string Game::choose_noble(int noble_index)
 {
-    consecutive_passes_++;
+    if (step_ != TurnStep::ChooseNoble) {
+        return WRONG_STEP;
+    }
+    for (int choice : noble_choices_) {
+        if (choice == noble_index) {
+            receive_noble(noble_index);
+            noble_choices_.clear();
+            next_player();
+            return "";
+        }
+    }
+    return "Ce noble ne peut pas vous rendre visite.";
 }
 
-void Game::end_turn()
+// ---------------------------------------------------------------- Enchaînement du tour
+
+void Game::after_action()
+{
+    consecutive_passes_ = 0;
+    if (must_discard()) {
+        step_ = TurnStep::Discard;
+    } else {
+        after_discard();
+    }
+}
+
+void Game::after_discard()
+{
+    // Un seul noble par tour : il vient tout seul, ou le joueur choisit
+    std::vector<int> candidates = visiting_nobles();
+    if (candidates.size() > 1) {
+        noble_choices_ = candidates;
+        step_ = TurnStep::ChooseNoble;
+        return;
+    }
+    if (candidates.size() == 1) {
+        receive_noble(candidates[0]);
+    }
+    next_player();
+}
+
+void Game::advance_one()
 {
     if (current_player().score() >= WINNING_SCORE) {
         last_round_ = true;
-    }
-    // Partie bloquée (plus personne ne peut jouer) : on arrête
-    if (is_blocked()) {
-        over_ = true;
-        return;
     }
     current_ = (current_ + 1) % static_cast<int>(players_.size());
     // Retour au premier joueur : le tour de table est terminé
     if (current_ == 0) {
         if (last_round_) {
-            over_ = true;
-        } else {
-            round_++;
+            step_ = TurnStep::Over;
+            return;
         }
+        round_++;
+    }
+}
+
+void Game::next_player()
+{
+    advance_one();
+    // Ceux qui ne peuvent rien faire passent leur tour
+    while (step_ != TurnStep::Over && !can_play()) {
+        events_.push_back(Event(EventType::Pass, current_));
+        consecutive_passes_++;
+        // Partie bloquée : plus personne ne peut jouer
+        if (is_blocked()) {
+            step_ = TurnStep::Over;
+            return;
+        }
+        advance_one();
+    }
+    if (step_ != TurnStep::Over) {
+        step_ = TurnStep::Action;
     }
 }
 

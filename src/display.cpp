@@ -70,6 +70,14 @@ static std::string bold(const std::string& text)
     return ansi("1", text);
 }
 
+// Couleur de chaque joueur dans la console (violet, orange, turquoise, rose),
+// différente des couleurs des jetons
+std::string player_colored(int player, const std::string& text)
+{
+    const std::string codes[] = {"1;38;5;141", "1;38;5;208", "1;38;5;44", "1;38;5;205"};
+    return ansi(codes[player % 4], text);
+}
+
 // ---------------------------------------------------------------- Mise en page
 
 // Largeur à l'écran : on ignore les codes ANSI et on compte les caractères
@@ -368,7 +376,7 @@ static void show_players(const Game& game)
         const Player& player = game.players()[i];
         bool is_current = i == game.current_index();
 
-        std::string name = (is_current ? gold("▶ ") : "  ") + (is_current ? bold(player.name) : player.name);
+        std::string name = (is_current ? player_colored(i, "▶ ") : "  ") + player_colored(i, player.name);
         std::string bonus_line = " " + pad(name, 9) + pad(" bonus", 7);
         std::string token_line = " " + pad("", 9) + pad(" jetons", 7);
         for (int c = 0; c < COLOR_COUNT; c++) {
@@ -413,11 +421,13 @@ void show_board(const Game& game)
 {
     std::string mode = game.mode() == Mode::Classic ? "classique" : "rapide";
     std::string title = " SPLENDOR (" + mode + ") - tour " + std::to_string(game.round())
-                        + " - au tour de " + game.current_player().name;
+                        + " - au tour de ";
+    std::cout << "\n" << repeat("━", 79) << "\n" << bold(title)
+              << player_colored(game.current_index(), game.current_player().name) << "\n"
+              << repeat("━", 79) << "\n";
     if (game.is_last_round()) {
-        title += "  - DERNIER TOUR !";
+        std::cout << bold(" DERNIER TOUR !") << "\n";
     }
-    std::cout << "\n" << repeat("━", 79) << "\n" << bold(title) << "\n" << repeat("━", 79) << "\n";
 
     show_nobles(game);
     std::cout << "\n";
@@ -455,13 +465,14 @@ void show_results(const Game& game)
     if (game.is_blocked()) {
         std::cout << "Partie bloquée : plus aucun joueur ne peut jouer.\n";
     }
-    for (const Player& player : game.players()) {
-        std::cout << "  " << pad(player.name, 15) << " : " << player.score() << " pts, "
+    for (int i = 0; i < static_cast<int>(game.players().size()); i++) {
+        const Player& player = game.players()[i];
+        std::cout << "  " << pad(player_colored(i, player.name), 15) << " : " << player.score() << " pts, "
                   << player.cards.size() << " cartes\n";
     }
     std::vector<int> winners = game.winners();
     if (winners.size() == 1) {
-        std::cout << "\nVictoire de " << bold(game.players()[winners[0]].name) << " !\n";
+        std::cout << "\nVictoire de " << player_colored(winners[0], game.players()[winners[0]].name) << " !\n";
     } else {
         std::cout << "\nÉgalité parfaite entre :";
         for (int i : winners) {
@@ -469,4 +480,60 @@ void show_results(const Game& game)
         }
         std::cout << "\n";
     }
+}
+
+// ---------------------------------------------------------------- Historique
+
+// Liste "2 Blanc, 1 Vert" sans couleurs ANSI (utilisable par la fenêtre)
+static std::string plain_tokens(const Resources& tokens, int gold_count)
+{
+    std::string text;
+    for (int c = 0; c < COLOR_COUNT; c++) {
+        if (tokens[c] > 0) {
+            if (!text.empty()) {
+                text += ", ";
+            }
+            text += std::to_string(tokens[c]) + " " + color_name(color_at(c));
+        }
+    }
+    if (gold_count > 0) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+        text += std::to_string(gold_count) + " Or";
+    }
+    return text;
+}
+
+static std::string plain_card(const Card& card)
+{
+    std::string text = "une carte " + color_name(card.provides);
+    if (card.points > 0) {
+        text += " (" + std::to_string(card.points) + (card.points > 1 ? " pts)" : " pt)");
+    }
+    return text;
+}
+
+std::string describe_event(const Game& game, const Event& event)
+{
+    std::string name = game.players()[event.player].name;
+    switch (event.type) {
+    case EventType::TakeTokens:
+        return name + " prend " + plain_tokens(event.tokens, 0) + ".";
+    case EventType::BuyCard:
+        return name + " achète " + plain_card(event.card) + ".";
+    case EventType::BuyReserved:
+        return name + " achète sa réservée, " + plain_card(event.card) + ".";
+    case EventType::Reserve: {
+        std::string text = name + " réserve " + (event.from_deck ? "une carte de la pioche" : plain_card(event.card));
+        return text + (event.gold > 0 ? " et prend un jeton or." : ".");
+    }
+    case EventType::Discard:
+        return name + " défausse " + plain_tokens(event.tokens, event.gold) + ".";
+    case EventType::NobleVisit:
+        return event.noble + " rend visite à " + name + " (+3 pts).";
+    case EventType::Pass:
+        return name + " ne peut rien faire et passe son tour.";
+    }
+    return "";
 }

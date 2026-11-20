@@ -29,7 +29,7 @@ jobs:
     # Ubuntu 22.04 : glibc plus ancienne, donc binaire compatible avec plus de distributions
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -50,7 +50,7 @@ jobs:
           make splendor-gui
           mv splendor-gui splendor-gui-linux
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: |
@@ -63,7 +63,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -81,7 +81,7 @@ jobs:
           ./splendor.exe --version
           mv splendor.exe splendor-windows.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: splendor-windows.exe
@@ -90,14 +90,14 @@ jobs:
     needs: [linux, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
       - name: Rendre les binaires Linux exécutables
         run: chmod +x splendor-linux splendor-gui-linux
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: Splendor ${{ inputs.tag || github.ref_name }}

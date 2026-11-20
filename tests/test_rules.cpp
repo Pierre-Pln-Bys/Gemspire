@@ -1,6 +1,7 @@
 // Tests de la logique du jeu (rules et game). Lancer avec : make test
 #include <cassert>
 #include <iostream>
+#include <random>
 
 #include "../src/data.hpp"
 #include "../src/game.hpp"
@@ -55,6 +56,26 @@ static void test_noble()
     assert(!noble_can_visit({4, 3, 9, 9, 9}, noble));
 }
 
+// Accès aux données privées de Game pour préparer des situations précises
+struct GameTester {
+    static Player& player(Game& game, int index) { return game.players_[index]; }
+    static Resources& bank(Game& game) { return game.bank_; }
+    static int& bank_gold(Game& game) { return game.bank_gold_; }
+    static std::vector<Noble>& nobles(Game& game) { return game.nobles_; }
+    static std::vector<Card>& visible(Game& game, int level) { return game.visible_[level - 1]; }
+    static std::vector<Card>& deck(Game& game, int level) { return game.decks_[level - 1]; }
+};
+
+// Nombre total de jetons (réserve + mains), qui ne doit jamais changer
+static int all_tokens(const Game& game)
+{
+    int sum = total(game.bank()) + game.bank_gold();
+    for (const Player& player : game.players()) {
+        sum += player.token_count();
+    }
+    return sum;
+}
+
 static void test_game()
 {
     Game game({"A", "B"}, 42, Mode::Quick);
@@ -64,49 +85,29 @@ static void test_game()
         assert(game.visible(level).size() == 4);
     }
     assert(game.deck_size(1) == 36);
+    assert(game.step() == TurnStep::Action);
 
-    // Prise de jetons
+    // Une action fait passer au joueur suivant, et le tour de table compte
     assert(game.take_tokens({1, 1, 1, 0, 0}).empty());
-    assert(game.current_player().tokens[0] == 1 && game.bank()[0] == 3);
-    game.end_turn();
-    assert(game.current_index() == 1);
+    assert(game.players()[0].tokens[0] == 1 && game.bank()[0] == 3);
+    assert(game.current_index() == 1 && game.round() == 1);
     assert(!game.take_tokens({2, 0, 0, 0, 0}).empty());  // plus que 3 blancs
-    game.end_turn();
+    assert(game.current_index() == 1);                   // erreur : on ne change pas de joueur
+    assert(game.take_tokens({0, 0, 0, 2, 0}).empty());
     assert(game.current_index() == 0 && game.round() == 2);
+    assert(game.events().size() == 2 && game.events()[1].type == EventType::TakeTokens);
 
-    // Défausse au-delà de 10 jetons
-    Game rich({"A", "B", "C", "D"}, 1, Mode::Quick);
-    for (int i = 0; i < 3; i++) {
-        assert(rich.take_tokens({2, 0, 0, 0, 0}).empty() || rich.take_tokens({0, 2, 0, 0, 0}).empty());
-    }
-    assert(rich.take_tokens({0, 0, 2, 0, 0}).empty());
-    assert(rich.take_tokens({0, 0, 0, 2, 0}).empty());
-    assert(total(rich.current_player().tokens) == 10);
-    assert(!rich.must_discard());
-    assert(rich.take_tokens({0, 0, 0, 0, 2}).empty());
-    assert(rich.must_discard());
-    assert(rich.discard(Color::Black).empty());
-    assert(rich.discard(Color::Black).empty());
-    assert(!rich.must_discard());
-    assert(!rich.discard(Color::Black).empty());
-
-    // Achat : avec tous ces jetons, on peut acheter une carte de niveau 1
-    int bought_level = 0;
-    int bought_position = 0;
-    for (int p = 1; p <= 4 && bought_level == 0; p++) {
-        if (rich.can_buy(1, p)) {
-            bought_level = 1;
-            bought_position = p;
-        }
-    }
-    assert(bought_level == 1);
-    int tokens_before = total(rich.current_player().tokens) + total(rich.bank());
-    assert(rich.buy_card(bought_level, bought_position).empty());
-    assert(rich.current_player().cards.size() == 1);
-    assert(rich.visible(1).size() == 4);
-    assert(rich.deck_size(1) == 35);
-    assert(total(rich.current_player().tokens) + total(rich.bank()) == tokens_before);
-    assert(!rich.buy_card(4, 1).empty());
+    // Achat : coût payé, carte remplacée, jetons conservés
+    Game shop({"A", "B"}, 1, Mode::Quick);
+    GameTester::player(shop, 0).tokens = {4, 4, 4, 4, 4};
+    GameTester::bank(shop) = {0, 0, 0, 0, 0};
+    int before = all_tokens(shop);
+    assert(shop.can_buy(1, 1));
+    assert(shop.buy_card(1, 1).empty());
+    assert(shop.players()[0].cards.size() == 1);
+    assert(shop.visible(1).size() == 4 && shop.deck_size(1) == 35);
+    assert(all_tokens(shop) == before);
+    assert(!shop.buy_card(4, 1).empty());
 
     // Pas de réservation ni d'or en partie rapide
     assert(game.bank_gold() == 0);
@@ -123,37 +124,180 @@ static void test_classic()
     // Réserver une carte visible : elle est remplacée, on gagne 1 or
     Card wanted = game.visible(2)[0];
     assert(game.reserve_card(2, 1).empty());
-    assert(game.current_player().reserved.size() == 1);
-    assert(game.current_player().reserved[0].cost == wanted.cost);
-    assert(game.current_player().gold == 1 && game.bank_gold() == GOLD_TOKENS - 1);
+    const Player& a = game.players()[0];
+    assert(a.reserved.size() == 1 && a.reserved[0].cost == wanted.cost);
+    assert(a.gold == 1 && game.bank_gold() == GOLD_TOKENS - 1);
     assert(game.visible(2).size() == 4 && game.deck_size(2) == 25);
+    assert(game.events().back().type == EventType::Reserve && game.events().back().gold == 1);
 
-    // Réserver le dessus de la pioche, puis une 3e carte, puis refus de la 4e
+    // B réserve le dessus d'une pioche, puis A une 2e et une 3e carte : refus de la 4e
     assert(game.reserve_card(3, 0).empty());
-    assert(game.deck_size(3) == 15);
+    assert(game.deck_size(3) == 15 && game.events().back().from_deck);
     assert(game.reserve_card(1, 4).empty());
-    assert(game.current_player().gold == 3);
+    assert(game.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(game.reserve_card(1, 1).empty());
+    assert(game.players()[0].reserved.size() == 3 && game.players()[0].gold == 3);
+    assert(game.take_tokens({1, 1, 1, 0, 0}).empty());
     assert(!game.can_reserve());
     assert(!game.reserve_card(1, 1).empty());
     assert(!game.reserve_card(9, 1).empty());
 
-    // L'or sert de joker : une carte de niveau 1 coûte au plus 5 jetons,
-    // avec 3 or et 2 jetons de couleurs adaptées on peut payer.
+    // L'or sert de joker : 2 jetons manquants payés avec 2 or
     Game joker({"A", "B"}, 5, Mode::Classic);
-    for (int i = 0; i < 3; i++) {
-        assert(joker.reserve_card(3, 0).empty());
-    }
-    Card card = joker.visible(1)[0];
-    int missing = missing_tokens({0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}, card);
-    assert(joker.can_buy(1, 1) == (missing <= 3));
-    if (missing <= 3) {
-        assert(joker.buy_card(1, 1).empty());
-        assert(joker.current_player().gold == 3 - missing);
-        assert(joker.bank_gold() == GOLD_TOKENS - 3 + missing);
-    }
+    Card card = {1, Color::Red, {2, 2, 0, 0, 0}};
+    GameTester::visible(joker, 1)[0] = card;
+    GameTester::player(joker, 0).tokens = {1, 1, 0, 0, 0};
+    GameTester::player(joker, 0).gold = 2;
+    GameTester::bank_gold(joker) = 3;
+    assert(joker.can_buy(1, 1));
+    assert(joker.buy_card(1, 1).empty());
+    assert(joker.players()[0].gold == 0 && joker.bank_gold() == 5);
+    assert(joker.players()[0].tokens[0] == 0 && joker.players()[0].tokens[1] == 0);
 
-    // Défausse de l'or
-    assert(joker.discard_gold().empty() || joker.current_player().gold == 0);
+    // Une réservée peut être achetée par son propriétaire
+    Game own({"A", "B"}, 6, Mode::Classic);
+    GameTester::player(own, 0).reserved.push_back({2, Color::Blue, {1, 0, 0, 0, 0}});
+    GameTester::player(own, 0).tokens = {1, 0, 0, 0, 0};
+    assert(own.can_buy_reserved(1));
+    assert(own.buy_reserved(1).empty());
+    assert(own.players()[0].cards.size() == 1 && own.players()[0].reserved.empty());
+    assert(own.events().back().type == EventType::BuyReserved);
+}
+
+static void test_turn_flow()
+{
+    // Défausse obligatoire au-delà de 10 jetons, or compris
+    Game game({"A", "B"}, 7, Mode::Classic);
+    GameTester::player(game, 0).tokens = {2, 2, 2, 2, 0};
+    GameTester::player(game, 0).gold = 1;
+    assert(game.take_tokens({0, 0, 1, 1, 1}).empty());
+    assert(game.step() == TurnStep::Discard && game.current_index() == 0);
+    assert(game.tokens_to_discard() == 2);
+    assert(!game.take_tokens({1, 1, 1, 0, 0}).empty());   // pas d'action pendant la défausse
+    assert(game.discard_gold().empty());
+    assert(game.step() == TurnStep::Discard);
+    assert(!game.discard_gold().empty());                 // plus d'or
+    assert(game.discard(Color::Red).empty());
+    assert(game.step() == TurnStep::Action && game.current_index() == 1);
+    assert(game.players()[0].token_count() == 10);
+
+    // Un seul noble possible : il vient tout seul
+    Game single({"A", "B"}, 8, Mode::Quick);
+    std::vector<Noble>& nobles = GameTester::nobles(single);
+    nobles[0].cost = {1, 0, 0, 0, 0};
+    nobles[1].cost = {4, 4, 0, 0, 0};
+    nobles[2].cost = {4, 4, 0, 0, 0};
+    GameTester::player(single, 0).cards.push_back({0, Color::White, {0, 0, 0, 0, 0}});
+    assert(single.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(single.players()[0].nobles.size() == 1 && single.players()[0].score() == 3);
+    assert(single.nobles().size() == 2 && single.current_index() == 1);
+
+    // Deux nobles possibles : le joueur choisit, un seul par tour
+    Game two({"A", "B"}, 9, Mode::Quick);
+    GameTester::nobles(two)[0].cost = {1, 0, 0, 0, 0};
+    GameTester::nobles(two)[1].cost = {0, 1, 0, 0, 0};
+    GameTester::nobles(two)[2].cost = {4, 4, 4, 0, 0};
+    GameTester::player(two, 0).cards.push_back({0, Color::White, {0, 0, 0, 0, 0}});
+    GameTester::player(two, 0).cards.push_back({0, Color::Blue, {0, 0, 0, 0, 0}});
+    std::string second = two.nobles()[1].name;
+    assert(two.take_tokens({0, 0, 1, 1, 1}).empty());
+    assert(two.step() == TurnStep::ChooseNoble && two.noble_choices().size() == 2);
+    assert(!two.choose_noble(2).empty());                 // pas dans les choix
+    assert(two.choose_noble(1).empty());
+    assert(two.players()[0].nobles.size() == 1 && two.players()[0].nobles[0].name == second);
+    assert(two.step() == TurnStep::Action && two.current_index() == 1);
+
+    // Dernier tour : B termine le tour de table après les 15 points de A
+    Game last({"A", "B"}, 10, Mode::Quick);
+    for (int i = 0; i < 5; i++) {
+        GameTester::player(last, 0).cards.push_back({3, Color::Red, {0, 0, 0, 0, 0}});
+    }
+    assert(last.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(last.is_last_round() && !last.is_over());
+    assert(last.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(last.is_over() && last.step() == TurnStep::Over);
+    assert(last.winners().size() == 1 && last.winners()[0] == 0);
+
+    // Passes en chaîne et partie bloquée : réserve vide, personne ne peut acheter
+    Game blocked({"A", "B", "C"}, 11, Mode::Quick);
+    GameTester::bank(blocked) = {0, 0, 1, 0, 0};
+    assert(blocked.take_tokens({0, 0, 1, 0, 0}).empty());
+    // B et C ne peuvent rien faire, puis A non plus : partie bloquée
+    assert(blocked.is_over() && blocked.is_blocked());
+    int passes = 0;
+    for (const Event& event : blocked.events()) {
+        passes += event.type == EventType::Pass;
+    }
+    assert(passes == 3);
+}
+
+// Parties complètes jouées au hasard : elles doivent toutes se terminer,
+// sans perdre de jeton et sans dépasser les limites.
+static void test_random_games()
+{
+    std::mt19937 random(2026);
+    for (int g = 0; g < 300; g++) {
+        int count = 2 + g % 3;
+        std::vector<std::string> names;
+        for (int i = 0; i < count; i++) {
+            names.push_back("J" + std::to_string(i));
+        }
+        Game game(names, g, g % 2 ? Mode::Classic : Mode::Quick);
+        int start = all_tokens(game);
+        int moves = 0;
+        while (!game.is_over() && moves < 20000) {
+            moves++;
+            int choice = static_cast<int>(random() % 6);
+            if (game.step() == TurnStep::Discard) {
+                if (game.discard(color_at(choice % COLOR_COUNT)).empty() || game.discard_gold().empty()) {
+                    continue;
+                }
+            } else if (game.step() == TurnStep::ChooseNoble) {
+                assert(game.choose_noble(game.noble_choices()[0]).empty());
+            } else {
+                // Achète la première carte possible (réservées d'abord), sinon
+                // réserve parfois, sinon prend des jetons de couleurs différentes
+                bool done = false;
+                for (int r = 1; r <= 3 && !done; r++) {
+                    done = game.can_buy_reserved(r) && game.buy_reserved(r).empty();
+                }
+                for (int level = 3; level >= 1 && !done; level--) {
+                    for (int position = 1; position <= 4 && !done; position++) {
+                        done = game.can_buy(level, position) && game.buy_card(level, position).empty();
+                    }
+                }
+                if (!done && choice == 0 && game.can_reserve()) {
+                    done = game.reserve_card(1 + static_cast<int>(random() % 3), static_cast<int>(random() % 5)).empty();
+                }
+                if (!done) {
+                    Resources wanted = {0, 0, 0, 0, 0};
+                    int available = 0;
+                    for (int c = 0; c < COLOR_COUNT; c++) {
+                        available += game.bank()[c] > 0;
+                    }
+                    int needed = available < 3 ? available : 3;
+                    for (int c = choice % COLOR_COUNT, k = 0; k < COLOR_COUNT && needed > 0; k++, c = (c + 1) % COLOR_COUNT) {
+                        if (game.bank()[c] > 0) {
+                            wanted[c] = 1;
+                            needed--;
+                        }
+                    }
+                    done = game.take_tokens(wanted).empty();
+                }
+                if (!done && game.can_reserve()) {
+                    game.reserve_card(1, 0);
+                }
+            }
+            assert(all_tokens(game) == start);
+            for (const Player& player : game.players()) {
+                assert(player.reserved.size() <= 3 && player.gold >= 0);
+                for (int c = 0; c < COLOR_COUNT; c++) {
+                    assert(player.tokens[c] >= 0 && game.bank()[c] >= 0);
+                }
+            }
+        }
+        assert(game.is_over());
+    }
 }
 
 int main()
@@ -164,6 +308,8 @@ int main()
     test_noble();
     test_game();
     test_classic();
+    test_turn_flow();
+    test_random_games();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

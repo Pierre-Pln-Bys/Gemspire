@@ -4,6 +4,24 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [2.2.0] - 2026-11-20
+
+### Ajouté
+- CI : compilation et tests à chaque push et pull request, sous Linux et
+  Windows.
+- Historique des actions : chaque action (prise de jetons, achat,
+  réservation, défausse, visite de noble, passe) est décrite dans la console
+  et dans la ligne d'état de la fenêtre.
+- Console : chaque joueur a sa couleur (nom, tableau des joueurs, résultats).
+- Tests du déroulement du tour (défausse avec or, choix entre deux nobles,
+  dernier tour, passes en chaîne, partie bloquée) et 300 parties complètes
+  simulées.
+
+### Modifié
+- Le déroulement d'un tour (défausse, nobles, joueur suivant, passes) est
+  géré par `Game` lui-même ; la console et la fenêtre partagent ce code.
+- Actions GitHub mises à jour (plus d'avertissement Node.js 20).
+
 ## [2.1.0] - 2026-11-20
 
 ### Modifié

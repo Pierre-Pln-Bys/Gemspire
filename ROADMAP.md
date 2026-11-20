@@ -41,15 +41,15 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v2.2 — Fondations
 
-- [ ] CI à chaque push et pull request : console + GUI sous Linux, console
+- [x] CI à chaque push et pull request : console + GUI sous Linux, console
   sous Windows, `make test`.
-- [ ] Mise à jour des actions GitHub (avertissement Node.js 20).
-- [ ] Déroulement du tour dans la logique (`turn.cpp`) : action → défausse
+- [x] Mise à jour des actions GitHub (avertissement Node.js 20).
+- [x] Déroulement du tour dans la logique (`turn.cpp`) : action → défausse
   → noble (choix) → joueur suivant, passes automatiques. Console et fenêtre
   l'utilisent.
-- [ ] Tests du déroulement : défausse avec or, deux nobles, passes en
+- [x] Tests du déroulement : défausse avec or, deux nobles, passes en
   chaîne, partie bloquée, dernier tour.
-- [ ] Couleurs de joueurs dans la console.
+- [x] Couleurs de joueurs dans la console.
 
 ## v2.3 — Adversaires ordinateur
 

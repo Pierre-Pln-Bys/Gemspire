@@ -20,6 +20,13 @@ std::string format_resources(const Resources& resources);
 // Jetons d'un joueur, or compris
 std::string format_tokens(const Player& player);
 
+// `text` dans la couleur du joueur `player` (console)
+std::string player_colored(int player, const std::string& text);
+
+// Phrase décrivant un événement ("Alice prend 1 Blanc, 1 Vert, 1 Rouge."),
+// sans codes couleur : utilisée par la console et par la fenêtre.
+std::string describe_event(const Game& game, const Event& event);
+
 // Le plateau dessiné comme la vraie table : nobles, 3 rangées de cartes avec
 // leur pioche, réserve de jetons, puis les joueurs.
 void show_board(const Game& game);

@@ -145,49 +145,52 @@ static bool play_action(Game& game)
     }
 }
 
-// Défausse tant que le joueur a plus de 10 jetons.
-static bool discard_excess(Game& game)
+// Étape Discard : demande un jeton à défausser (Game passe à la suite tout seul).
+// Retourne false si le joueur veut quitter.
+static bool ask_discard(Game& game)
 {
     bool classic = game.mode() == Mode::Classic;
     int max_choice = classic ? COLOR_COUNT + 1 : COLOR_COUNT;
     std::string prompt = classic ? "Jeton à défausser (1-5, 6 = Or) : " : "Couleur à défausser (1-5) : ";
-    while (game.must_discard()) {
-        std::cout << "Vous avez plus de 10 jetons : " << format_tokens(game.current_player()) << "\n";
-        int choice = 0;
-        if (!ask_number(prompt, 1, max_choice, choice)) {
-            return false;
-        }
-        std::string error = choice == COLOR_COUNT + 1 ? game.discard_gold() : game.discard(color_at(choice - 1));
-        if (!error.empty()) {
-            std::cout << "Erreur : " << error << "\n";
-        }
+    std::cout << "Plus de 10 jetons, encore " << game.tokens_to_discard() << " à défausser : "
+              << format_tokens(game.current_player()) << "\n";
+    int choice = 0;
+    if (!ask_number(prompt, 1, max_choice, choice)) {
+        return false;
+    }
+    std::string error = choice == COLOR_COUNT + 1 ? game.discard_gold() : game.discard(color_at(choice - 1));
+    if (!error.empty()) {
+        std::cout << "Erreur : " << error << "\n";
     }
     return true;
 }
 
-// Visite d'un noble en fin de tour (le joueur choisit s'il y en a plusieurs).
-static bool noble_visit(Game& game)
+// Étape ChooseNoble : plusieurs nobles peuvent venir, le joueur en choisit un.
+static bool ask_noble(Game& game)
 {
-    std::vector<int> candidates = game.visiting_nobles();
-    if (candidates.empty()) {
-        return true;
+    const std::vector<int>& choices = game.noble_choices();
+    std::cout << "Plusieurs nobles veulent vous rendre visite :\n";
+    for (int i = 0; i < static_cast<int>(choices.size()); i++) {
+        std::cout << "  " << (i + 1) << ") " << game.nobles()[choices[i]].name << "\n";
     }
-    int choice = 0;
-    if (candidates.size() > 1) {
-        std::cout << "Plusieurs nobles veulent vous rendre visite :\n";
-        for (int i = 0; i < static_cast<int>(candidates.size()); i++) {
-            std::cout << "  " << (i + 1) << ") " << game.nobles()[candidates[i]].name << "\n";
-        }
-        int number = 0;
-        if (!ask_number("Lequel choisissez-vous ? ", 1, static_cast<int>(candidates.size()), number)) {
-            return false;
-        }
-        choice = number - 1;
+    int number = 0;
+    if (!ask_number("Lequel choisissez-vous ? ", 1, static_cast<int>(choices.size()), number)) {
+        return false;
     }
-    std::cout << game.nobles()[candidates[choice]].name << " rend visite à "
-              << game.current_player().name << " (+3 pts) !\n";
-    game.receive_noble(candidates[choice]);
+    std::string error = game.choose_noble(choices[number - 1]);
+    if (!error.empty()) {
+        std::cout << "Erreur : " << error << "\n";
+    }
     return true;
+}
+
+// Affiche les événements apparus depuis le dernier appel
+static void print_new_events(const Game& game, int& shown)
+{
+    const std::vector<Event>& events = game.events();
+    for (; shown < static_cast<int>(events.size()); shown++) {
+        std::cout << "  > " << describe_event(game, events[shown]) << "\n";
+    }
 }
 
 // Sous Windows : console en UTF-8 et codes couleur ANSI activés
@@ -279,22 +282,22 @@ int main(int argc, char* argv[])
     Game game(names, seed, mode);
     show_help(mode);
 
+    int shown_events = 0;
     while (!game.is_over()) {
-        show_board(game);
-        if (game.can_play()) {
-            if (!play_action(game)) {
-                std::cout << "Partie abandonnée.\n";
-                return 0;
-            }
-        } else {
-            std::cout << game.current_player().name << " ne peut rien faire et passe son tour.\n";
-            game.pass_turn();
+        bool keep_playing = true;
+        if (game.step() == TurnStep::Action) {
+            show_board(game);
+            keep_playing = play_action(game);
+        } else if (game.step() == TurnStep::Discard) {
+            keep_playing = ask_discard(game);
+        } else if (game.step() == TurnStep::ChooseNoble) {
+            keep_playing = ask_noble(game);
         }
-        if (!discard_excess(game) || !noble_visit(game)) {
+        if (!keep_playing) {
             std::cout << "Partie abandonnée.\n";
             return 0;
         }
-        game.end_turn();
+        print_new_events(game, shown_events);
     }
 
     show_results(game);

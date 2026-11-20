@@ -19,14 +19,6 @@ const double BOARD_WIDTH = 1280;
 const double BOARD_HEIGHT = 800;
 const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 couleurs
 
-// Étape du tour en cours
-enum class Phase {
-    Action,       // le joueur choisit son action
-    Discard,      // il doit défausser des jetons (plus de 10)
-    ChooseNoble,  // plusieurs nobles peuvent venir : il en choisit un
-    Over          // partie terminée
-};
-
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
 
@@ -65,12 +57,11 @@ struct Button {
 struct App {
     std::unique_ptr<Game> game;
     std::vector<int> player_colors;         // couleur choisie par chaque joueur (indice dans PLAYER_COLORS)
-    Phase phase = Phase::Action;
     Resources selection = {0, 0, 0, 0, 0};  // jetons choisis dans la réserve
     Target target = Target::None;
     int target_level = 0;                   // niveau de la carte / pioche choisie
     int target_index = 0;                   // position (à partir de 0)
-    std::vector<int> noble_choices;         // nobles possibles (phase ChooseNoble)
+    int shown_events = 0;                   // événements de Game déjà affichés
     std::string message;                    // ligne d'état en bas de l'écran
     bool message_is_error = false;
 
