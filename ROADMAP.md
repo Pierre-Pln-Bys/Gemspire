@@ -53,9 +53,9 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v2.3 — Adversaires ordinateur
 
-- [ ] IA « facile » et « moyenne » (logique pure, testable).
-- [ ] Choix humain / ordinateur par joueur (console et fenêtre).
-- [ ] Tournoi automatique de 1 000 parties dans les tests (aucun plantage,
+- [x] IA « facile » et « moyenne » (logique pure, testable).
+- [x] Choix humain / ordinateur par joueur (console et fenêtre).
+- [x] Tournoi automatique de 1 000 parties dans les tests (aucun plantage,
   aucun jeton perdu, la moyenne bat la facile).
 
 ## v2.4 — Sauvegarde

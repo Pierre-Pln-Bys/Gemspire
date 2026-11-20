@@ -63,6 +63,11 @@ Game::Game(const std::vector<std::string>& names, unsigned seed, Mode mode)
 
 // ---------------------------------------------------------------- Consultation
 
+void Game::set_controller(int player, Controller controller)
+{
+    players_[player].controller = controller;
+}
+
 Mode Game::mode() const { return mode_; }
 const std::vector<Player>& Game::players() const { return players_; }
 const Player& Game::current_player() const { return players_[current_]; }

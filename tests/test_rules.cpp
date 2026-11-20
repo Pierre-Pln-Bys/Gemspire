@@ -3,6 +3,7 @@
 #include <iostream>
 #include <random>
 
+#include "../src/ai.hpp"
 #include "../src/data.hpp"
 #include "../src/game.hpp"
 #include "../src/rules.hpp"
@@ -300,6 +301,47 @@ static void test_random_games()
     }
 }
 
+// Tournoi : 1 000 parties entre ordinateurs. Aucune ne doit planter ni
+// perdre de jeton, et l'IA moyenne doit battre nettement l'IA facile.
+static void test_ai_tournament()
+{
+    int medium_wins = 0;
+    int easy_wins = 0;
+    for (int g = 0; g < 1000; g++) {
+        int count = 2 + g % 3;
+        std::vector<std::string> names;
+        for (int i = 0; i < count; i++) {
+            names.push_back("IA" + std::to_string(i));
+        }
+        Game game(names, 1000 + g, g % 2 ? Mode::Classic : Mode::Quick);
+        // Moyenne et facile en alternance, la première place change à chaque partie
+        for (int i = 0; i < count; i++) {
+            game.set_controller(i, (i + g) % 2 ? Controller::AiMedium : Controller::AiEasy);
+        }
+        int start = all_tokens(game);
+        int moves = 0;
+        while (!game.is_over()) {
+            assert(ai_to_play(game));
+            assert(ai_play(game).empty());
+            assert(all_tokens(game) == start);
+            assert(++moves < 5000);
+        }
+        if (game.is_blocked()) {
+            continue;
+        }
+        std::vector<int> winners = game.winners();
+        if (winners.size() == 1) {
+            if (game.players()[winners[0]].controller == Controller::AiMedium) {
+                medium_wins++;
+            } else {
+                easy_wins++;
+            }
+        }
+    }
+    std::cout << "Tournoi : IA moyenne " << medium_wins << " victoires, IA facile " << easy_wins << std::endl;
+    assert(medium_wins > easy_wins * 3 / 2);
+}
+
 int main()
 {
     test_data();
@@ -310,6 +352,7 @@ int main()
     test_classic();
     test_turn_flow();
     test_random_games();
+    test_ai_tournament();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

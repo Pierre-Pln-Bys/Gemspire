@@ -8,7 +8,7 @@ TARGET = splendor
 GUI_TARGET = splendor-gui
 
 # Logique du jeu, commune aux deux versions et aux tests
-LOGIC_OBJS = src/data.o src/rules.o src/game.o
+LOGIC_OBJS = src/data.o src/rules.o src/game.o src/ai.o
 # Liste des fichiers nécessaires à chaque exécutable
 OBJS = src/main.o src/display.o $(LOGIC_OBJS)
 GUI_OBJS = src/gui_main.o src/gui_draw.o src/display.o $(LOGIC_OBJS)

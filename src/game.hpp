@@ -19,9 +19,13 @@ enum class Mode {
     Classic   // règles classiques : avec or et réservation
 };
 
+// Qui joue pour ce joueur : une personne ou l'ordinateur (voir ai.hpp)
+enum class Controller { Human, AiEasy, AiMedium };
+
 // Un joueur et tout ce qu'il possède
 struct Player {
     std::string name;
+    Controller controller = Controller::Human;
     Resources tokens = {0, 0, 0, 0, 0};
     int gold = 0;                 // jetons or (joker)
     std::vector<Card> cards;      // cartes achetées
@@ -65,6 +69,9 @@ class Game {
 public:
     // `names` : 2 à 4 noms de joueurs. `seed` : graine du mélange.
     Game(const std::vector<std::string>& names, unsigned seed, Mode mode);
+
+    // Choisit qui joue pour le joueur `player` (humain par défaut)
+    void set_controller(int player, Controller controller);
 
     // --- Consultation de l'état ---
     Mode mode() const;

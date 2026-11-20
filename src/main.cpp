@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "ai.hpp"
 #include "display.hpp"
 #include "game.hpp"
 #include "version.hpp"
@@ -268,6 +269,7 @@ int main(int argc, char* argv[])
         return 0;
     }
     std::vector<std::string> names;
+    std::vector<Controller> controllers;
     for (int i = 1; i <= player_count; i++) {
         std::string name;
         if (!read_line("Nom du joueur " + std::to_string(i) + " : ", name)) {
@@ -277,15 +279,37 @@ int main(int argc, char* argv[])
             name = "Joueur " + std::to_string(i);
         }
         names.push_back(name);
+
+        // Humain par défaut (Entrée), sinon ordinateur facile ou moyen
+        std::string answer;
+        if (!read_line("  Joué par : Entrée = humain, f = ordinateur facile, m = ordinateur moyen : ", answer)) {
+            return 0;
+        }
+        if (answer == "f") {
+            controllers.push_back(Controller::AiEasy);
+        } else if (answer == "m") {
+            controllers.push_back(Controller::AiMedium);
+        } else {
+            controllers.push_back(Controller::Human);
+        }
     }
 
     Game game(names, seed, mode);
+    for (int i = 0; i < player_count; i++) {
+        game.set_controller(i, controllers[i]);
+    }
     show_help(mode);
 
     int shown_events = 0;
     while (!game.is_over()) {
         bool keep_playing = true;
-        if (game.step() == TurnStep::Action) {
+        if (ai_to_play(game)) {
+            std::string error = ai_play(game);
+            if (!error.empty()) {
+                std::cout << "Erreur de l'ordinateur : " << error << "\n";
+                return 1;
+            }
+        } else if (game.step() == TurnStep::Action) {
             show_board(game);
             keep_playing = play_action(game);
         } else if (game.step() == TurnStep::Discard) {

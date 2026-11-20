@@ -4,6 +4,14 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [2.3.0] - 2026-11-20
+
+### Ajouté
+- Adversaires ordinateur « facile » et « moyen », dans la console et dans la
+  fenêtre (colonne « Joué par » ; l'ordinateur joue avec une courte pause).
+- Tournoi de 1 000 parties entre ordinateurs dans les tests : aucune partie
+  ne plante ni ne perd de jeton, et l'IA moyenne bat l'IA facile.
+
 ## [2.2.0] - 2026-11-20
 
 ### Ajouté

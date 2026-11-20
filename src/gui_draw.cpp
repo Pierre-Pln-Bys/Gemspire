@@ -505,6 +505,14 @@ static void draw_players(cairo_t* cr, const App& app)
             name_x += 22;
         }
         draw_text(cr, player.name, name_x, r.y + 30, 19, true, own);
+        if (player.controller != Controller::Human) {
+            std::string kind = player.controller == Controller::AiEasy ? "ordinateur facile" : "ordinateur moyen";
+            cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+            cairo_set_font_size(cr, 19);
+            cairo_text_extents_t extents;
+            cairo_text_extents(cr, player.name.c_str(), &extents);
+            draw_text(cr, "(" + kind + ")", name_x + extents.x_advance + 10, r.y + 29, 12, false, {0.8, 0.85, 0.8});
+        }
         draw_text(cr, std::to_string(player.score()), r.x + r.w - 52, r.y + 34, 30, true, WHITE_TEXT, Align::Right);
         draw_text(cr, "pts", r.x + r.w - 15, r.y + 34, 13, false, WHITE_TEXT, Align::Right);
 
@@ -606,7 +614,10 @@ static void draw_action_panel(cairo_t* cr, const App& app)
     cairo_fill(cr);
 
     std::string title;
-    if (app.game->step() == TurnStep::Discard) {
+    bool computer = app.game->current_player().controller != Controller::Human;
+    if (computer) {
+        title = app.game->current_player().name + " réfléchit...";
+    } else if (app.game->step() == TurnStep::Discard) {
         title = "Défaussez vos jetons en trop";
     } else if (app.game->step() == TurnStep::ChooseNoble) {
         title = "Choisissez un noble";
@@ -629,7 +640,7 @@ static void draw_action_panel(cairo_t* cr, const App& app)
                 k++;
             }
         }
-    } else if (app.game->step() == TurnStep::Action && app.target == Target::None) {
+    } else if (!computer && app.game->step() == TurnStep::Action && app.target == Target::None) {
         draw_text(cr, "Cliquez des jetons de la réserve,", r.x + 12, r.y + 50, 12, false, {0.85, 0.9, 0.85});
         draw_text(cr, "une carte ou une pioche.", r.x + 12, r.y + 68, 12, false, {0.85, 0.9, 0.85});
         draw_text(cr, "Contour doré = carte achetable", r.x + 12, r.y + 96, 12, false, BUYABLE);

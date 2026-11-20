@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ai.hpp"
 #include "display.hpp"
 #include "gui.hpp"
 #include "rules.hpp"
@@ -18,6 +19,7 @@ struct SetupWidgets {
     GtkWidget* spin;
     GtkWidget* entries[4];
     GtkWidget* colors[4];   // choix de la couleur de chaque joueur
+    GtkWidget* players[4];  // humain ou ordinateur
 };
 
 // Active seulement les champs des joueurs présents
@@ -28,6 +30,7 @@ static void on_player_count_changed(GtkSpinButton* spin, gpointer data)
     for (int i = 0; i < 4; i++) {
         gtk_widget_set_sensitive(widgets->entries[i], i < count);
         gtk_widget_set_sensitive(widgets->colors[i], i < count);
+        gtk_widget_set_sensitive(widgets->players[i], i < count);
     }
 }
 
@@ -50,14 +53,15 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
     GtkWidget* classic = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(quick),
                                                                      "Partie classique (avec or et réservation)");
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Mode :"), 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), quick, 1, 0, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), classic, 1, 1, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), quick, 1, 0, 3, 1);
+    gtk_grid_attach(GTK_GRID(grid), classic, 1, 1, 3, 1);
 
     SetupWidgets widgets;
     widgets.spin = gtk_spin_button_new_with_range(2, 4, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Joueurs :"), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), widgets.spin, 1, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Couleur"), 2, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Joué par"), 3, 2, 1, 1);
     for (int i = 0; i < 4; i++) {
         widgets.entries[i] = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(widgets.entries[i]), ("Joueur " + std::to_string(i + 1)).c_str());
@@ -73,9 +77,17 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
         }
         gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.colors[i]), i);
         gtk_grid_attach(GTK_GRID(grid), widgets.colors[i], 2, 3 + i, 1, 1);
+
+        // Joueur 1 humain, les autres aussi par défaut
+        widgets.players[i] = gtk_combo_box_text_new();
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.players[i]), "Humain");
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.players[i]), "Ordinateur facile");
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.players[i]), "Ordinateur moyen");
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.players[i]), 0);
+        gtk_grid_attach(GTK_GRID(grid), widgets.players[i], 3, 3 + i, 1, 1);
     }
     GtkWidget* error_label = gtk_label_new("");
-    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 7, 3, 1);
+    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 7, 4, 1);
     g_signal_connect(widgets.spin, "value-changed", G_CALLBACK(on_player_count_changed), &widgets);
     on_player_count_changed(GTK_SPIN_BUTTON(widgets.spin), &widgets);
 
@@ -108,6 +120,10 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
         }
         app.game.reset(new Game(names, std::random_device{}(), mode));
         app.player_colors = colors;
+        const Controller kinds[] = {Controller::Human, Controller::AiEasy, Controller::AiMedium};
+        for (int i = 0; i < count; i++) {
+            app.game->set_controller(i, kinds[gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.players[i]))]);
+        }
         app.shown_events = 0;
         app.selection = {0, 0, 0, 0, 0};
         app.target = Target::None;
@@ -152,6 +168,41 @@ static void show_new_events(App& app)
         text += "À " + game.current_player().name + " de jouer.";
     }
     set_message(app, text, false);
+}
+
+// ---------------------------------------------------------------- Ordinateur
+
+// Un coup de l'ordinateur ; GTK rappelle cette fonction tant qu'il doit jouer
+static gboolean on_ai_timer(gpointer data)
+{
+    App& app = *static_cast<App*>(data);
+    if (!app.game || !ai_to_play(*app.game)) {
+        app.ai_timer_pending = false;
+        return G_SOURCE_REMOVE;
+    }
+    std::string error = ai_play(*app.game);
+    if (error.empty()) {
+        show_new_events(app);
+    } else {
+        set_message(app, "Erreur de l'ordinateur : " + error, true);
+    }
+    if (app.area != nullptr) {
+        gtk_widget_queue_draw(app.area);
+    }
+    if (!error.empty() || !ai_to_play(*app.game)) {
+        app.ai_timer_pending = false;
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+// Si c'est à l'ordinateur de jouer, programme ses coups (un toutes les 0,7 s)
+static void schedule_ai(App& app)
+{
+    if (app.game && ai_to_play(*app.game) && !app.ai_timer_pending) {
+        app.ai_timer_pending = true;
+        g_timeout_add(700, on_ai_timer, &app);
+    }
 }
 
 // ---------------------------------------------------------------- Boutons
@@ -298,6 +349,10 @@ static gboolean on_click(GtkWidget* area, GdkEventButton* event, gpointer data)
     if (!app.game || event->button != 1) {
         return FALSE;
     }
+    // Pendant le tour de l'ordinateur, on ne peut pas cliquer sur le plateau
+    if (ai_to_play(*app.game)) {
+        return TRUE;
+    }
     // Coordonnées de la fenêtre -> repère virtuel du plateau
     double x = (event->x - app.offset_x) / app.scale;
     double y = (event->y - app.offset_y) / app.scale;
@@ -324,6 +379,7 @@ static gboolean on_click(GtkWidget* area, GdkEventButton* event, gpointer data)
     }
     if (app.game) {
         gtk_widget_queue_draw(area);
+        schedule_ai(app);
     }
     return TRUE;
 }
@@ -369,7 +425,9 @@ int main(int argc, char* argv[])
     g_signal_connect(window, "key-press-event", G_CALLBACK(on_key), &app);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
 
+    app.area = area;
     gtk_widget_show_all(window);
+    schedule_ai(app);
     gtk_main();
     return 0;
 }

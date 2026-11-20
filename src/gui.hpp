@@ -7,6 +7,9 @@
 
 #include <cairo.h>
 
+// Déclaration de GTK (définie dans gtk.h) : évite d'inclure GTK partout
+typedef struct _GtkWidget GtkWidget;
+
 #include "game.hpp"
 #include "types.hpp"
 
@@ -57,6 +60,8 @@ struct Button {
 struct App {
     std::unique_ptr<Game> game;
     std::vector<int> player_colors;         // couleur choisie par chaque joueur (indice dans PLAYER_COLORS)
+    GtkWidget* area = nullptr;              // zone de dessin (pour redessiner après un coup de l'ordinateur)
+    bool ai_timer_pending = false;          // un coup de l'ordinateur est programmé
     Resources selection = {0, 0, 0, 0, 0};  // jetons choisis dans la réserve
     Target target = Target::None;
     int target_level = 0;                   // niveau de la carte / pioche choisie
