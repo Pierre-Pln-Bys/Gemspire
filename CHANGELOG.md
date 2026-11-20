@@ -4,7 +4,7 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
-## [Non publié]
+## [2.1.0] - 2026-11-20
 
 ### Modifié
 - La 5e couleur de ressource s'appelle maintenant Noir (au lieu de Marron),
@@ -16,6 +16,8 @@ Toutes les évolutions notables du projet. Format inspiré de
 - Interface graphique : chaque joueur choisit sa couleur à la création de la
   partie ; son panneau en est entouré pendant son tour et ses cartes
   réservées en prennent le bord.
+- Workflow de release : lancement manuel possible pour publier un tag déjà
+  existant (onglet Actions ou `gh workflow run release.yml -f tag=vX.Y.Z`).
 
 ## [2.0.0] - 2026-11-20
 
