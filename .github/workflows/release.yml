@@ -2,6 +2,8 @@
 #
 # Déclenchement : push d'un tag de la forme vX.0.0 (ex : v2.0.0, v3.0.0).
 # Les versions mineures/correctives (v2.1.0, v2.0.1) ne déclenchent rien.
+# Lancement manuel possible (onglet Actions ou `gh workflow run release.yml
+# -f tag=v2.0.0`) pour (re)publier un tag existant.
 #
 # Fichiers attachés à la release GitHub (téléchargeables directement, sans zip) :
 #   - splendor-windows.exe       jeu console pour Windows (autonome)
@@ -13,6 +15,11 @@ on:
   push:
     tags:
       - "v[0-9]+.0.0"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existant à publier (ex : v2.0.0)"
+        required: true
 
 permissions:
   contents: write
@@ -23,6 +30,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Dépendances
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev
@@ -55,6 +64,8 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: msys2/setup-msys2@v2
         with:
@@ -88,7 +99,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: Splendor ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Splendor ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: |
             splendor-windows.exe
