@@ -17,20 +17,22 @@
 struct SetupWidgets {
     GtkWidget* spin;
     GtkWidget* entries[4];
+    GtkWidget* colors[4];   // choix de la couleur de chaque joueur
 };
 
-// Active seulement les champs de nom utiles
+// Active seulement les champs des joueurs présents
 static void on_player_count_changed(GtkSpinButton* spin, gpointer data)
 {
     SetupWidgets* widgets = static_cast<SetupWidgets*>(data);
     int count = gtk_spin_button_get_value_as_int(spin);
     for (int i = 0; i < 4; i++) {
         gtk_widget_set_sensitive(widgets->entries[i], i < count);
+        gtk_widget_set_sensitive(widgets->colors[i], i < count);
     }
 }
 
-// Demande le mode, le nombre de joueurs et les noms, puis crée la partie.
-// Retourne false si le joueur annule.
+// Demande le mode, le nombre de joueurs, leurs noms et leurs couleurs, puis
+// crée la partie. Retourne false si le joueur annule.
 static bool run_setup_dialog(App& app, GtkWindow* parent)
 {
     GtkWidget* dialog = gtk_dialog_new_with_buttons("Nouvelle partie de Splendor", parent, GTK_DIALOG_MODAL,
@@ -48,13 +50,14 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
     GtkWidget* classic = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(quick),
                                                                      "Partie classique (avec or et réservation)");
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Mode :"), 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), quick, 1, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), classic, 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), quick, 1, 0, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), classic, 1, 1, 2, 1);
 
     SetupWidgets widgets;
     widgets.spin = gtk_spin_button_new_with_range(2, 4, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Joueurs :"), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), widgets.spin, 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Couleur"), 2, 2, 1, 1);
     for (int i = 0; i < 4; i++) {
         widgets.entries[i] = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(widgets.entries[i]), ("Joueur " + std::to_string(i + 1)).c_str());
@@ -62,28 +65,57 @@ static bool run_setup_dialog(App& app, GtkWindow* parent)
         std::string label = "Nom " + std::to_string(i + 1) + " :";
         gtk_grid_attach(GTK_GRID(grid), gtk_label_new(label.c_str()), 0, 3 + i, 1, 1);
         gtk_grid_attach(GTK_GRID(grid), widgets.entries[i], 1, 3 + i, 1, 1);
+
+        // Par défaut, chaque joueur a une couleur différente
+        widgets.colors[i] = gtk_combo_box_text_new();
+        for (int c = 0; c < PLAYER_COLOR_COUNT; c++) {
+            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.colors[i]), PLAYER_COLORS[c].name);
+        }
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.colors[i]), i);
+        gtk_grid_attach(GTK_GRID(grid), widgets.colors[i], 2, 3 + i, 1, 1);
     }
+    GtkWidget* error_label = gtk_label_new("");
+    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 7, 3, 1);
     g_signal_connect(widgets.spin, "value-changed", G_CALLBACK(on_player_count_changed), &widgets);
     on_player_count_changed(GTK_SPIN_BUTTON(widgets.spin), &widgets);
 
     gtk_widget_show_all(dialog);
-    bool accepted = gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK;
-
-    if (accepted) {
-        Mode mode = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(classic)) ? Mode::Classic : Mode::Quick;
+    bool accepted = false;
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
         int count = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(widgets.spin));
+        std::vector<int> colors;
+        bool duplicate = false;
+        for (int i = 0; i < count; i++) {
+            int color = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.colors[i]));
+            for (int other : colors) {
+                if (other == color) {
+                    duplicate = true;
+                }
+            }
+            colors.push_back(color);
+        }
+        if (duplicate) {
+            gtk_label_set_markup(GTK_LABEL(error_label),
+                                 "<span foreground=\"#d03030\">Chaque joueur doit avoir une couleur différente.</span>");
+            continue;
+        }
+
+        Mode mode = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(classic)) ? Mode::Classic : Mode::Quick;
         std::vector<std::string> names;
         for (int i = 0; i < count; i++) {
             std::string name = gtk_entry_get_text(GTK_ENTRY(widgets.entries[i]));
             names.push_back(name.empty() ? "Joueur " + std::to_string(i + 1) : name);
         }
         app.game.reset(new Game(names, std::random_device{}(), mode));
+        app.player_colors = colors;
         app.phase = Phase::Action;
         app.selection = {0, 0, 0, 0, 0};
         app.target = Target::None;
         app.noble_choices.clear();
         app.message = "À " + app.game->current_player().name + " de jouer.";
         app.message_is_error = false;
+        accepted = true;
+        break;
     }
     gtk_widget_destroy(dialog);
     return accepted;

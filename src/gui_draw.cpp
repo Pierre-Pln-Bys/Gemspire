@@ -87,7 +87,7 @@ static Rgb gem_color(int color_index)
     case 1: return {0.16, 0.38, 0.82};  // bleu (saphir)
     case 2: return {0.10, 0.58, 0.30};  // vert (émeraude)
     case 3: return {0.85, 0.16, 0.18};  // rouge (rubis)
-    case 4: return {0.38, 0.24, 0.16};  // marron (onyx)
+    case 4: return {0.12, 0.12, 0.13};  // noir (onyx)
     default: return {0.96, 0.76, 0.12}; // or
     }
 }
@@ -113,8 +113,17 @@ static void set_color(cairo_t* cr, Rgb c, double alpha = 1)
 
 const Rgb WHITE_TEXT = {1, 1, 1};
 const Rgb DARK_TEXT = {0.15, 0.15, 0.15};
-const Rgb HIGHLIGHT = {1.0, 0.82, 0.25};   // sélection (doré)
-const Rgb BUYABLE = {0.35, 0.95, 0.45};    // carte achetable (vert vif)
+const Rgb HIGHLIGHT = {1.0, 0.82, 0.25};   // doré : titres, boutons, cartes achetables
+const Rgb BUYABLE = HIGHLIGHT;             // carte achetable
+const Rgb SELECTED = {1, 1, 1};            // carte ou pioche sélectionnée (blanc)
+
+// Couleur choisie par le joueur `player`
+static Rgb player_rgb(const App& app, int player)
+{
+    int choice = player < static_cast<int>(app.player_colors.size()) ? app.player_colors[player] : player;
+    const PlayerColor& color = PLAYER_COLORS[choice % PLAYER_COLOR_COUNT];
+    return {color.r, color.g, color.b};
+}
 
 // ---------------------------------------------------------------- Outils de dessin
 
@@ -172,9 +181,9 @@ static void draw_shadow(cairo_t* cr, Rect r, double radius)
 }
 
 // Contour épais (sélection, carte achetable...)
-static void draw_outline(cairo_t* cr, Rect r, double radius, Rgb color, double width)
+static void draw_outline(cairo_t* cr, Rect r, double radius, Rgb color, double width, double expand = 2)
 {
-    rounded_rect(cr, {r.x - 2, r.y - 2, r.w + 4, r.h + 4}, radius + 2);
+    rounded_rect(cr, {r.x - expand, r.y - expand, r.w + 2 * expand, r.h + 2 * expand}, radius + expand);
     set_color(cr, color);
     cairo_set_line_width(cr, width);
     cairo_stroke(cr);
@@ -231,6 +240,16 @@ static void draw_gem(cairo_t* cr, int color_index, double cx, double cy, double 
 
 // ---------------------------------------------------------------- Éléments du jeu
 
+// Contour doré d'une carte achetable, avec un halo pour bien le voir
+static void draw_buyable_outline(cairo_t* cr, Rect r, double expand)
+{
+    rounded_rect(cr, {r.x - expand - 2, r.y - expand - 2, r.w + 2 * expand + 4, r.h + 2 * expand + 4}, 10 + expand);
+    set_color(cr, BUYABLE, 0.35);
+    cairo_set_line_width(cr, 6);
+    cairo_stroke(cr);
+    draw_outline(cr, r, 8, BUYABLE, 3, expand);
+}
+
 // Une carte : bandeau de sa couleur avec les points et la gemme, coûts en bas à gauche
 static void draw_card(cairo_t* cr, const Card& card, Rect r, bool selected, bool buyable)
 {
@@ -271,9 +290,9 @@ static void draw_card(cairo_t* cr, const Card& card, Rect r, bool selected, bool
     cairo_stroke(cr);
 
     if (selected) {
-        draw_outline(cr, r, 8, HIGHLIGHT, 4);
+        draw_outline(cr, r, 8, SELECTED, 4);
     } else if (buyable) {
-        draw_outline(cr, r, 8, BUYABLE, 3);
+        draw_buyable_outline(cr, r, 2);
     }
 }
 
@@ -316,7 +335,7 @@ static void draw_deck(cairo_t* cr, int level, int count, bool selected)
     draw_text_centered(cr, "cartes", r.x + r.w / 2, r.y + 117, 11, false, WHITE_TEXT);
 
     if (selected) {
-        draw_outline(cr, r, 8, HIGHLIGHT, 4);
+        draw_outline(cr, r, 8, SELECTED, 4);
     }
 }
 
@@ -452,32 +471,45 @@ static void draw_players(cairo_t* cr, const App& app)
         bool current = p == game.current_index() && app.phase != Phase::Over;
         Rect r = player_rect(p);
 
+        Rgb own = player_rgb(app, p);
+
         rounded_rect(cr, r, 10);
         cairo_set_source_rgba(cr, 0, 0, 0, current ? 0.45 : 0.28);
         cairo_fill(cr);
+
+        // Bande de couleur du joueur, toujours visible sur la gauche du panneau
+        cairo_save(cr);
+        rounded_rect(cr, r, 10);
+        cairo_clip(cr);
+        cairo_rectangle(cr, r.x, r.y, 7, r.h);
+        set_color(cr, own);
+        cairo_fill(cr);
+        cairo_restore(cr);
+
+        // Son tour : toute sa main est entourée de sa couleur
         if (current) {
             rounded_rect(cr, r, 10);
-            set_color(cr, HIGHLIGHT);
-            cairo_set_line_width(cr, 3);
+            set_color(cr, own);
+            cairo_set_line_width(cr, 4);
             cairo_stroke(cr);
         }
 
-        double name_x = r.x + 15;
+        double name_x = r.x + 17;
         if (current) {
-            cairo_move_to(cr, r.x + 15, r.y + 14);
-            cairo_line_to(cr, r.x + 29, r.y + 23);
-            cairo_line_to(cr, r.x + 15, r.y + 32);
+            cairo_move_to(cr, r.x + 17, r.y + 14);
+            cairo_line_to(cr, r.x + 31, r.y + 23);
+            cairo_line_to(cr, r.x + 17, r.y + 32);
             cairo_close_path(cr);
-            set_color(cr, HIGHLIGHT);
+            set_color(cr, own);
             cairo_fill(cr);
             name_x += 22;
         }
-        draw_text(cr, player.name, name_x, r.y + 30, 19, true, current ? HIGHLIGHT : WHITE_TEXT);
+        draw_text(cr, player.name, name_x, r.y + 30, 19, true, own);
         draw_text(cr, std::to_string(player.score()), r.x + r.w - 52, r.y + 34, 30, true, WHITE_TEXT, Align::Right);
         draw_text(cr, "pts", r.x + r.w - 15, r.y + 34, 13, false, WHITE_TEXT, Align::Right);
 
         // Bonus : petites cartes de chaque couleur
-        draw_text(cr, "Bonus", r.x + 15, r.y + 72, 12, false, {0.8, 0.85, 0.8});
+        draw_text(cr, "Bonus", r.x + 17, r.y + 72, 12, false, {0.8, 0.85, 0.8});
         Resources bonus = player.bonuses();
         for (int c = 0; c < COLOR_COUNT; c++) {
             Rect box = {r.x + 95 + c * 52, r.y + 48, 30, 38};
@@ -491,7 +523,7 @@ static void draw_players(cairo_t* cr, const App& app)
         }
 
         // Jetons en main
-        draw_text(cr, "Jetons", r.x + 15, r.y + 127, 12, false, {0.8, 0.85, 0.8});
+        draw_text(cr, "Jetons", r.x + 17, r.y + 127, 12, false, {0.8, 0.85, 0.8});
         int token_kinds = classic ? COLOR_COUNT + 1 : COLOR_COUNT;
         for (int c = 0; c < token_kinds; c++) {
             double x = 0;
@@ -507,7 +539,7 @@ static void draw_players(cairo_t* cr, const App& app)
         if (classic) {
             info += "   " + std::to_string(player.reserved.size()) + " réservée(s)";
         }
-        draw_text(cr, info, r.x + 15, r.y + 167, 12, false, {0.85, 0.9, 0.85});
+        draw_text(cr, info, r.x + 17, r.y + 167, 12, false, {0.85, 0.9, 0.85});
 
         if (current && app.phase == Phase::Discard) {
             draw_outline(cr, {r.x + 85, r.y + 98, 52.0 * token_kinds, 48}, 8, {1, 0.45, 0.4}, 2);
@@ -521,20 +553,28 @@ static void draw_reserved(cairo_t* cr, const App& app)
     if (game.mode() != Mode::Classic || app.phase == Phase::Over) {
         return;
     }
-    draw_text(cr, "Vos cartes", 30, 670, 13, true, WHITE_TEXT);
-    draw_text(cr, "réservées", 30, 688, 13, true, WHITE_TEXT);
+    // Les cartes réservées prennent la couleur du joueur dont c'est le tour
     const Player& me = game.current_player();
+    Rgb own = player_rgb(app, game.current_index());
+    draw_text(cr, "Réservées", 30, 655, 13, true, WHITE_TEXT);
+    draw_text(cr, "de", 30, 673, 13, false, WHITE_TEXT);
+    draw_text(cr, me.name, 30, 693, 15, true, own);
     for (int i = 0; i < MAX_RESERVED; i++) {
         Rect r = reserved_rect(i);
         if (i < static_cast<int>(me.reserved.size())) {
-            bool selected = app.target == Target::Reserved && app.target_index == i;
-            draw_card(cr, me.reserved[i], r, selected,
-                      app.phase == Phase::Action && game.can_buy_reserved(i + 1));
+            draw_card(cr, me.reserved[i], r, false, false);
+            draw_outline(cr, r, 8, own, 4);
+            // Sélection ou carte achetable : un second contour, plus large
+            if (app.target == Target::Reserved && app.target_index == i) {
+                draw_outline(cr, r, 8, SELECTED, 3, 7);
+            } else if (app.phase == Phase::Action && game.can_buy_reserved(i + 1)) {
+                draw_buyable_outline(cr, r, 7);
+            }
         } else {
             double dashes[] = {6, 4};
             cairo_set_dash(cr, dashes, 2, 0);
             rounded_rect(cr, r, 8);
-            cairo_set_source_rgba(cr, 1, 1, 1, 0.18);
+            set_color(cr, own, 0.45);
             cairo_set_line_width(cr, 2);
             cairo_stroke(cr);
             cairo_set_dash(cr, nullptr, 0, 0);
@@ -592,7 +632,7 @@ static void draw_action_panel(cairo_t* cr, const App& app)
     } else if (app.phase == Phase::Action && app.target == Target::None) {
         draw_text(cr, "Cliquez des jetons de la réserve,", r.x + 12, r.y + 50, 12, false, {0.85, 0.9, 0.85});
         draw_text(cr, "une carte ou une pioche.", r.x + 12, r.y + 68, 12, false, {0.85, 0.9, 0.85});
-        draw_text(cr, "Vert = carte achetable", r.x + 12, r.y + 96, 12, false, BUYABLE);
+        draw_text(cr, "Contour doré = carte achetable", r.x + 12, r.y + 96, 12, false, BUYABLE);
     }
     draw_buttons(cr, app);
 }
@@ -637,7 +677,7 @@ static void draw_results(cairo_t* cr, const App& app)
     for (int i = 0; i < static_cast<int>(game.players().size()); i++) {
         const Player& player = game.players()[i];
         double y = 355 + i * 34;
-        draw_text(cr, player.name, 440, y, 17, true, WHITE_TEXT);
+        draw_text(cr, player.name, 440, y, 17, true, player_rgb(app, i));
         draw_text(cr, std::to_string(player.score()) + " pts", 720, y, 17, true, HIGHLIGHT, Align::Right);
         draw_text(cr, std::to_string(player.cards.size()) + " cartes", 840, y, 14, false, WHITE_TEXT, Align::Right);
     }

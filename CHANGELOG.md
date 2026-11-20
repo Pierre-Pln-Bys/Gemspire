@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Modifié
+- La 5e couleur de ressource s'appelle maintenant Noir (au lieu de Marron),
+  dans la console comme dans l'interface graphique.
+- Interface graphique : cartes achetables entourées en doré, sélection en
+  blanc.
+
+### Ajouté
+- Interface graphique : chaque joueur choisit sa couleur à la création de la
+  partie ; son panneau en est entouré pendant son tour et ses cartes
+  réservées en prennent le bord.
+
 ## [2.0.0] - 2026-11-20
 
 ### Ajouté

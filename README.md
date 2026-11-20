@@ -43,8 +43,10 @@ make clean
 ```
 
 Tout se joue à la souris : cliquer des jetons de la réserve puis « Prendre »,
-ou une carte (ou une pioche) puis « Acheter » / « Réserver ». Contour vert =
-carte achetable. Pour défausser, cliquer ses propres jetons. Échap annule la
+ou une carte (ou une pioche) puis « Acheter » / « Réserver ». Contour doré =
+carte achetable, contour blanc = sélection. Chaque joueur choisit sa couleur à
+la création de la partie : son panneau en est entouré pendant son tour, et ses
+cartes réservées en prennent le bord. Pour défausser, cliquer ses propres jetons. Échap annule la
 sélection.
 
 ## Version console
@@ -61,7 +63,7 @@ désactiver les couleurs.
 
 ## Commandes
 
-Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Marron (6=Or, seulement pour défausser)
+Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir (6=Or, seulement pour défausser)
 
 | Commande  | Effet                                                    |
 |-----------|----------------------------------------------------------|

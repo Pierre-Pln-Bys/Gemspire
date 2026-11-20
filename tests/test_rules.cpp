@@ -85,10 +85,10 @@ static void test_game()
     assert(!rich.must_discard());
     assert(rich.take_tokens({0, 0, 0, 0, 2}).empty());
     assert(rich.must_discard());
-    assert(rich.discard(Color::Maroon).empty());
-    assert(rich.discard(Color::Maroon).empty());
+    assert(rich.discard(Color::Black).empty());
+    assert(rich.discard(Color::Black).empty());
     assert(!rich.must_discard());
-    assert(!rich.discard(Color::Maroon).empty());
+    assert(!rich.discard(Color::Black).empty());
 
     // Achat : avec tous ces jetons, on peut acheter une carte de niveau 1
     int bought_level = 0;

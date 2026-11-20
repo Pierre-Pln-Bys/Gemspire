@@ -5,11 +5,11 @@
 #include <string>
 
 // Les 5 couleurs de ressources. Cet ordre est celui des données de data.cpp.
-enum class Color { White, Blue, Green, Red, Maroon };
+enum class Color { White, Blue, Green, Red, Black };
 
 const int COLOR_COUNT = 5;
 
-// Une quantité de chaque ressource, indicée par la couleur (0 = Blanc ... 4 = Marron)
+// Une quantité de chaque ressource, indicée par la couleur (0 = Blanc ... 4 = Noir)
 using Resources = std::array<int, COLOR_COUNT>;
 
 // Une carte de développement

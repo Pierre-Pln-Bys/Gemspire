@@ -32,6 +32,20 @@ enum class Target { None, Visible, Deck, Reserved };
 
 enum class ButtonId { Take, Buy, Reserve, Cancel, Replay, Quit };
 
+// Couleurs que les joueurs peuvent choisir (différentes de celles des jetons)
+struct PlayerColor {
+    const char* name;
+    double r, g, b;
+};
+const int PLAYER_COLOR_COUNT = 5;
+const PlayerColor PLAYER_COLORS[PLAYER_COLOR_COUNT] = {
+    {"Violet", 0.66, 0.38, 0.92},
+    {"Orange", 1.00, 0.55, 0.10},
+    {"Turquoise", 0.20, 0.85, 0.80},
+    {"Rose", 1.00, 0.45, 0.72},
+    {"Marron", 0.62, 0.40, 0.22},
+};
+
 struct Rect {
     double x, y, w, h;
     bool contains(double px, double py) const
@@ -50,6 +64,7 @@ struct Button {
 // Tout l'état de l'interface (passé aux fonctions de rappel GTK par pointeur)
 struct App {
     std::unique_ptr<Game> game;
+    std::vector<int> player_colors;         // couleur choisie par chaque joueur (indice dans PLAYER_COLORS)
     Phase phase = Phase::Action;
     Resources selection = {0, 0, 0, 0, 0};  // jetons choisis dans la réserve
     Target target = Target::None;

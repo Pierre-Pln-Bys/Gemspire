@@ -38,7 +38,7 @@ std::string color_name(Color color)
     case Color::Blue:   return "Bleu";
     case Color::Green:  return "Vert";
     case Color::Red:    return "Rouge";
-    case Color::Maroon: return "Marron";
+    case Color::Black:  return "Noir";
     }
     return "?";
 }
@@ -50,7 +50,7 @@ std::string colored(Color color, const std::string& text)
     case Color::Blue:   return ansi("1;34", text);
     case Color::Green:  return ansi("1;32", text);
     case Color::Red:    return ansi("1;31", text);
-    case Color::Maroon: return ansi("38;5;130", text);  // brun
+    case Color::Black:  return ansi("1;90", text);  // gris foncé, lisible sur fond noir
     }
     return text;
 }
@@ -354,7 +354,7 @@ static std::string cell(int value)
 
 static void show_players(const Game& game)
 {
-    const std::string short_names[] = {"Blanc", "Bleu", "Vert", "Rouge", "Marr."};
+    const std::string short_names[] = {"Blanc", "Bleu", "Vert", "Rouge", "Noir"};
     std::string header = pad(bold(" JOUEURS"), 17);
     for (int c = 0; c < COLOR_COUNT; c++) {
         header += pad(colored(color_at(c), short_names[c]), 6);
@@ -432,7 +432,7 @@ void show_board(const Game& game)
 void show_help(Mode mode)
 {
     std::cout << "\nCommandes :\n"
-              << "  j 1 3 5   prendre 3 jetons de couleurs différentes (ici Blanc, Vert, Marron)\n"
+              << "  j 1 3 5   prendre 3 jetons de couleurs différentes (ici Blanc, Vert, Noir)\n"
               << "  j 2 2     prendre 2 jetons de la même couleur (pile d'au moins 4)\n"
               << "  a 2 4     acheter la carte 4 du niveau 2\n";
     if (mode == Mode::Classic) {
@@ -442,7 +442,7 @@ void show_help(Mode mode)
     }
     std::cout << "  ?         afficher cette aide\n"
               << "  q         quitter la partie\n"
-              << "Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Marron";
+              << "Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir";
     if (mode == Mode::Classic) {
         std::cout << "\n           6=Or (seulement pour défausser)";
     }
