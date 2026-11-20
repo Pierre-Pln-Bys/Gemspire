@@ -9,10 +9,10 @@
 // Tout l'affichage du jeu (sortie standard, couleurs ANSI, cadres Unicode).
 
 // Nom français de la couleur ("Blanc", "Bleu", ...)
-std::string color_name(Color color);
+std::string color_name(Gem color);
 
 // `text` entouré du code couleur ANSI de `color` (sauf si NO_COLOR est défini)
-std::string colored(Color color, const std::string& text);
+std::string colored(Gem color, const std::string& text);
 
 // "Bleu: 2, Rouge: 1" (les couleurs à 0 sont omises), "aucun" si tout est à 0
 std::string format_resources(const Resources& resources);

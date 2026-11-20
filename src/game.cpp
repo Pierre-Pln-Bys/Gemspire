@@ -277,7 +277,7 @@ std::string Game::reserve_card(int level, int position)
         return "Ce niveau n'existe pas.";
     }
 
-    Card card = {0, Color::White, {0, 0, 0, 0, 0}};
+    Card card = {0, Gem::White, {0, 0, 0, 0, 0}};
     if (position == 0) {
         std::vector<Card>& deck = decks_[level - 1];
         if (deck.empty()) {
@@ -320,7 +320,7 @@ int Game::tokens_to_discard() const
     return extra > 0 ? extra : 0;
 }
 
-std::string Game::discard(Color color)
+std::string Game::discard(Gem color)
 {
     if (step_ != TurnStep::Discard) {
         return WRONG_STEP;

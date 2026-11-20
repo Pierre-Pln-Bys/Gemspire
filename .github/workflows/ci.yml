@@ -1,5 +1,5 @@
 # Vérifie chaque push et chaque pull request : compilation (avec -Werror)
-# et tests, sous Linux (console + interface graphique) et Windows (console).
+# et tests, sous Linux et Windows (console + interface graphique raylib).
 name: CI
 
 on:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Dépendances
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
       - name: Compilation
         run: make
       - name: Tests
@@ -30,7 +30,7 @@ jobs:
         with:
           msystem: UCRT64
           install: make mingw-w64-ucrt-x86_64-gcc
-      - name: Compilation (console)
-        run: make splendor
+      - name: Compilation
+        run: make
       - name: Tests
         run: make test

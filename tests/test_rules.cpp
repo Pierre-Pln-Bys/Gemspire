@@ -21,7 +21,7 @@ static void test_data()
 static void test_tokens_to_pay()
 {
     // Exemple du sujet : carte 2 bleu 2 vert, bonus 1 bleu 1 vert
-    Card card = {0, Color::Red, {0, 2, 2, 0, 0}};
+    Card card = {0, Gem::Red, {0, 2, 2, 0, 0}};
     Resources bonus = {0, 1, 1, 0, 0};
     Resources wallet_ok = {0, 1, 1, 1, 0};
     Resources wallet_ko = {1, 0, 0, 1, 1};
@@ -147,7 +147,7 @@ static void test_classic()
 
     // L'or sert de joker : 2 jetons manquants payés avec 2 or
     Game joker({"A", "B"}, 5, Mode::Classic);
-    Card card = {1, Color::Red, {2, 2, 0, 0, 0}};
+    Card card = {1, Gem::Red, {2, 2, 0, 0, 0}};
     GameTester::visible(joker, 1)[0] = card;
     GameTester::player(joker, 0).tokens = {1, 1, 0, 0, 0};
     GameTester::player(joker, 0).gold = 2;
@@ -159,7 +159,7 @@ static void test_classic()
 
     // Une réservée peut être achetée par son propriétaire
     Game own({"A", "B"}, 6, Mode::Classic);
-    GameTester::player(own, 0).reserved.push_back({2, Color::Blue, {1, 0, 0, 0, 0}});
+    GameTester::player(own, 0).reserved.push_back({2, Gem::Blue, {1, 0, 0, 0, 0}});
     GameTester::player(own, 0).tokens = {1, 0, 0, 0, 0};
     assert(own.can_buy_reserved(1));
     assert(own.buy_reserved(1).empty());
@@ -180,7 +180,7 @@ static void test_turn_flow()
     assert(game.discard_gold().empty());
     assert(game.step() == TurnStep::Discard);
     assert(!game.discard_gold().empty());                 // plus d'or
-    assert(game.discard(Color::Red).empty());
+    assert(game.discard(Gem::Red).empty());
     assert(game.step() == TurnStep::Action && game.current_index() == 1);
     assert(game.players()[0].token_count() == 10);
 
@@ -190,7 +190,7 @@ static void test_turn_flow()
     nobles[0].cost = {1, 0, 0, 0, 0};
     nobles[1].cost = {4, 4, 0, 0, 0};
     nobles[2].cost = {4, 4, 0, 0, 0};
-    GameTester::player(single, 0).cards.push_back({0, Color::White, {0, 0, 0, 0, 0}});
+    GameTester::player(single, 0).cards.push_back({0, Gem::White, {0, 0, 0, 0, 0}});
     assert(single.take_tokens({1, 1, 1, 0, 0}).empty());
     assert(single.players()[0].nobles.size() == 1 && single.players()[0].score() == 3);
     assert(single.nobles().size() == 2 && single.current_index() == 1);
@@ -200,8 +200,8 @@ static void test_turn_flow()
     GameTester::nobles(two)[0].cost = {1, 0, 0, 0, 0};
     GameTester::nobles(two)[1].cost = {0, 1, 0, 0, 0};
     GameTester::nobles(two)[2].cost = {4, 4, 4, 0, 0};
-    GameTester::player(two, 0).cards.push_back({0, Color::White, {0, 0, 0, 0, 0}});
-    GameTester::player(two, 0).cards.push_back({0, Color::Blue, {0, 0, 0, 0, 0}});
+    GameTester::player(two, 0).cards.push_back({0, Gem::White, {0, 0, 0, 0, 0}});
+    GameTester::player(two, 0).cards.push_back({0, Gem::Blue, {0, 0, 0, 0, 0}});
     std::string second = two.nobles()[1].name;
     assert(two.take_tokens({0, 0, 1, 1, 1}).empty());
     assert(two.step() == TurnStep::ChooseNoble && two.noble_choices().size() == 2);
@@ -213,7 +213,7 @@ static void test_turn_flow()
     // Dernier tour : B termine le tour de table après les 15 points de A
     Game last({"A", "B"}, 10, Mode::Quick);
     for (int i = 0; i < 5; i++) {
-        GameTester::player(last, 0).cards.push_back({3, Color::Red, {0, 0, 0, 0, 0}});
+        GameTester::player(last, 0).cards.push_back({3, Gem::Red, {0, 0, 0, 0, 0}});
     }
     assert(last.take_tokens({1, 1, 1, 0, 0}).empty());
     assert(last.is_last_round() && !last.is_over());

@@ -177,7 +177,7 @@ struct Reader {
     Card card()
     {
         expect("card");
-        Card read = {0, Color::White, {0, 0, 0, 0, 0}};
+        Card read = {0, Gem::White, {0, 0, 0, 0, 0}};
         read.points = number(0, 15);
         read.provides = color_at(number(0, COLOR_COUNT - 1));
         read.cost = resources(20);

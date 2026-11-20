@@ -31,26 +31,26 @@ static std::string ansi(const std::string& code, const std::string& text)
     return "\033[" + code + "m" + text + "\033[0m";
 }
 
-std::string color_name(Color color)
+std::string color_name(Gem color)
 {
     switch (color) {
-    case Color::White:  return "Blanc";
-    case Color::Blue:   return "Bleu";
-    case Color::Green:  return "Vert";
-    case Color::Red:    return "Rouge";
-    case Color::Black:  return "Noir";
+    case Gem::White:  return "Blanc";
+    case Gem::Blue:   return "Bleu";
+    case Gem::Green:  return "Vert";
+    case Gem::Red:    return "Rouge";
+    case Gem::Black:  return "Noir";
     }
     return "?";
 }
 
-std::string colored(Color color, const std::string& text)
+std::string colored(Gem color, const std::string& text)
 {
     switch (color) {
-    case Color::White:  return ansi("1;37", text);
-    case Color::Blue:   return ansi("1;34", text);
-    case Color::Green:  return ansi("1;32", text);
-    case Color::Red:    return ansi("1;31", text);
-    case Color::Black:  return ansi("1;90", text);  // gris foncé, lisible sur fond noir
+    case Gem::White:  return ansi("1;37", text);
+    case Gem::Blue:   return ansi("1;34", text);
+    case Gem::Green:  return ansi("1;32", text);
+    case Gem::Red:    return ansi("1;31", text);
+    case Gem::Black:  return ansi("1;90", text);  // gris foncé, lisible sur fond noir
     }
     return text;
 }
@@ -182,7 +182,7 @@ std::string format_tokens(const Player& player)
 //   └─ 2 * ─────┘   (numéro de la carte, * = achetable)
 static Block card_block(const Card& card, const std::string& label, bool buyable)
 {
-    Color c = card.provides;
+    Gem c = card.provides;
     std::string side = colored(c, "│");
     Block block;
     block.push_back(colored(c, "┌" + repeat("─", CARD_INNER) + "┐"));
@@ -196,7 +196,7 @@ static Block card_block(const Card& card, const std::string& label, bool buyable
     std::vector<std::string> costs;
     for (int i = 0; i < COLOR_COUNT; i++) {
         if (card.cost[i] > 0) {
-            Color cost_color = color_at(i);
+            Gem cost_color = color_at(i);
             costs.push_back(" " + colored(cost_color, "●") + " " + std::to_string(card.cost[i])
                             + " " + colored(cost_color, color_name(cost_color)));
         }
@@ -270,7 +270,7 @@ static Block noble_block(const Noble& noble)
     std::vector<std::string> costs;
     for (int i = 0; i < COLOR_COUNT; i++) {
         if (noble.cost[i] > 0) {
-            Color c = color_at(i);
+            Gem c = color_at(i);
             costs.push_back(" " + colored(c, "◆") + " " + std::to_string(noble.cost[i]) + " "
                             + colored(c, color_name(c)));
         }
@@ -290,7 +290,7 @@ static std::vector<std::string> bank_lines(const Game& game)
     lines.push_back(bold("RÉSERVE"));
     lines.push_back("");
     for (int c = 0; c < COLOR_COUNT; c++) {
-        Color color = color_at(c);
+        Gem color = color_at(c);
         std::string count = std::to_string(game.bank()[c]);
         lines.push_back(dim(std::to_string(c + 1)) + " " + colored(color, "●") + " " + count + " "
                         + colored(color, color_name(color)));

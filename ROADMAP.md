@@ -99,6 +99,22 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
   publie « Alice ouvre une partie classique (2/4) — code ABCD ».
 - [ ] Déploiement du serveur (hébergeur à choisir) et documentation.
 
+## v4 — Communauté (idées validées, à détailler)
+
+- [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
+  mise en sourdine d'un joueur, réactions rapides.
+- [ ] Bot Discord « Crée ta partie » : rejoindre ce salon vocal crée un salon
+  temporaire ; si le compte lié a le jeu ouvert, le jeu propose de créer la
+  partie (mode, places) ; le salon est limité au nombre de places et supprimé
+  quand il est vide.
+- [ ] Commandes du bot : `/classement`, `/stats @joueur`, `/defi @joueur`.
+- [ ] Mode spectateur et rediffusion des parties (historique d'événements).
+- [ ] Saisons classées (Elo remis partiellement à zéro, badges).
+- [ ] Recherche de partie automatique à Elo proche.
+- [ ] Liste d'amis, statut en ligne / en partie.
+- [ ] Succès (premier noble, victoire sans réserver...).
+- [ ] Page web publique du classement.
+
 ## Plus tard
 
 - Version macOS.

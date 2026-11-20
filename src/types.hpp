@@ -5,7 +5,7 @@
 #include <string>
 
 // Les 5 couleurs de ressources. Cet ordre est celui des données de data.cpp.
-enum class Color { White, Blue, Green, Red, Black };
+enum class Gem { White, Blue, Green, Red, Black };
 
 const int COLOR_COUNT = 5;
 
@@ -15,7 +15,7 @@ using Resources = std::array<int, COLOR_COUNT>;
 // Une carte de développement
 struct Card {
     int points;        // points de prestige
-    Color provides;    // couleur du bonus fourni
+    Gem provides;    // couleur du bonus fourni
     Resources cost;    // coût en ressources
 };
 
@@ -27,14 +27,14 @@ struct Noble {
 };
 
 // Conversion couleur <-> indice dans un tableau Resources
-inline int index_of(Color color)
+inline int index_of(Gem color)
 {
     return static_cast<int>(color);
 }
 
-inline Color color_at(int index)
+inline Gem color_at(int index)
 {
-    return static_cast<Color>(index);
+    return static_cast<Gem>(index);
 }
 
 #endif

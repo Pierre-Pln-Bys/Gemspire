@@ -58,7 +58,7 @@ struct Event {
     int player;                                  // indice du joueur concerné
     Resources tokens = {0, 0, 0, 0, 0};          // jetons pris ou défaussés
     int gold = 0;                                // or reçu (réservation) ou défaussé
-    Card card = {0, Color::White, {0, 0, 0, 0, 0}};  // carte achetée ou réservée
+    Card card = {0, Gem::White, {0, 0, 0, 0, 0}};  // carte achetée ou réservée
     bool from_deck = false;                      // réservation sur le dessus d'une pioche
     std::string noble;                           // nom du noble en visite
 };
@@ -108,7 +108,7 @@ public:
     // --- Étape Discard ---
     bool must_discard() const;                      // plus de 10 jetons en main
     int tokens_to_discard() const;                  // combien il faut encore en défausser
-    std::string discard(Color color);
+    std::string discard(Gem color);
     std::string discard_gold();
 
     // --- Étape ChooseNoble ---
