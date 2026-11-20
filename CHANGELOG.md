@@ -4,6 +4,25 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.2.0] - 2026-11-20
+
+### Ajouté
+- **Rich Presence Discord** : le profil affiche le menu, la partie (mode,
+  tour, points) ou le salon (places) ; « Rejoindre » depuis Discord ouvre le
+  salon dans le jeu. Passe par l'IPC local de Discord (Linux et Windows),
+  sans SDK.
+- **Invitations** : bouton « Copier une invitation » dans le salon.
+- **Bot Discord « Crée ta partie »** (Python, discord.py) : salon vocal
+  temporaire, proposition de partie dans le jeu si Splendor est ouvert,
+  salon limité au nombre de places, supprimé quand il est vide.
+- Serveur : présence des joueurs, notifications du jeu, `/config`, API du
+  bot protégée par clé, salons liés à un salon vocal, annonces des nouveaux
+  salons par webhook Discord.
+- **Déploiement** sur le Raspberry Pi : `deploy/install.sh`, services
+  systemd durcis, modèle de réglages.
+- Tests : faux Discord local (`make test-discord`), bot et intégration
+  avec le serveur (`make test-bot`).
+
 ## [3.1.0] - 2026-11-20
 
 ### Ajouté

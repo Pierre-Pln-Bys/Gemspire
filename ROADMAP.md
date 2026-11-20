@@ -3,7 +3,9 @@
 Point de départ : v2.1.0 (20/11/2026). **Fait depuis** : v2.2 (fondations),
 v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome),
 v3.1 (serveur, comptes, parties en ligne, Elo).
-**Prochaine étape** : v3.2 (Discord, bot vocal, déploiement sur le Raspberry Pi).
+v3.2 (Discord : présence, invitations, bot vocal ; kit de déploiement).
+**Prochaine étape** : installer sur le Raspberry Pi et valider avec les vraies
+applications Discord / Google, puis la v4 (communauté, audit de sécurité).
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -93,17 +95,18 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v3.2 — Discord
 
-- [ ] Rich Presence : écran, mode, tour, score, places libres du salon.
-- [ ] Invitations : bouton « Inviter » (lien `splendor://join/CODE` copié) et
+- [x] Rich Presence : écran, mode, tour, score, places libres du salon.
+- [x] Invitations : bouton « Inviter » (lien `splendor://join/CODE` copié) et
   « Rejoindre » depuis le profil Discord (secret de partie Rich Presence).
-- [ ] Partage dans un serveur Discord : un webhook configuré par le serveur
+- [x] Partage dans un serveur Discord : un webhook configuré par le serveur
   publie « Alice ouvre une partie classique (2/4) — code ABCD ».
-- [ ] Bot Discord « Crée ta partie » : rejoindre ce salon vocal crée un salon
+- [x] Bot Discord « Crée ta partie » : rejoindre ce salon vocal crée un salon
   temporaire ; si le compte lié a le jeu ouvert, le jeu propose de créer la
   partie (mode, places) ; le salon est limité au nombre de places et supprimé
   quand il est vide.
 - [ ] Déploiement du serveur sur le Raspberry Pi du projet (HTTPS, démarrage
-  automatique) et documentation.
+  automatique) et documentation. *Kit prêt (`deploy/`) ; reste à l'installer
+  sur le Pi et à tester avec les vraies applications Discord et Google.*
 
 ## v4 — Communauté (idées validées, à détailler)
 

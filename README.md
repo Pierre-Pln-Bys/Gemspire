@@ -42,6 +42,7 @@ make            # construit ./splendor-gui (fenêtre) et ./splendor (console)
 make splendor   # version console seule (aucune dépendance)
 make test       # lance les tests de la logique
 make splendor-server test-server   # serveur en ligne et son test (Linux, libssl-dev)
+make test-discord test-bot         # Rich Presence (faux Discord) et bot Python
 make clean      # make clean-all supprime aussi la raylib compilée
 ```
 
@@ -83,9 +84,22 @@ Depuis l'accueil, « Jouer en ligne » :
 4. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
    est visible depuis le menu en ligne.
 
+**Discord** :
+
+- **Rich Presence** : votre profil Discord affiche ce que vous faites
+  (« Partie en ligne (classique) — Tour 7 · 12 pts »). Dans un salon, vos amis
+  peuvent cliquer **Rejoindre** directement depuis Discord.
+- **Inviter** : dans le salon, « Copier une invitation » met dans le
+  presse-papiers un message prêt à coller (code + lien de téléchargement).
+- **Salon vocal « Crée ta partie »** : en le rejoignant, le bot Discord vous
+  crée un salon vocal temporaire ; si Splendor est ouvert (connecté avec
+  Discord), le jeu propose de créer la partie, et le salon vocal est limité au
+  nombre de places.
+
 L'adresse du serveur se règle avec la variable `SPLENDOR_SERVER` ou un fichier
-`serveur.txt` à côté du jeu. Le serveur lui-même est décrit dans
-[server/README.md](server/README.md).
+`serveur.txt` à côté du jeu. Le serveur est décrit dans
+[server/README.md](server/README.md), le bot dans `bot/`, l'installation sur
+le Raspberry Pi dans [deploy/README.md](deploy/README.md).
 
 ## Version console
 
