@@ -1,3 +1,5 @@
 *.o
 *.d
 CLAUDE.md
+splendor
+tests/test_rules
