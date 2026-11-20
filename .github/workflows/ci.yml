@@ -13,11 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Dépendances
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev
       - name: Compilation
         run: make
       - name: Tests
         run: make test
+      - name: Serveur et test en ligne
+        run: make splendor-server test-server
 
   windows:
     runs-on: windows-latest
@@ -29,7 +31,7 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
-          install: make mingw-w64-ucrt-x86_64-gcc
+          install: make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-openssl
       - name: Compilation
         run: make
       - name: Tests

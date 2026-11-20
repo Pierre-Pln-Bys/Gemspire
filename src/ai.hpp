@@ -4,6 +4,7 @@
 #include <string>
 
 #include "game.hpp"
+#include "move.hpp"
 
 // Adversaires ordinateur. Logique pure : aucune entrée/sortie.
 //
@@ -17,6 +18,10 @@
 // selon game.step(). Ne fait rien si c'est le tour d'un humain.
 // Retourne une chaîne vide si un coup a été joué, sinon un message d'erreur.
 std::string ai_play(Game& game);
+
+// Le coup que choisirait l'ordinateur (moyen ou facile) pour le joueur
+// courant, sans le jouer. Sert aussi pour les tests du serveur.
+Move ai_choose(const Game& game, bool medium);
 
 // Vrai si c'est à l'ordinateur de jouer
 bool ai_to_play(const Game& game);

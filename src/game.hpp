@@ -137,7 +137,7 @@ private:
     // Les tests peuvent préparer des situations précises
     friend struct GameTester;
     // La sauvegarde lit et écrit tout l'état (voir save.hpp)
-    friend std::string save_game(const Game& game);
+    friend std::string write_game(const Game& game, int viewer);
     friend std::string load_game(const std::string& text, std::unique_ptr<Game>& game);
 
     Player& current();

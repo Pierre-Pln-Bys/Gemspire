@@ -7,3 +7,9 @@ splendor-gui
 *.exe
 *.splendor
 build/
+*.db
+*.db-wal
+*.db-shm
+session.txt
+splendor-server
+tests/test_server

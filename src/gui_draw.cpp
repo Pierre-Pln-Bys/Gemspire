@@ -40,9 +40,24 @@ bool point_in(Vector2 point, Rectangle rect)
 
 // ---------------------------------------------------------------- Boutons
 
+// Vrai si celui qui est devant l'écran peut jouer maintenant
 static bool human_turn(const App& app)
 {
-    return app.game && !app.game->is_over() && app.game->current_player().controller == Controller::Human;
+    if (!app.game || app.game->is_over()) {
+        return false;
+    }
+    if (app.online.in_game) {
+        return app.game->current_index() == app.online.my_seat && !app.online.move_pending;
+    }
+    return app.game->current_player().controller == Controller::Human;
+}
+
+int viewer_seat(const App& app)
+{
+    if (app.online.in_game) {
+        return std::max(0, app.online.my_seat);
+    }
+    return app.game->current_index();
 }
 
 static void add(std::vector<Button>& buttons, ButtonId id, const std::string& label, Rectangle rect,
@@ -54,9 +69,10 @@ static void add(std::vector<Button>& buttons, ButtonId id, const std::string& la
 static std::vector<Button> home_buttons()
 {
     std::vector<Button> buttons;
-    add(buttons, ButtonId::NewGame, "Nouvelle partie", {490, 400, 300, 54});
-    add(buttons, ButtonId::Resume, "Reprendre la sauvegarde", {490, 468, 300, 54}, 0, FileExists(SAVE_FILE));
-    add(buttons, ButtonId::Quit, "Quitter", {490, 536, 300, 54});
+    add(buttons, ButtonId::NewGame, "Nouvelle partie", {490, 390, 300, 54});
+    add(buttons, ButtonId::PlayOnline, "Jouer en ligne", {490, 456, 300, 54});
+    add(buttons, ButtonId::Resume, "Reprendre la sauvegarde", {490, 522, 300, 54}, 0, FileExists(SAVE_FILE));
+    add(buttons, ButtonId::Quit, "Quitter", {490, 588, 300, 54});
     return buttons;
 }
 
@@ -97,13 +113,22 @@ static std::vector<Button> board_buttons(const App& app)
     std::vector<Button> buttons;
     const Game& game = *app.game;
 
+    bool online = app.online.in_game;
     if (game.is_over()) {
-        add(buttons, ButtonId::Replay, "Rejouer", {490, 540, 140, 44});
-        add(buttons, ButtonId::Menu, "Menu", {650, 540, 140, 44});
+        if (online) {
+            add(buttons, ButtonId::BackOnline, "Retour au menu en ligne", {490, 560, 300, 44});
+        } else {
+            add(buttons, ButtonId::Replay, "Rejouer", {490, 560, 140, 44});
+            add(buttons, ButtonId::Menu, "Menu", {650, 560, 140, 44});
+        }
         return buttons;
     }
-    add(buttons, ButtonId::Menu, "Menu", {790, 8, 120, 30});
-    add(buttons, ButtonId::Save, "Sauvegarder", {920, 8, 160, 30});
+    if (online) {
+        add(buttons, ButtonId::BackOnline, "Menu en ligne", {790, 8, 290, 30});
+    } else {
+        add(buttons, ButtonId::Menu, "Menu", {790, 8, 120, 30});
+        add(buttons, ButtonId::Save, "Sauvegarder", {920, 8, 160, 30});
+    }
     add(buttons, ButtonId::Journal, "Journal", {1090, 8, 170, 30}, 0, true, app.journal_open);
     if (app.curtain || app.journal_open || !human_turn(app) || game.step() != TurnStep::Action) {
         return buttons;
@@ -134,13 +159,83 @@ static std::vector<Button> board_buttons(const App& app)
     return buttons;
 }
 
+// ---------------------------------------------------------------- Boutons en ligne
+
+static std::vector<Button> login_buttons(const App& app)
+{
+    std::vector<Button> buttons;
+    bool waiting = !app.online.login_id.empty();
+    add(buttons, ButtonId::LoginDiscord, "Se connecter avec Discord", {470, 330, 340, 56}, 0, !waiting);
+    add(buttons, ButtonId::LoginGoogle, "Se connecter avec Google", {470, 400, 340, 56}, 0, !waiting);
+    if (app.online.dev_login) {
+        add(buttons, ButtonId::LoginDev, "Connexion de test", {470, 470, 340, 44}, 0, !waiting);
+    }
+    add(buttons, ButtonId::BackHome, waiting ? "Annuler" : "Retour", {540, 600, 200, 46});
+    return buttons;
+}
+
+static std::vector<Button> pseudo_buttons(const App& app)
+{
+    std::vector<Button> buttons;
+    add(buttons, ButtonId::PseudoBox, app.online.pseudo_input, {440, 340, 400, 48}, 0, true, app.online.focus == 1);
+    add(buttons, ButtonId::PseudoOk, "Valider", {540, 420, 200, 50}, 0, app.net.pending() == 0);
+    add(buttons, ButtonId::Logout, "Se déconnecter", {540, 600, 200, 44});
+    return buttons;
+}
+
+static std::vector<Button> online_buttons(const App& app)
+{
+    const OnlineState& online = app.online;
+    std::vector<Button> buttons;
+    // Créer une partie
+    add(buttons, ButtonId::CreateMode, "Rapide", {200, 330, 150, 40}, 0, true, online.create_mode == Mode::Quick);
+    add(buttons, ButtonId::CreateMode, "Classique", {360, 330, 150, 40}, 1, true, online.create_mode == Mode::Classic);
+    for (int seats = 2; seats <= 4; seats++) {
+        add(buttons, ButtonId::CreateSeats, std::to_string(seats) + " joueurs", {200.0f + (seats - 2) * 105, 390, 95, 40},
+            seats, true, online.create_seats == seats);
+    }
+    add(buttons, ButtonId::CreateLobby, "Créer le salon", {200, 460, 310, 50}, 0, app.net.pending() == 0);
+    // Rejoindre une partie
+    add(buttons, ButtonId::CodeBox, online.code_input, {770, 330, 310, 48}, 0, true, online.focus == 2);
+    add(buttons, ButtonId::JoinLobby, "Rejoindre", {770, 400, 310, 50}, 0,
+        online.code_input.size() == 5 && app.net.pending() == 0);
+    if (online.game_id != 0 && !online.game_over) {
+        add(buttons, ButtonId::ReturnToGame, "Revenir à la partie en cours", {440, 560, 400, 50});
+    }
+    add(buttons, ButtonId::ShowLeaderboard, "Classement", {200, 680, 200, 46});
+    add(buttons, ButtonId::Logout, "Se déconnecter", {540, 680, 200, 46});
+    add(buttons, ButtonId::BackHome, "Accueil", {880, 680, 200, 46});
+    return buttons;
+}
+
+static std::vector<Button> lobby_buttons(const App& app)
+{
+    const OnlineState& online = app.online;
+    std::vector<Button> buttons;
+    add(buttons, ButtonId::CopyCode, "Copier le code", {540, 250, 200, 40});
+    if (online.lobby_host == online.account) {
+        add(buttons, ButtonId::LobbyStart, "Lancer la partie", {440, 600, 400, 54}, 0,
+            online.lobby_members.size() >= 2 && app.net.pending() == 0);
+    }
+    add(buttons, ButtonId::LobbyLeave, "Quitter le salon", {540, 680, 200, 46});
+    return buttons;
+}
+
 std::vector<Button> visible_buttons(const App& app)
 {
-    if (app.screen == Screen::Home) {
-        return home_buttons();
+    switch (app.screen) {
+    case Screen::Home: return home_buttons();
+    case Screen::Setup: return setup_buttons(app.setup);
+    case Screen::Login: return login_buttons(app);
+    case Screen::Pseudo: return pseudo_buttons(app);
+    case Screen::Online: return online_buttons(app);
+    case Screen::Lobby: return lobby_buttons(app);
+    case Screen::Leaderboard: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::BackOnline, "Retour", {540, 700, 200, 46});
+        return buttons;
     }
-    if (app.screen == Screen::Setup) {
-        return setup_buttons(app.setup);
+    case Screen::Board: break;
     }
     return board_buttons(app);
 }
@@ -550,7 +645,11 @@ static void draw_players(const App& app)
             name_x += 22;
         }
         text(app, player.name, name_x, r.y + 10, 21, true, own);
-        if (player.controller != Controller::Human) {
+        if (app.online.in_game && p < static_cast<int>(app.online.seat_elos.size())) {
+            float width = measure(app, player.name, 21, true).x;
+            std::string extra = "Elo " + std::to_string(app.online.seat_elos[p]) + (p == app.online.my_seat ? " (vous)" : "");
+            text(app, extra, name_x + width + 10, r.y + 16, 12, false, SOFT_TEXT);
+        } else if (player.controller != Controller::Human) {
             float width = measure(app, player.name, 21, true).x;
             std::string kind = player.controller == Controller::AiEasy ? "(ordinateur facile)" : "(ordinateur moyen)";
             text(app, kind, name_x + width + 10, r.y + 16, 12, false, SOFT_TEXT);
@@ -599,14 +698,15 @@ static void draw_reserved(const App& app)
     if (game.mode() != Mode::Classic || game.is_over()) {
         return;
     }
-    const Player& me = game.current_player();
-    Color own = player_color(app, game.current_index());
+    int seat = viewer_seat(app);
+    const Player& me = game.players()[seat];
+    Color own = player_color(app, seat);
     text(app, "Réservées", 30, 645, 14, true, WHITE_TEXT);
     text(app, "de", 30, 664, 14, false, WHITE_TEXT);
     float size = 16;
     text(app, fit(app, me.name, 110, size, 10), 30, 684, size, true, own);
 
-    bool can_act = human_turn(app) && game.step() == TurnStep::Action;
+    bool can_act = human_turn(app) && game.step() == TurnStep::Action && seat == game.current_index();
     for (int i = 0; i < MAX_RESERVED; i++) {
         Rectangle r = reserved_rect(i);
         if (i < static_cast<int>(me.reserved.size()) && !app.curtain) {
@@ -635,7 +735,11 @@ static void draw_button(const App& app, const Button& button, Vector2 mouse)
         ink = {70, 70, 70, 255};
     } else if (button.selected || button.id == ButtonId::Take || button.id == ButtonId::Buy
                || button.id == ButtonId::Reserve || button.id == ButtonId::Cancel || button.id == ButtonId::Start
-               || button.id == ButtonId::NewGame || button.id == ButtonId::Resume || button.id == ButtonId::Replay) {
+               || button.id == ButtonId::NewGame || button.id == ButtonId::Resume || button.id == ButtonId::Replay
+               || button.id == ButtonId::PlayOnline || button.id == ButtonId::LoginDiscord
+               || button.id == ButtonId::LoginGoogle || button.id == ButtonId::PseudoOk
+               || button.id == ButtonId::CreateLobby || button.id == ButtonId::JoinLobby
+               || button.id == ButtonId::LobbyStart || button.id == ButtonId::ReturnToGame) {
         fill = hover ? mix(GOLD_UI, {255, 255, 255, 255}, 0.3f) : GOLD_UI;
         ink = DARK_TEXT;
     } else {
@@ -656,7 +760,11 @@ static void draw_action_panel(const App& app)
     rounded(r, 10, {0, 0, 0, 80});
 
     std::string title;
-    if (!human_turn(app)) {
+    if (app.online.in_game && app.online.move_pending) {
+        title = "Envoi du coup…";
+    } else if (app.online.in_game && !human_turn(app)) {
+        title = "Au tour de " + game.current_player().name;
+    } else if (!human_turn(app)) {
         title = game.current_player().name + " réfléchit…";
     } else if (game.step() == TurnStep::Discard) {
         title = "Défaussez vos jetons en trop";
@@ -791,18 +899,28 @@ static void draw_journal(const App& app)
     text(app, "Journal de la partie", r.x + 24, r.y + 18, 24, true, GOLD_UI);
     text(app, "J ou clic pour fermer", r.x + r.width - 24, r.y + 26, 13, false, SOFT_TEXT, Align::Right);
 
-    const std::vector<Event>& events = game.events();
-    const int lines = 21;
-    int first = std::max(0, static_cast<int>(events.size()) - lines);
-    if (events.empty()) {
+    // En ligne, l'historique vient du serveur (phrases déjà écrites)
+    std::vector<std::string> lines;
+    std::vector<int> owners;
+    if (app.online.in_game) {
+        lines = app.online.log;
+        owners.assign(lines.size(), -1);
+    } else {
+        for (const Event& event : game.events()) {
+            lines.push_back(describe_event(game, event));
+            owners.push_back(event.player);
+        }
+    }
+    const int shown = 21;
+    int first = std::max(0, static_cast<int>(lines.size()) - shown);
+    if (lines.empty()) {
         text(app, "Rien pour l'instant.", r.x + 24, r.y + 70, 15, false, SOFT_TEXT);
     }
-    for (int i = first; i < static_cast<int>(events.size()); i++) {
+    for (int i = first; i < static_cast<int>(lines.size()); i++) {
         float y = r.y + 64 + (i - first) * 23.0f;
-        DrawCircleV({r.x + 30, y + 9}, 5, player_color(app, events[i].player));
+        DrawCircleV({r.x + 30, y + 9}, 5, owners[i] >= 0 ? player_color(app, owners[i]) : SOFT_TEXT);
         float size = 15;
-        text(app, fit(app, describe_event(game, events[i]), r.width - 70, size, 11), r.x + 44, y, size, false,
-             WHITE_TEXT);
+        text(app, fit(app, lines[i], r.width - 70, size, 11), r.x + 44, y, size, false, WHITE_TEXT);
     }
 }
 
@@ -820,7 +938,7 @@ static void draw_results(const App& app, Vector2 mouse)
 {
     const Game& game = *app.game;
     DrawRectangle(0, 0, static_cast<int>(BOARD_WIDTH), static_cast<int>(BOARD_HEIGHT), {0, 0, 0, 165});
-    Rectangle r = {390, 190, 500, 420};
+    Rectangle r = {370, 190, 560, 430};
     rounded(r, 16, {31, 77, 54, 255});
     outline(r, 16, 3, GOLD_UI, 0);
     text_centered(app, "Fin de partie", 640, 235, 34, true, GOLD_UI);
@@ -837,6 +955,12 @@ static void draw_results(const App& app, Vector2 mouse)
         text(app, player.name, 440, y, 19, true, player_color(app, i));
         text(app, std::to_string(player.score()) + " pts", 720, y, 19, true, GOLD_UI, Align::Right);
         text(app, std::to_string(player.cards.size()) + " cartes", 840, y + 2, 15, false, WHITE_TEXT, Align::Right);
+        // En ligne : variation d'Elo
+        if (app.online.in_game && i < static_cast<int>(app.online.elo_changes.size())) {
+            int change = app.online.elo_changes[i];
+            std::string label = (change >= 0 ? "+" : "") + std::to_string(change) + " Elo";
+            text(app, label, 860, y + 2, 15, true, change >= 0 ? Color{120, 230, 140, 255} : ERROR_TEXT);
+        }
     }
     for (const Button& button : board_buttons(app)) {
         draw_button(app, button, mouse);
@@ -886,10 +1010,22 @@ static void draw_home(const App& app, Vector2 mouse)
         draw_button(app, button, mouse);
     }
     if (!FileExists(SAVE_FILE)) {
-        text_centered(app, "(aucune sauvegarde trouvée)", 640, 612, 13, false, SOFT_TEXT);
+        text_centered(app, "(aucune sauvegarde trouvée)", 640, 662, 13, false, SOFT_TEXT);
     }
     if (!app.message.empty()) {
-        text_centered(app, app.message, 640, 650, 15, false, app.message_is_error ? ERROR_TEXT : SOFT_TEXT);
+        text_centered(app, app.message, 640, 700, 15, false, app.message_is_error ? ERROR_TEXT : SOFT_TEXT);
+    }
+}
+
+// Champ de saisie : fond clair, curseur clignotant quand il est actif
+static void draw_text_box(const App& app, const Button& button)
+{
+    rounded(button.rect, 6, {255, 255, 255, 235});
+    bool caret = button.selected && static_cast<int>(GetTime() * 2) % 2 == 0;
+    text(app, button.label + (caret ? "|" : ""), button.rect.x + 12, button.rect.y + button.rect.height / 2 - 11, 20,
+         false, DARK_TEXT);
+    if (button.selected) {
+        outline(button.rect, 6, 3, GOLD_UI);
     }
 }
 
@@ -909,14 +1045,7 @@ static void draw_setup(const App& app, Vector2 mouse)
 
     for (const Button& button : setup_buttons(setup)) {
         if (button.id == ButtonId::NameBox) {
-            // Champ de saisie du nom
-            rounded(button.rect, 6, {255, 255, 255, 235});
-            std::string name = button.label;
-            bool caret = button.selected && static_cast<int>(GetTime() * 2) % 2 == 0;
-            text(app, name + (caret ? "|" : ""), button.rect.x + 12, button.rect.y + 9, 19, false, DARK_TEXT);
-            if (button.selected) {
-                outline(button.rect, 6, 3, GOLD_UI);
-            }
+            draw_text_box(app, button);
         } else if (button.id == ButtonId::Swatch) {
             // Pastille de couleur du joueur
             Vector2 center = {button.rect.x + 18, button.rect.y + 18};
@@ -936,14 +1065,144 @@ static void draw_setup(const App& app, Vector2 mouse)
     }
 }
 
+// ---------------------------------------------------------------- Écrans en ligne
+
+static void draw_buttons_of(const App& app, const std::vector<Button>& buttons, Vector2 mouse)
+{
+    for (const Button& button : buttons) {
+        if (button.id == ButtonId::PseudoBox || button.id == ButtonId::CodeBox) {
+            draw_text_box(app, button);
+        } else {
+            draw_button(app, button, mouse);
+        }
+    }
+}
+
+static void draw_message_line(const App& app, float y)
+{
+    if (!app.message.empty()) {
+        float size = 16;
+        std::string line = fit(app, app.message, 1100, size, 11);
+        text_centered(app, line, 640, y, size, app.message_is_error, app.message_is_error ? ERROR_TEXT : SOFT_TEXT);
+    }
+}
+
+static void draw_login(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    text_centered(app, "Jouer en ligne", 640, 150, 44, true, GOLD_UI);
+    text_centered(app, "Connectez-vous avec Discord ou Google : aucun mot de passe n'est demandé ni stocké.", 640,
+                  215, 17, false, SOFT_TEXT);
+    text_centered(app, "Serveur : " + app.net.server(), 640, 250, 14, false, alpha(SOFT_TEXT, 0.7f));
+    if (!app.online.login_id.empty()) {
+        text_centered(app, "Terminez la connexion dans votre navigateur…", 640, 545, 18, true, WHITE_TEXT);
+    }
+    draw_buttons_of(app, login_buttons(app), mouse);
+    draw_message_line(app, 660);
+}
+
+static void draw_pseudo(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    text_centered(app, "Choisissez votre pseudo", 640, 200, 40, true, GOLD_UI);
+    text_centered(app, "3 à 16 caractères : lettres, chiffres, espaces, - et _. Il sera visible dans le classement.",
+                  640, 270, 16, false, SOFT_TEXT);
+    draw_buttons_of(app, pseudo_buttons(app), mouse);
+    draw_message_line(app, 520);
+}
+
+static void draw_online(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt();
+    text(app, "En ligne", 200, 50, 40, true, GOLD_UI);
+    // Carte du compte
+    Rectangle card = {760, 50, 320, 110};
+    rounded(card, 12, {0, 0, 0, 90});
+    text(app, online.pseudo, card.x + 20, card.y + 14, 24, true, WHITE_TEXT);
+    text(app, "Elo " + std::to_string(online.elo), card.x + 20, card.y + 50, 20, true, GOLD_UI);
+    text(app, std::to_string(online.games) + " parties, " + std::to_string(online.wins) + " victoires", card.x + 20,
+         card.y + 80, 15, false, SOFT_TEXT);
+
+    text(app, "Créer une partie", 200, 270, 22, true, WHITE_TEXT);
+    text(app, "Rejoindre avec un code", 770, 270, 22, true, WHITE_TEXT);
+    draw_buttons_of(app, online_buttons(app), mouse);
+    draw_message_line(app, 640);
+}
+
+static void draw_lobby(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt();
+    text_centered(app, "Salon", 640, 70, 26, false, SOFT_TEXT);
+    text_centered(app, online.lobby_code, 640, 140, 76, true, GOLD_UI);
+    text_centered(app, "Partie " + online.lobby_mode + " — " + std::to_string(online.lobby_members.size()) + " / "
+                           + std::to_string(online.lobby_seats) + " joueurs. Donnez ce code à vos amis.",
+                  640, 215, 16, false, SOFT_TEXT);
+    for (int i = 0; i < online.lobby_seats; i++) {
+        Rectangle row = {440, 320.0f + i * 62, 400, 52};
+        rounded(row, 10, {0, 0, 0, static_cast<unsigned char>(i < static_cast<int>(online.lobby_members.size()) ? 100 : 40)});
+        if (i < static_cast<int>(online.lobby_members.size())) {
+            DrawCircleV({row.x + 26, row.y + 26}, 9, PLAYER_COLORS[i % PLAYER_COLOR_COUNT].color);
+            text(app, online.lobby_members[i] + (i == 0 ? "  (hôte)" : ""), row.x + 48, row.y + 14, 20, true, WHITE_TEXT);
+            text(app, "Elo " + std::to_string(online.lobby_elos[i]), row.x + row.width - 16, row.y + 16, 17, false,
+                 GOLD_UI, Align::Right);
+        } else {
+            text(app, "place libre", row.x + 48, row.y + 15, 18, false, alpha(SOFT_TEXT, 0.6f));
+        }
+    }
+    if (online.lobby_host != online.account) {
+        text_centered(app, "En attente de l'hôte…", 640, 627, 18, false, SOFT_TEXT);
+    }
+    draw_buttons_of(app, lobby_buttons(app), mouse);
+    draw_message_line(app, 760);
+}
+
+static void draw_leaderboard(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt();
+    text_centered(app, "Classement", 640, 60, 40, true, GOLD_UI);
+    Rectangle table = {290, 110, 700, 570};
+    rounded(table, 14, {0, 0, 0, 90});
+    text(app, "#", table.x + 24, table.y + 16, 15, true, SOFT_TEXT);
+    text(app, "Joueur", table.x + 70, table.y + 16, 15, true, SOFT_TEXT);
+    text(app, "Elo", table.x + 470, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
+    text(app, "Parties", table.x + 570, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
+    text(app, "Victoires", table.x + 676, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
+    int count = std::min(static_cast<int>(online.board_names.size()), 20);
+    for (int i = 0; i < count; i++) {
+        float y = table.y + 50 + i * 25.5f;
+        bool me = online.board_names[i] == online.pseudo;
+        Color color = me ? GOLD_UI : WHITE_TEXT;
+        text(app, std::to_string(i + 1), table.x + 24, y, 16, me, color);
+        text(app, online.board_names[i], table.x + 70, y, 16, me, color);
+        text(app, std::to_string(online.board_elos[i]), table.x + 470, y, 16, true, color, Align::Right);
+        text(app, std::to_string(online.board_games[i]), table.x + 570, y, 16, false, color, Align::Right);
+        text(app, std::to_string(online.board_wins[i]), table.x + 676, y, 16, false, color, Align::Right);
+    }
+    if (count == 0) {
+        text_centered(app, app.net.pending() > 0 ? "Chargement…" : "Personne n'a encore joué en ligne.", 640, 380, 18,
+                      false, SOFT_TEXT);
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+}
+
 void draw_app(const App& app, Vector2 mouse)
 {
-    if (app.screen == Screen::Home) {
-        draw_home(app, mouse);
-    } else if (app.screen == Screen::Setup) {
-        draw_setup(app, mouse);
-    } else if (app.game) {
-        draw_board(app, mouse);
+    switch (app.screen) {
+    case Screen::Home: draw_home(app, mouse); break;
+    case Screen::Setup: draw_setup(app, mouse); break;
+    case Screen::Login: draw_login(app, mouse); break;
+    case Screen::Pseudo: draw_pseudo(app, mouse); break;
+    case Screen::Online: draw_online(app, mouse); break;
+    case Screen::Lobby: draw_lobby(app, mouse); break;
+    case Screen::Leaderboard: draw_leaderboard(app, mouse); break;
+    case Screen::Board:
+        if (app.game) {
+            draw_board(app, mouse);
+        }
+        break;
     }
 }
 

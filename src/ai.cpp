@@ -52,12 +52,12 @@ static bool can_buy_target(const Game& game, const Target& target)
     return game.can_buy(target.level, target.position);
 }
 
-static std::string buy_target(Game& game, const Target& target)
+static Move buy_target(const Target& target)
 {
     if (target.level == 0) {
-        return game.buy_reserved(target.position);
+        return buy_reserved_move(target.position);
     }
-    return game.buy_card(target.level, target.position);
+    return buy_move(target.level, target.position);
 }
 
 // Combien la carte aide à attirer un noble (bonus de la bonne couleur)
@@ -188,7 +188,7 @@ static int medium_target(const Game& game, const std::vector<Target>& targets)
 
 // ---------------------------------------------------------------- Étapes
 
-static std::string play_action(Game& game, bool medium)
+static Move choose_action(const Game& game, bool medium)
 {
     const Player& me = game.current_player();
     std::vector<Target> targets = all_targets(game);
@@ -207,7 +207,7 @@ static std::string play_action(Game& game, bool medium)
         }
     }
     if (best_buy != -1) {
-        return buy_target(game, targets[best_buy]);
+        return buy_target(targets[best_buy]);
     }
 
     int target = medium ? medium_target(game, targets) : easy_target(game, targets);
@@ -223,7 +223,7 @@ static std::string play_action(Game& game, bool medium)
             for (const Target& t : targets) {
                 if (t.level > 0 && other.score() + t.card.points >= WINNING_SCORE
                     && missing_tokens(other.bonuses(), other.tokens, t.card) <= other.gold) {
-                    return game.reserve_card(t.level, t.position);
+                    return reserve_move(t.level, t.position);
                 }
             }
         }
@@ -247,27 +247,33 @@ static std::string play_action(Game& game, bool medium)
         }
     }
     Resources pick;
-    if (choose_pick(game, need, pick) && game.take_tokens(pick).empty()) {
-        return "";
+    if (choose_pick(game, need, pick) && check_pick(pick, game.bank()).empty()) {
+        return take_move(pick);
     }
 
     // 4. Plus de jetons : réserver (classique) la cible ou le dessus d'une pioche
     if (game.can_reserve()) {
         if (target != -1 && targets[target].level > 0) {
-            return game.reserve_card(targets[target].level, targets[target].position);
+            return reserve_move(targets[target].level, targets[target].position);
         }
         for (int level = 1; level <= LEVEL_COUNT; level++) {
-            if (game.reserve_card(level, 0).empty()) {
-                return "";
+            if (game.deck_size(level) > 0) {
+                return reserve_move(level, 0);
+            }
+        }
+        for (int level = 1; level <= LEVEL_COUNT; level++) {
+            if (!game.visible(level).empty()) {
+                return reserve_move(level, 1);
             }
         }
     }
-    return "L'ordinateur ne trouve aucun coup.";
+    // Aucun coup possible (ne devrait pas arriver : Game fait passer ces joueurs)
+    return take_move({0, 0, 0, 0, 0});
 }
 
 // Défausse le jeton le moins utile : la couleur dont il a le plus et qui ne
 // sert pas à sa cible ; l'or en dernier.
-static std::string play_discard(Game& game, bool medium)
+static Move choose_discard(const Game& game, bool medium)
 {
     const Player& me = game.current_player();
     std::vector<Target> targets = all_targets(game);
@@ -285,10 +291,7 @@ static std::string play_discard(Game& game, bool medium)
             best_extra = extra;
         }
     }
-    if (best == -1) {
-        return game.discard_gold();
-    }
-    return game.discard(color_at(best));
+    return discard_move(best == -1 ? GOLD_GEM : best);
 }
 
 bool ai_to_play(const Game& game)
@@ -296,21 +299,26 @@ bool ai_to_play(const Game& game)
     return !game.is_over() && game.current_player().controller != Controller::Human;
 }
 
+Move ai_choose(const Game& game, bool medium)
+{
+    switch (game.step()) {
+    case TurnStep::Discard:
+        return choose_discard(game, medium);
+    case TurnStep::ChooseNoble:
+        return noble_move(game.noble_choices()[0]);
+    default:
+        return choose_action(game, medium);
+    }
+}
+
 std::string ai_play(Game& game)
 {
     if (!ai_to_play(game)) {
         return "Ce n'est pas à l'ordinateur de jouer.";
     }
-    bool medium = game.current_player().controller == Controller::AiMedium;
-    switch (game.step()) {
-    case TurnStep::Action:
-        return play_action(game, medium);
-    case TurnStep::Discard:
-        return play_discard(game, medium);
-    case TurnStep::ChooseNoble:
-        return game.choose_noble(game.noble_choices()[0]);
-    case TurnStep::Over:
-        break;
+    if (game.is_over()) {
+        return "La partie est terminée.";
     }
-    return "La partie est terminée.";
+    bool medium = game.current_player().controller == Controller::AiMedium;
+    return apply_move(game, ai_choose(game, medium));
 }

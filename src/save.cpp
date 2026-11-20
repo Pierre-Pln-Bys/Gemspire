@@ -67,7 +67,15 @@ static void write_noble(std::ostringstream& out, const Noble& noble)
     out << " " << noble.name << "\n";
 }
 
-std::string save_game(const Game& game)
+// Carte cachée : même nombre de cartes, aucune information
+static std::vector<Card> hidden_cards(const std::vector<Card>& cards)
+{
+    return std::vector<Card>(cards.size(), Card{0, Gem::White, {0, 0, 0, 0, 0}});
+}
+
+// viewer = -1 : tout l'état ; sinon on cache les pioches et les cartes
+// réservées des joueurs autres que `viewer` (un spectateur passe -2)
+std::string write_game(const Game& game, int viewer)
 {
     std::ostringstream out;
     out << "SPLENDOR 1\n";
@@ -82,14 +90,16 @@ std::string save_game(const Game& game)
     out << " gold " << game.bank_gold_ << "\n";
 
     out << "players " << game.players_.size() << "\n";
-    for (const Player& player : game.players_) {
+    for (int index = 0; index < static_cast<int>(game.players_.size()); index++) {
+        const Player& player = game.players_[index];
         out << "name " << player.name << "\n";
         out << "controller " << CONTROLLER_NAMES[static_cast<int>(player.controller)] << "\n";
         out << "tokens";
         write_resources(out, player.tokens);
         out << " gold " << player.gold << "\n";
         write_cards(out, "cards", player.cards);
-        write_cards(out, "reserved", player.reserved);
+        bool hide = viewer != -1 && index != viewer;
+        write_cards(out, "reserved", hide ? hidden_cards(player.reserved) : player.reserved);
         out << "nobles " << player.nobles.size() << "\n";
         for (const Noble& noble : player.nobles) {
             write_noble(out, noble);
@@ -97,7 +107,7 @@ std::string save_game(const Game& game)
     }
 
     for (int l = 0; l < LEVEL_COUNT; l++) {
-        write_cards(out, "deck " + std::to_string(l + 1), game.decks_[l]);
+        write_cards(out, "deck " + std::to_string(l + 1), viewer >= 0 ? hidden_cards(game.decks_[l]) : game.decks_[l]);
         write_cards(out, "visible " + std::to_string(l + 1), game.visible_[l]);
     }
     out << "board_nobles " << game.nobles_.size() << "\n";
@@ -110,6 +120,16 @@ std::string save_game(const Game& game)
     }
     out << "\nend\n";
     return out.str();
+}
+
+std::string save_game(const Game& game)
+{
+    return write_game(game, -1);
+}
+
+std::string save_game_for(const Game& game, int viewer)
+{
+    return write_game(game, viewer);
 }
 
 // ---------------------------------------------------------------- Lecture

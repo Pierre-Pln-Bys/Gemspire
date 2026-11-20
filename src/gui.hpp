@@ -8,6 +8,7 @@
 #include "raylib.h"
 
 #include "game.hpp"
+#include "net.hpp"
 #include "types.hpp"
 
 // Interface graphique (raylib).
@@ -20,7 +21,7 @@ const float BOARD_HEIGHT = 800;
 const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 
-enum class Screen { Home, Setup, Board };
+enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -28,7 +29,10 @@ enum class Target { None, Visible, Deck, Reserved };
 // Tous les éléments cliquables. `value` précise lequel (joueur, couleur...).
 enum class ButtonId {
     // Accueil
-    NewGame, Resume, Quit,
+    NewGame, Resume, Quit, PlayOnline,
+    // En ligne
+    LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
+    CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -87,6 +91,46 @@ struct Flip {
     int index;
 };
 
+// Tout ce qui concerne le jeu en ligne
+struct OnlineState {
+    bool in_game = false;            // le plateau affiche une partie en ligne
+    bool dev_login = false;          // bouton « connexion de test » (SPLENDOR_DEV=1)
+    std::string login_id;            // connexion en cours dans le navigateur
+    double next_login_poll = 0;
+    std::string pseudo;              // compte connecté
+    int account = 0;
+    int elo = 1000;
+    int games = 0;
+    int wins = 0;
+    std::string pseudo_input;        // champs de saisie
+    std::string code_input;
+    int focus = 0;                   // 1 : pseudo, 2 : code
+    Mode create_mode = Mode::Classic;
+    int create_seats = 2;
+    std::string lobby_code;          // salon actuel
+    std::string lobby_mode;
+    int lobby_seats = 2;
+    int lobby_host = 0;
+    long lobby_version = 0;
+    std::vector<std::string> lobby_members;
+    std::vector<int> lobby_elos;
+    int game_id = 0;                 // partie en ligne en cours
+    long game_version = 0;
+    int my_seat = -1;
+    bool game_over = false;
+    bool move_pending = false;       // coup envoyé, réponse attendue
+    double next_game_poll = 0;       // nouvelle tentative après une coupure
+    bool game_poll_running = false;
+    bool lobby_poll_running = false;
+    std::vector<std::string> log;    // historique envoyé par le serveur
+    std::vector<int> seat_elos;
+    std::vector<int> elo_changes;
+    std::vector<std::string> board_names;  // classement
+    std::vector<int> board_elos;
+    std::vector<int> board_games;
+    std::vector<int> board_wins;
+};
+
 // Tout l'état de l'interface
 struct App {
     Screen screen = Screen::Home;
@@ -107,6 +151,8 @@ struct App {
     std::vector<Animation> animations;
     std::vector<Flip> flips;
     bool quit = false;
+    NetClient net;
+    OnlineState online;
 
     Font font = {};
     Font bold = {};
@@ -124,6 +170,10 @@ const float BANK_TOKEN_RADIUS = 28;
 const float PLAYER_TOKEN_RADIUS = 18;
 
 bool point_in(Vector2 point, Rectangle rect);
+
+// Le joueur dont on montre la main (cartes réservées) : en ligne, toujours
+// le sien ; en local, le joueur dont c'est le tour
+int viewer_seat(const App& app);
 
 // Boutons visibles selon l'écran et l'état
 std::vector<Button> visible_buttons(const App& app);

@@ -14,6 +14,10 @@
 // Retourne le texte de la sauvegarde
 std::string save_game(const Game& game);
 
+// Même chose, vue par le joueur `viewer` (parties en ligne) : l'ordre des
+// pioches et les cartes réservées des autres joueurs sont cachés.
+std::string save_game_for(const Game& game, int viewer);
+
 // Recrée une partie depuis le texte d'une sauvegarde. Retourne une chaîne
 // vide si tout va bien (la partie est alors dans `game`), sinon l'erreur.
 std::string load_game(const std::string& text, std::unique_ptr<Game>& game);

@@ -4,6 +4,9 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <functional>
 #include <random>
 #include <string>
@@ -11,10 +14,14 @@
 
 #include "raylib.h"
 
+#include "json.hpp"
+
 #include "ai.hpp"
 #include "display.hpp"
 #include "gui.hpp"
 #include "gui_font.h"
+#include "move_json.hpp"
+#include "net.hpp"
 #include "rules.hpp"
 #include "save.hpp"
 #include "version.hpp"
@@ -178,6 +185,29 @@ static void play_move(App& app, const std::function<std::string()>& move)
     }
 }
 
+// Repères des requêtes envoyées au serveur
+enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
+              TagLeaderboard, TagLogout, TagDevStart };
+
+const char* const SESSION_FILE = "session.txt";   // jeton de connexion
+const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
+
+// Un coup du joueur devant l'écran : appliqué tout de suite en local, envoyé
+// au serveur en ligne (le serveur vérifie et renvoie la nouvelle partie)
+static void submit_move(App& app, const Move& move)
+{
+    if (app.online.in_game) {
+        if (app.online.move_pending) {
+            return;
+        }
+        app.online.move_pending = true;
+        app.net.send(TagMove, "POST", "/games/" + std::to_string(app.online.game_id) + "/move",
+                     move_to_json(move).dump());
+        return;
+    }
+    play_move(app, [&]() { return apply_move(*app.game, move); });
+}
+
 // ---------------------------------------------------------------- Accueil et nouvelle partie
 
 static void start_new_game(App& app)
@@ -316,6 +346,432 @@ static void press_menu_button(App& app, const Button& button)
     }
 }
 
+// ---------------------------------------------------------------- En ligne
+
+static std::string read_first_line(const std::string& path)
+{
+    std::ifstream file(path);
+    std::string line;
+    std::getline(file, line);
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+        line.pop_back();
+    }
+    return line;
+}
+
+static void save_session(const std::string& token)
+{
+    if (token.empty()) {
+        std::remove(SESSION_FILE);
+        return;
+    }
+    std::ofstream file(SESSION_FILE);
+    file << token << "\n";
+}
+
+// Adresse du serveur : variable SPLENDOR_SERVER, sinon serveur.txt, sinon local
+static void configure_network(App& app)
+{
+    const char* from_env = std::getenv("SPLENDOR_SERVER");
+    std::string server = from_env != nullptr ? from_env : read_first_line(SERVER_FILE);
+    app.net.set_server(server.empty() ? "http://localhost:8080" : server);
+    app.net.set_token(read_first_line(SESSION_FILE));
+    const char* dev = std::getenv("SPLENDOR_DEV");
+    app.online.dev_login = dev != nullptr && std::string(dev) == "1";
+}
+
+static void go_online(App& app)
+{
+    app.message.clear();
+    if (read_first_line(SESSION_FILE).empty()) {
+        app.screen = Screen::Login;
+        return;
+    }
+    set_message(app, "Connexion au serveur…", false);
+    app.net.send(TagMe, "GET", "/me");
+}
+
+static void start_login(App& app, const std::string& provider)
+{
+    app.online.login_id = random_login_id();
+    app.online.next_login_poll = GetTime() + 2;
+    app.message.clear();
+    if (provider == "dev") {
+        std::string name = "test-" + app.online.login_id.substr(0, 6);
+        app.net.send(TagDevStart, "GET", "/auth/dev/start?login=" + app.online.login_id + "&name=" + name);
+        app.online.next_login_poll = GetTime() + 0.5;
+        return;
+    }
+    std::string url = app.net.server() + "/auth/" + provider + "/start?login=" + app.online.login_id;
+    OpenURL(url.c_str());
+}
+
+static void poll_lobby(App& app)
+{
+    OnlineState& online = app.online;
+    if (online.lobby_poll_running || online.lobby_code.empty() || GetTime() < online.next_game_poll) {
+        return;
+    }
+    online.lobby_poll_running = true;
+    app.net.send(TagLobby, "GET", "/lobbies/" + online.lobby_code + "?since=" + std::to_string(online.lobby_version));
+}
+
+static void poll_game(App& app)
+{
+    OnlineState& online = app.online;
+    if (online.game_poll_running || online.game_id == 0 || GetTime() < online.next_game_poll) {
+        return;
+    }
+    online.game_poll_running = true;
+    app.net.send(TagGame, "GET", "/games/" + std::to_string(online.game_id) + "?since=" + std::to_string(online.game_version));
+}
+
+static void enter_online_game(App& app, int game_id)
+{
+    OnlineState& online = app.online;
+    online.game_id = game_id;
+    online.game_version = 0;
+    online.game_over = false;
+    online.move_pending = false;
+    online.log.clear();
+    online.lobby_code.clear();
+    online.in_game = true;
+    app.game.reset();
+    app.screen = Screen::Board;
+    set_message(app, "Chargement de la partie…", false);
+    poll_game(app);
+}
+
+// Nouvel état de la partie envoyé par le serveur
+static void apply_game_state(App& app, const nlohmann::json& body)
+{
+    OnlineState& online = app.online;
+    long version = body.value("version", 0L);
+    if (version <= online.game_version && app.game) {
+        return;
+    }
+    std::unique_ptr<Game> loaded;
+    std::string error = load_game(body.value("save", std::string()), loaded);
+    if (!error.empty()) {
+        set_message(app, error, true);
+        return;
+    }
+    bool first = !app.game;
+    int previous_player = app.game ? app.game->current_index() : -1;
+    app.game = std::move(loaded);
+    online.game_version = version;
+    online.my_seat = body.value("your_seat", -1);
+    online.game_over = body.value("over", false);
+    online.elo_changes = body.value("elo_changes", std::vector<int>());
+    online.seat_elos.clear();
+    for (const nlohmann::json& seat : body["seats"]) {
+        online.seat_elos.push_back(seat.value("elo", 1000));
+    }
+    std::vector<std::string> log = body.value("log", std::vector<std::string>());
+    std::string news;
+    for (size_t i = online.log.size(); i < log.size(); i++) {
+        news += log[i] + " ";
+    }
+    online.log = log;
+    if (first) {
+        start_board(app);
+        app.player_colors.clear();
+        for (int p = 0; p < static_cast<int>(app.game->players().size()); p++) {
+            app.player_colors.push_back(p);
+        }
+    }
+    if (app.game->current_index() != previous_player) {
+        clear_selection(app);
+    }
+    std::string next;
+    if (online.game_over) {
+        next = "Partie terminée.";
+        app.net.send(TagMe, "GET", "/me");  // nouvel Elo
+    } else if (app.game->current_index() == online.my_seat) {
+        next = app.game->step() == TurnStep::Discard ? "Défaussez vos jetons en trop." : "À vous de jouer !";
+    } else {
+        next = "Au tour de " + app.game->current_player().name + ".";
+    }
+    set_message(app, news + next, false);
+}
+
+static std::string error_of(const NetResponse& response, const nlohmann::json& body, const App& app)
+{
+    if (response.status == 0) {
+        return "Serveur injoignable (" + app.net.server() + ").";
+    }
+    if (body.is_object() && body.contains("error") && body["error"].is_string()) {
+        return body["error"].get<std::string>();
+    }
+    return "Erreur du serveur (" + std::to_string(response.status) + ").";
+}
+
+static void handle_responses(App& app)
+{
+    OnlineState& online = app.online;
+    for (const NetResponse& response : app.net.poll()) {
+        nlohmann::json body = nlohmann::json::parse(response.body, nullptr, false);
+        bool ok = response.status == 200 && body.is_object();
+        switch (response.tag) {
+        case TagMe:
+            if (ok) {
+                online.account = body.value("id", 0);
+                online.pseudo = body.value("pseudo", std::string());
+                online.elo = body.value("elo", 1000);
+                online.games = body.value("games", 0);
+                online.wins = body.value("wins", 0);
+                if (online.pseudo.empty()) {
+                    app.screen = Screen::Pseudo;
+                    online.focus = 1;
+                } else if (app.screen != Screen::Board && app.screen != Screen::Lobby) {
+                    app.screen = Screen::Online;
+                }
+                if (app.screen != Screen::Board) {
+                    app.message.clear();
+                }
+            } else if (response.status == 401) {
+                save_session("");
+                app.net.set_token("");
+                app.screen = Screen::Login;
+                set_message(app, "Session expirée : reconnectez-vous.", true);
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagAuthPoll:
+            if (online.login_id.empty()) {
+                break;
+            }
+            if (ok && body.value("status", std::string()) == "done") {
+                std::string token = body.value("token", std::string());
+                online.login_id.clear();
+                save_session(token);
+                app.net.set_token(token);
+                app.net.send(TagMe, "GET", "/me");
+            } else if (ok && body.value("status", std::string()) == "error") {
+                online.login_id.clear();
+                set_message(app, body.value("error", std::string("Connexion impossible.")), true);
+            } else if (!ok) {
+                online.login_id.clear();
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagPseudo:
+            if (ok) {
+                app.net.send(TagMe, "GET", "/me");
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagCreate:
+        case TagJoin:
+            if (ok) {
+                online.lobby_code = response.tag == TagCreate ? body.value("code", std::string()) : online.code_input;
+                online.lobby_version = 0;
+                online.lobby_members.clear();
+                app.screen = Screen::Lobby;
+                app.message.clear();
+                poll_lobby(app);
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagStart:
+            if (!ok) {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagLobby:
+            online.lobby_poll_running = false;
+            if (app.screen != Screen::Lobby || !ok || body.value("code", std::string()) != online.lobby_code) {
+                if (app.screen == Screen::Lobby && response.status == 404) {
+                    online.lobby_code.clear();
+                    app.screen = Screen::Online;
+                    set_message(app, "Le salon n'existe plus.", true);
+                } else if (app.screen == Screen::Lobby && !ok) {
+                    online.next_game_poll = GetTime() + 2;  // nouvelle tentative
+                }
+                break;
+            }
+            online.lobby_version = body.value("version", 0L);
+            online.lobby_host = body.value("host", 0);
+            online.lobby_seats = body.value("seats", 2);
+            online.lobby_mode = body.value("mode", std::string());
+            online.lobby_members.clear();
+            online.lobby_elos.clear();
+            for (const nlohmann::json& member : body["members"]) {
+                online.lobby_members.push_back(member.value("pseudo", std::string()));
+                online.lobby_elos.push_back(member.value("elo", 1000));
+            }
+            if (body.value("game_id", 0) > 0) {
+                enter_online_game(app, body.value("game_id", 0));
+            } else {
+                poll_lobby(app);
+            }
+            break;
+        case TagGame:
+            online.game_poll_running = false;
+            if (!online.in_game) {
+                break;
+            }
+            if (ok) {
+                apply_game_state(app, body);
+                if (!online.game_over) {
+                    poll_game(app);
+                }
+            } else if (response.status == 404) {
+                online.in_game = false;
+                online.game_id = 0;
+                app.screen = Screen::Online;
+                set_message(app, "Cette partie n'existe plus.", true);
+            } else {
+                online.next_game_poll = GetTime() + 2;
+                set_message(app, error_of(response, body, app) + " Nouvelle tentative…", true);
+            }
+            break;
+        case TagMove:
+            online.move_pending = false;
+            if (ok) {
+                clear_selection(app);
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagLeaderboard:
+            if (ok) {
+                online.board_names.clear();
+                online.board_elos.clear();
+                online.board_games.clear();
+                online.board_wins.clear();
+                for (const nlohmann::json& player : body["players"]) {
+                    online.board_names.push_back(player.value("pseudo", std::string()));
+                    online.board_elos.push_back(player.value("elo", 1000));
+                    online.board_games.push_back(player.value("games", 0));
+                    online.board_wins.push_back(player.value("wins", 0));
+                }
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+// Saisie dans un champ texte. `code` : majuscules et chiffres seulement.
+static void edit_text(std::string& text, int max_chars, bool code)
+{
+    int codepoint = GetCharPressed();
+    while (codepoint > 0) {
+        if (code && codepoint >= 'a' && codepoint <= 'z') {
+            codepoint -= 32;
+        }
+        bool allowed = code ? ((codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= '0' && codepoint <= '9'))
+                            : codepoint >= 32;
+        if (allowed && utf8_length(text) < max_chars) {
+            int size = 0;
+            const char* bytes = CodepointToUTF8(codepoint, &size);
+            text.append(bytes, size);
+        }
+        codepoint = GetCharPressed();
+    }
+    if ((IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) && !text.empty()) {
+        while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80) {
+            text.pop_back();
+        }
+        if (!text.empty()) {
+            text.pop_back();
+        }
+    }
+}
+
+static void press_online_button(App& app, const Button& button)
+{
+    OnlineState& online = app.online;
+    switch (button.id) {
+    case ButtonId::PlayOnline:
+        go_online(app);
+        break;
+    case ButtonId::LoginDiscord:
+        start_login(app, "discord");
+        break;
+    case ButtonId::LoginGoogle:
+        start_login(app, "google");
+        break;
+    case ButtonId::LoginDev:
+        start_login(app, "dev");
+        break;
+    case ButtonId::BackHome:
+        online.login_id.clear();
+        app.message.clear();
+        app.screen = Screen::Home;
+        break;
+    case ButtonId::PseudoBox:
+        online.focus = 1;
+        break;
+    case ButtonId::PseudoOk:
+        app.net.send(TagPseudo, "POST", "/me/pseudo", nlohmann::json({{"pseudo", online.pseudo_input}}).dump());
+        break;
+    case ButtonId::CodeBox:
+        online.focus = 2;
+        break;
+    case ButtonId::CreateMode:
+        online.create_mode = button.value == 1 ? Mode::Classic : Mode::Quick;
+        break;
+    case ButtonId::CreateSeats:
+        online.create_seats = button.value;
+        break;
+    case ButtonId::CreateLobby: {
+        nlohmann::json body = {{"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"},
+                               {"seats", online.create_seats}};
+        app.net.send(TagCreate, "POST", "/lobbies", body.dump());
+        break;
+    }
+    case ButtonId::JoinLobby:
+        app.net.send(TagJoin, "POST", "/lobbies/" + online.code_input + "/join");
+        break;
+    case ButtonId::ShowLeaderboard:
+        online.board_names.clear();
+        app.screen = Screen::Leaderboard;
+        app.net.send(TagLeaderboard, "GET", "/leaderboard");
+        break;
+    case ButtonId::Logout:
+        app.net.send(TagLogout, "POST", "/auth/logout");
+        save_session("");
+        app.net.set_token("");
+        online = OnlineState();
+        configure_network(app);
+        app.screen = Screen::Home;
+        set_message(app, "Vous êtes déconnecté.", false);
+        break;
+    case ButtonId::BackOnline:
+        online.in_game = false;
+        app.screen = Screen::Online;
+        app.message.clear();
+        app.net.send(TagMe, "GET", "/me");
+        break;
+    case ButtonId::ReturnToGame:
+        enter_online_game(app, online.game_id);
+        break;
+    case ButtonId::CopyCode:
+        SetClipboardText(online.lobby_code.c_str());
+        set_message(app, "Code copié.", false);
+        break;
+    case ButtonId::LobbyStart:
+        app.net.send(TagStart, "POST", "/lobbies/" + online.lobby_code + "/start");
+        break;
+    case ButtonId::LobbyLeave:
+        app.net.send(TagLeave, "POST", "/lobbies/" + online.lobby_code + "/leave");
+        online.lobby_code.clear();
+        app.screen = Screen::Online;
+        app.message.clear();
+        break;
+    default:
+        break;
+    }
+}
+
 // ---------------------------------------------------------------- Plateau
 
 static void save_current_game(App& app)
@@ -333,18 +789,18 @@ static void press_board_button(App& app, ButtonId id)
     Game& game = *app.game;
     switch (id) {
     case ButtonId::Take:
-        play_move(app, [&]() { return game.take_tokens(app.selection); });
+        submit_move(app, take_move(app.selection));
         break;
     case ButtonId::Buy:
         if (app.target == Target::Visible) {
-            play_move(app, [&]() { return game.buy_card(app.target_level, app.target_index + 1); });
+            submit_move(app, buy_move(app.target_level, app.target_index + 1));
         } else if (app.target == Target::Reserved) {
-            play_move(app, [&]() { return game.buy_reserved(app.target_index + 1); });
+            submit_move(app, buy_reserved_move(app.target_index + 1));
         }
         break;
     case ButtonId::Reserve: {
         int position = app.target == Target::Deck ? 0 : app.target_index + 1;
-        play_move(app, [&]() { return game.reserve_card(app.target_level, position); });
+        submit_move(app, reserve_move(app.target_level, position));
         break;
     }
     case ButtonId::Cancel:
@@ -367,6 +823,9 @@ static void press_board_button(App& app, ButtonId id)
         break;
     case ButtonId::Replay:
         app.screen = Screen::Setup;
+        break;
+    case ButtonId::BackOnline:
+        press_online_button(app, {ButtonId::BackOnline, "", true, {}, 0, false});
         break;
     default:
         break;
@@ -437,8 +896,7 @@ static void click_action_step(App& app, Vector2 mouse)
 
 static void discard_gem(App& app, int gem)
 {
-    Game& game = *app.game;
-    play_move(app, [&]() { return gem == GOLD_INDEX ? game.discard_gold() : game.discard(color_at(gem)); });
+    submit_move(app, discard_move(gem));
 }
 
 static void click_board(App& app, Vector2 mouse)
@@ -457,7 +915,7 @@ static void click_board(App& app, Vector2 mouse)
     } else if (game.step() == TurnStep::ChooseNoble) {
         for (int choice : game.noble_choices()) {
             if (point_in(mouse, noble_rect(choice))) {
-                play_move(app, [&]() { return game.choose_noble(choice); });
+                submit_move(app, noble_move(choice));
                 return;
             }
         }
@@ -523,7 +981,7 @@ static void update_board(App& app, Vector2 mouse)
 
     bool clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-    if (ctrl && IsKeyPressed(KEY_S) && !game.is_over()) {
+    if (ctrl && IsKeyPressed(KEY_S) && !game.is_over() && !app.online.in_game) {
         save_current_game(app);
     }
     if (IsKeyPressed(KEY_J) && !game.is_over()) {
@@ -574,9 +1032,37 @@ static void update_board(App& app, Vector2 mouse)
 
 static void update(App& app, Vector2 mouse)
 {
+    OnlineState& online = app.online;
+    handle_responses(app);
+    // Connexion en cours : on demande au serveur si le navigateur a fini
+    if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
+        online.next_login_poll = GetTime() + 1.5;
+        app.net.send(TagAuthPoll, "GET", "/auth/poll?login=" + online.login_id);
+    }
+    if (app.screen == Screen::Lobby) {
+        poll_lobby(app);
+    }
+    if (online.in_game) {
+        poll_game(app);
+    }
+    if (app.screen == Screen::Board && online.in_game && !app.game) {
+        return;  // la partie arrive du serveur
+    }
     if (app.screen == Screen::Board && app.game) {
         update_board(app, mouse);
         return;
+    }
+    if (online.focus == 1 && app.screen == Screen::Pseudo) {
+        edit_text(online.pseudo_input, 16, false);
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+            press_online_button(app, {ButtonId::PseudoOk, "", true, {}, 0, false});
+        }
+    }
+    if (online.focus == 2 && app.screen == Screen::Online) {
+        edit_text(online.code_input, 5, true);
+        if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) && online.code_input.size() == 5) {
+            press_online_button(app, {ButtonId::JoinLobby, "", true, {}, 0, false});
+        }
     }
     if (app.screen == Screen::Setup) {
         update_name_input(app.setup);
@@ -591,14 +1077,20 @@ static void update(App& app, Vector2 mouse)
             if (point_in(mouse, button.rect)) {
                 on_button = true;
                 if (button.enabled) {
-                    press_menu_button(app, button);
+                    if (app.screen == Screen::Home || app.screen == Screen::Setup) {
+                        press_menu_button(app, button);
+                    }
+                    if (app.screen != Screen::Setup) {
+                        press_online_button(app, button);
+                    }
                 }
                 break;
             }
         }
-        // Clic ailleurs : on quitte la saisie du nom
+        // Clic ailleurs : on quitte la saisie
         if (!on_button) {
             app.setup.focused_name = -1;
+            online.focus = 0;
         }
     }
 }
@@ -635,6 +1127,7 @@ int main()
     SetTargetFPS(60);
 
     App app;
+    configure_network(app);
     app.font = load_font_regular();
     app.bold = load_font_bold();
     prepare_font(app.font);

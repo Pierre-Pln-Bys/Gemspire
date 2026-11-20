@@ -1,0 +1,2 @@
+SQLite 3.46.1 amalgamation (https://www.sqlite.org) - domaine public - ne pas modifier
+sha256 zip : 77823cb110929c2bcb0f5d48e4833b5c59a8a6e40cdea3936b99e199dbbe5784

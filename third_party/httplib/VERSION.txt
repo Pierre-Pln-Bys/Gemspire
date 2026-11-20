@@ -1,0 +1,2 @@
+cpp-httplib 0.15.3 (https://github.com/yhirose/cpp-httplib) - ne pas modifier
+sha256 httplib.h : a3347656c71c81c3fe510fdb1ff229d7db52eb7df04d3342d340eba0b6ad50ea
