@@ -109,3 +109,7 @@ git push origin main v2.0.0
 ```
 
 Un tag majeur (`vX.0.0`) lance le workflow qui publie les exécutables.
+
+## Suite du projet
+
+Voir [ROADMAP.md](ROADMAP.md) pour les étapes prévues jusqu'à la v3.
