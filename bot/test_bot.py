@@ -24,13 +24,15 @@ from logic import (TempChannel, apply_event, can_moderate, channel_matches, form
 class LogicTests(unittest.TestCase):
     def test_create_channel_name(self):
         self.assertTrue(is_create_channel("Crée ta partie"))
+        self.assertTrue(is_create_channel("create a game"))
         self.assertTrue(is_create_channel("  crée TA partie "))
         self.assertFalse(is_create_channel("Général"))
         self.assertFalse(is_create_channel(None))
 
     def test_temp_channel(self):
-        self.assertEqual(temp_channel_name("Pierre"), "Partie de Pierre")
-        self.assertEqual(temp_channel_name("   "), "Partie de joueur")
+        self.assertEqual(temp_channel_name("Pierre"), "Pierre's game")
+        self.assertEqual(temp_channel_name("Pierre", "fr"), "Partie de Pierre")
+        self.assertEqual(temp_channel_name("   ", "fr"), "Partie de joueur")
         self.assertEqual(len(temp_channel_name("x" * 300)), 100)
         self.assertTrue(should_delete(True, 0))
         self.assertFalse(should_delete(True, 1))
@@ -65,14 +67,21 @@ class LogicTests(unittest.TestCase):
         self.assertIn("🥇 **P0**", text)
         self.assertIn("`10.` **P9**", text)
         self.assertNotIn("P10", text)  # top 10 seulement
-        self.assertIn("25 %", text)
+        self.assertIn("25% wins", text)
         self.assertIn("<t:1800000000:R>", text)
-        self.assertIn("Soyez le premier", format_ranking([]))
+        self.assertIn("/leaderboard>", text)
+        french = format_ranking(players, 1800000000, "fr")
+        self.assertIn("25 % de victoires", french)
+        self.assertIn("/leaderboard?lang=fr>", french)
+        self.assertIn("Be the first", format_ranking([]))
+        self.assertIn("Soyez le premier", format_ranking([], lang="fr"))
         profile = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 10, "wins": 7, "rank": 2}
-        self.assertIn("2ᵉ au classement", format_profile(profile))
-        self.assertIn("70 %", format_profile(profile))
-        self.assertIn("suspendu définitivement", format_profile(dict(profile, banned=True, banned_until=-1)))
-        self.assertIn("Aucun joueur", format_profile({"found": False}))
+        self.assertIn("#2 on the leaderboard", format_profile(profile))
+        self.assertIn("2ᵉ au classement", format_profile(profile, "fr"))
+        self.assertIn("70 %", format_profile(profile, "fr"))
+        self.assertIn("suspended permanently", format_profile(dict(profile, banned=True, banned_until=-1)))
+        self.assertIn("suspendu définitivement", format_profile(dict(profile, banned=True, banned_until=-1), "fr"))
+        self.assertIn("No Splendor player", format_profile({"found": False}))
 
     def test_history_flags_repeated_opponents(self):
         now = 1800000000
@@ -83,13 +92,15 @@ class LogicTests(unittest.TestCase):
         history = {"found": True, "pseudo": "Pierre", "elo": 1100, "games": 7, "wins": 6, "games_list": games}
         self.assertEqual(frequent_opponents(history, now), [("Alt", 6)])  # la partie d'il y a 30 jours ne compte pas
         text = format_history(history, now)
-        self.assertIn("Alt (6 parties)", text)
+        self.assertIn("Alt (6 games)", text)
         self.assertIn("`#99`", text)
         self.assertIn("-12 Elo", text)
-        self.assertEqual(format_history({"found": False}), "Joueur introuvable.")
+        self.assertIn("Alt (6 parties)", format_history(history, now, "fr"))
+        self.assertEqual(format_history({"found": False}), "Player not found.")
+        self.assertEqual(format_history({"found": False}, lang="fr"), "Joueur introuvable.")
 
     def test_events(self):
-        temp = TempChannel(owner_id=1)
+        temp = TempChannel(owner_id=1, lang="fr")
         limit, message = apply_event(temp, {"code": "K7Q2M", "seats": 3, "players": 1, "started": False, "closed": False})
         self.assertEqual(limit, 3)
         self.assertIn("K7Q2M", message)
@@ -104,8 +115,20 @@ class LogicTests(unittest.TestCase):
 
     def test_offer_messages(self):
         self.assertIn("Discord", offer_message({"linked": False}))
-        self.assertIn("Lancez", offer_message({"linked": True, "online": False}))
-        self.assertIn("fenêtre", offer_message({"linked": True, "online": True}))
+        self.assertIn("Start Splendor", offer_message({"linked": True, "online": False}))
+        self.assertIn("Lancez", offer_message({"linked": True, "online": False}, "fr"))
+        self.assertIn("fenêtre", offer_message({"linked": True, "online": True}, "fr"))
+
+    def test_texts_complete(self):
+        # Chaque texte existe dans les deux langues, avec les mêmes valeurs à remplir
+        import re
+        from texts import COMMAND_FR, TEXTS, lang_of
+        for key, entry in TEXTS.items():
+            self.assertEqual(set(entry), {"en", "fr"}, key)
+            self.assertEqual(sorted(re.findall(r"{(\w+)}", entry["en"])), sorted(re.findall(r"{(\w+)}", entry["fr"])), key)
+        for english, french in COMMAND_FR.items():
+            self.assertTrue(french)
+        self.assertEqual((lang_of("fr"), lang_of("fr-FR"), lang_of("en-US"), lang_of(None)), ("fr", "fr", "en", "en"))
 
 
 class FakeServer(BaseHTTPRequestHandler):

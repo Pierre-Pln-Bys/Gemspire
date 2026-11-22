@@ -1,12 +1,15 @@
-"""Bot Discord de Splendor : « Crée ta partie », #classement et commandes.
+"""Bot Discord de Splendor : « Create a game », #leaderboard et commandes.
+
+Commandes et textes en anglais, traduits en français pour les membres dont
+Discord est en français (texts.py).
 
 Réglages (variables d'environnement) :
   DISCORD_BOT_TOKEN    jeton du bot (portail développeur Discord)
   SPLENDOR_API         adresse du serveur Splendor (défaut http://127.0.0.1:8080)
   SPLENDOR_BOT_KEY     clé partagée avec le serveur (même valeur des deux côtés)
-  CREATE_CHANNEL_NAME  nom du salon vocal « déclencheur » (défaut « Crée ta partie »)
+  CREATE_CHANNEL_NAME  salon vocal « déclencheur » (défaut « Create a game » ; « Crée ta partie » marche aussi)
   SPLENDOR_BOT_STATE   fichier d'état du bot (défaut temp_channels.json)
-  RANKING_CHANNEL      salon du classement mis à jour (défaut « classement »)
+  RANKING_CHANNEL      salon du classement mis à jour (défaut « leaderboard » ; « classement » marche aussi)
   MOD_LOG_CHANNEL      salon du journal de modération (défaut « moderation »)
   MOD_ROLE             rôle des modérateurs (défaut « Modérateur »)
   PLAYER_ROLE          rôle donné par /lier (défaut « Joueur »)
@@ -26,9 +29,10 @@ from discord import app_commands
 
 from api import ApiError, SplendorApi
 from logic import (CREATE_CHANNEL_NAME, DELETE_DELAY_SECONDS, DOWNLOAD_URL, OFFER_RETRY_COUNT, OFFER_RETRY_SECONDS,
-                   RANKING_SECONDS, SITE_URL, TempChannel, apply_event, ban_duration_text, can_moderate,
-                   channel_matches, format_history, format_profile, format_ranking, is_create_channel, load_state,
-                   offer_message, save_state, should_delete, temp_channel_name)
+                   RANKING_SECONDS, TempChannel, apply_event, ban_duration_text, can_moderate, channel_matches,
+                   format_history, format_profile, format_ranking, is_create_channel, load_state, offer_message,
+                   save_state, should_delete, site_page, temp_channel_name)
+from texts import COMMAND_FR, lang_of, tr
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("splendor-bot")
@@ -36,7 +40,7 @@ log = logging.getLogger("splendor-bot")
 api = SplendorApi(os.environ.get("SPLENDOR_API", "http://127.0.0.1:8080"), os.environ["SPLENDOR_BOT_KEY"])
 create_name = os.environ.get("CREATE_CHANNEL_NAME", CREATE_CHANNEL_NAME)
 state_file = os.environ.get("SPLENDOR_BOT_STATE", "temp_channels.json")
-ranking_channel_name = os.environ.get("RANKING_CHANNEL", "classement")
+ranking_channel_names = [os.environ.get("RANKING_CHANNEL", "leaderboard"), "classement"]
 mod_log_name = os.environ.get("MOD_LOG_CHANNEL", "moderation")
 mod_role_name = os.environ.get("MOD_ROLE", "Modérateur")
 player_role_name = os.environ.get("PLAYER_ROLE", "Joueur")
@@ -46,6 +50,16 @@ intents.guilds = True
 intents.voice_states = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+_ = app_commands.locale_str  # textes de commande traduisibles
+
+
+class FrenchTranslator(app_commands.Translator):
+    """Noms et descriptions des commandes en français pour les Discord en français."""
+
+    async def translate(self, string, locale, context):
+        if locale == discord.Locale.french:
+            return COMMAND_FR.get(string.message)
+        return None
 
 temp_channels = {}      # identifiant du salon vocal temporaire -> TempChannel
 ranking_messages = {}   # identifiant du serveur Discord -> message du classement
@@ -60,10 +74,22 @@ def remember():
 
 
 def find_text_channel(guild, wanted):
+    """Premier salon texte dont le nom contient l'un des noms voulus."""
+    names = wanted if isinstance(wanted, list) else [wanted]
     for channel in guild.text_channels:
-        if channel_matches(channel.name, wanted):
+        if any(channel_matches(channel.name, name) for name in names):
             return channel
     return None
+
+
+def guild_lang(guild):
+    """Langue du serveur Discord (messages postés dans les salons)."""
+    return lang_of(getattr(guild, "preferred_locale", None))
+
+
+def user_lang(interaction):
+    """Langue du membre qui utilise une commande."""
+    return lang_of(interaction.locale)
 
 
 async def mod_log(guild, text):
@@ -85,7 +111,7 @@ async def offer_game(member, channel):
             return  # salon supprimé entre-temps
         presence = await asyncio.to_thread(api.presence, member.id)
         if attempt == 0:
-            await channel.send(offer_message(presence))
+            await channel.send(offer_message(presence, guild_lang(channel.guild)))
         if not presence.get("linked"):
             return
         if presence.get("online"):
@@ -118,10 +144,11 @@ async def on_voice_state_update(member, before, after):
     # Entrée dans « Crée ta partie » : salon temporaire, puis proposition dans le jeu
     if after.channel is not None and before.channel != after.channel and is_create_channel(after.channel.name, create_name):
         guild = after.channel.guild
-        channel = await guild.create_voice_channel(temp_channel_name(member.display_name),
+        lang = guild_lang(guild)
+        channel = await guild.create_voice_channel(temp_channel_name(member.display_name, lang),
                                                    category=after.channel.category,
-                                                   reason="Splendor : Crée ta partie")
-        temp_channels[channel.id] = TempChannel(member.id)
+                                                   reason="Splendor: create a game")
+        temp_channels[channel.id] = TempChannel(member.id, lang)
         remember()
         await member.move_to(channel)
         log.info("Salon temporaire %s créé pour %s", channel.id, member.id)
@@ -164,9 +191,9 @@ async def update_rankings():
     while True:
         try:
             players = await asyncio.to_thread(api.leaderboard)
-            text = format_ranking(players, time.time())
             for guild in client.guilds:
-                channel = find_text_channel(guild, ranking_channel_name)
+                text = format_ranking(players, time.time(), guild_lang(guild))
+                channel = find_text_channel(guild, ranking_channel_names)
                 if channel is None:
                     continue
                 message = None
@@ -201,82 +228,80 @@ async def call_api(interaction, function, *args, **kwargs):
         await answer(interaction, "❌ " + str(error), private=True)
     except Exception as error:  # serveur injoignable
         log.warning("Serveur Splendor : %s", error)
-        await answer(interaction, "❌ Le serveur Splendor ne répond pas. Réessayez dans un moment.", private=True)
+        await answer(interaction, tr("server_down", user_lang(interaction)), private=True)
     return None
 
 
-@tree.command(name="classement", description="Top 10 des joueurs Splendor en ligne")
-async def classement(interaction: discord.Interaction):
+@tree.command(name=_("leaderboard"), description=_("Top 10 Splendor online players"))
+async def leaderboard(interaction: discord.Interaction):
     players = await call_api(interaction, api.leaderboard)
     if players is not None:
-        await answer(interaction, format_ranking(players))
+        await answer(interaction, format_ranking(players, lang=user_lang(interaction)))
 
 
-@tree.command(name="profil", description="Elo, rang et victoires d'un joueur")
-@app_commands.describe(membre="Membre Discord (par défaut : vous)", pseudo="Ou pseudo Splendor")
-async def profil(interaction: discord.Interaction, membre: discord.Member = None, pseudo: str = None):
-    if pseudo:
-        result = await call_api(interaction, api.profile, pseudo=pseudo)
+@tree.command(name=_("profile"), description=_("Elo, rank and wins of a player"))
+@app_commands.rename(member=_("member"), username=_("username"))
+@app_commands.describe(member=_("Discord member (default: you)"), username=_("Or Splendor username"))
+async def profile(interaction: discord.Interaction, member: discord.Member = None, username: str = None):
+    lang = user_lang(interaction)
+    if username:
+        result = await call_api(interaction, api.profile, pseudo=username)
     else:
-        result = await call_api(interaction, api.profile, discord_id=(membre or interaction.user).id)
+        result = await call_api(interaction, api.profile, discord_id=(member or interaction.user).id)
     if result is None:
         return
-    if not result.get("found") and not pseudo:
-        await answer(interaction, "Ce membre n'a pas lié Splendor à Discord (dans le jeu : Jouer en ligne > "
-                                  "Se connecter avec Discord).", private=True)
+    if not result.get("found") and not username:
+        await answer(interaction, tr("not_linked_member", lang), private=True)
         return
-    await answer(interaction, format_profile(result))
+    await answer(interaction, format_profile(result, lang))
 
 
-@tree.command(name="lier", description="Relie votre compte Splendor à Discord et donne le rôle Joueur")
-async def lier(interaction: discord.Interaction):
+@tree.command(name=_("link"), description=_("Link your Splendor account to Discord and get the Player role"))
+async def link(interaction: discord.Interaction):
+    lang = user_lang(interaction)
     presence = await call_api(interaction, api.presence, interaction.user.id)
     if presence is None:
         return
     if not presence.get("linked") or not presence.get("pseudo"):
-        await answer(interaction, "Pas encore de compte Splendor lié : dans le jeu, **Jouer en ligne > Se connecter "
-                                  "avec Discord**, choisissez un pseudo, puis relancez `/lier`.", private=True)
+        await answer(interaction, tr("link_missing", lang), private=True)
         return
-    text = "✅ Compte Splendor **{}** lié.".format(presence["pseudo"])
+    text = tr("link_ok", lang, pseudo=presence["pseudo"])
     guild = interaction.guild
-    role = discord.utils.find(lambda r: channel_matches(r.name, player_role_name), guild.roles) if guild else None
+    role = None
+    if guild:
+        role = discord.utils.find(lambda r: channel_matches(r.name, player_role_name) or channel_matches(r.name, "Joueur"),
+                                  guild.roles)
     if role is not None and isinstance(interaction.user, discord.Member):
         try:
-            await interaction.user.add_roles(role, reason="Splendor : compte lié")
-            text += " Rôle **{}** ajouté.".format(role.name)
+            await interaction.user.add_roles(role, reason="Splendor: account linked")
+            text += tr("role_added", lang, role=role.name)
         except discord.Forbidden:
-            text += " (le bot ne peut pas donner le rôle {} : placez son rôle au-dessus)".format(role.name)
+            text += tr("role_denied", lang, role=role.name)
     await answer(interaction, text, private=True)
 
 
-@tree.command(name="jouer", description="Télécharger Splendor et jouer en ligne")
-async def jouer(interaction: discord.Interaction):
-    await answer(interaction,
-                 "🎲 **Splendor** — Windows et Linux, un seul fichier à lancer :\n"
-                 "• Téléchargement : <{}>\n• Site et classement : <{}>\n"
-                 "• Rejoignez le salon vocal **{}** : le bot prépare votre partie.".format(
-                     DOWNLOAD_URL, SITE_URL, create_name), private=True)
-
-
-@tree.command(name="regles", description="Les règles de Splendor en bref")
-async def regles(interaction: discord.Interaction):
-    await answer(interaction,
-                 "📜 **Règles en bref** — à votre tour, UNE action :\n"
-                 "• prendre 3 jetons de couleurs différentes, ou 2 identiques (pile d'au moins 4) ;\n"
-                 "• acheter une carte (vos cartes réduisent le prix) ;\n"
-                 "• en classique : réserver une carte et gagner 1 or (joker).\n"
-                 "10 jetons au maximum. Les nobles viennent quand vous avez assez de cartes. "
-                 "À 15 points, on finit le tour de table. En ligne : 2 minutes par tour.\n"
-                 "Règles complètes : <https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki/Regles-du-jeu>",
+@tree.command(name=_("play"), description=_("Download Splendor or play in your browser"))
+async def play(interaction: discord.Interaction):
+    lang = user_lang(interaction)
+    await answer(interaction, tr("play", lang, download=DOWNLOAD_URL, site=site_page("home", lang), channel=create_name),
                  private=True)
 
 
-@tree.command(name="signaler", description="Signaler un joueur aux modérateurs (triche, pseudo...)")
-@app_commands.describe(pseudo="Pseudo Splendor du joueur", raison="Ce qui s'est passé")
-async def signaler(interaction: discord.Interaction, pseudo: str, raison: app_commands.Range[str, 5, 500]):
-    await mod_log(interaction.guild, "🚩 **Signalement** de {} contre **{}** : {}".format(
-        interaction.user.mention, discord.utils.escape_markdown(pseudo), discord.utils.escape_markdown(raison)))
-    await answer(interaction, "Merci, les modérateurs ont reçu votre signalement.", private=True)
+@tree.command(name=_("rules"), description=_("Splendor rules in short"))
+async def rules(interaction: discord.Interaction):
+    await answer(interaction, tr("rules", user_lang(interaction),
+                                 wiki="https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki/Regles-du-jeu"),
+                 private=True)
+
+
+@tree.command(name=_("report"), description=_("Report a player to the moderators (cheating, username...)"))
+@app_commands.rename(username=_("username"), reason=_("reason"))
+@app_commands.describe(username=_("Splendor username"), reason=_("What happened"))
+async def report(interaction: discord.Interaction, username: str, reason: app_commands.Range[str, 5, 500]):
+    await mod_log(interaction.guild, tr("report_log", guild_lang(interaction.guild), user=interaction.user.mention,
+                                        pseudo=discord.utils.escape_markdown(username),
+                                        reason=discord.utils.escape_markdown(reason)))
+    await answer(interaction, tr("report_ok", user_lang(interaction)), private=True)
 
 
 # ---------------------------------------------------------------- Commandes des modérateurs
@@ -291,73 +316,95 @@ def is_moderator(interaction):
 async def refuse_if_not_moderator(interaction):
     if is_moderator(interaction):
         return False
-    await answer(interaction, "Réservé aux modérateurs.", private=True)
+    await answer(interaction, tr("mods_only", user_lang(interaction)), private=True)
     return True
 
 
-moderation = app_commands.Group(name="mod", description="Modération de Splendor",
+moderation = app_commands.Group(name=_("mod"), description=_("Splendor moderation"),
                                 default_permissions=discord.Permissions(moderate_members=True), guild_only=True)
 
 
-@moderation.command(name="ban", description="Suspendre un compte Splendor (0 jour = définitif)")
-@app_commands.describe(pseudo="Pseudo Splendor", jours="Durée en jours (0 = définitif)", raison="Motif")
-async def mod_ban(interaction: discord.Interaction, pseudo: str, jours: app_commands.Range[int, 0, 3650],
-                  raison: app_commands.Range[str, 3, 200]):
+@moderation.command(name=_("ban"), description=_("Suspend a Splendor account (0 days = permanent)"))
+@app_commands.rename(username=_("username"), days=_("days"), reason=_("reason"))
+@app_commands.describe(username=_("Splendor username"), days=_("Duration in days (0 = permanent)"),
+                       reason=_("Reason"))
+async def mod_ban(interaction: discord.Interaction, username: str, days: app_commands.Range[int, 0, 3650],
+                  reason: app_commands.Range[str, 3, 200]):
     if await refuse_if_not_moderator(interaction):
         return
-    result = await call_api(interaction, api.ban, pseudo, jours, raison)
+    result = await call_api(interaction, api.ban, username, days, reason)
     if result is None:
         return
-    await answer(interaction, "⛔ **{}** suspendu {} : {}".format(result.get("pseudo", pseudo),
-                                                                 ban_duration_text(jours), raison), private=True)
-    await mod_log(interaction.guild, "⛔ {} a suspendu **{}** {} — {}".format(
-        interaction.user.mention, result.get("pseudo", pseudo), ban_duration_text(jours), raison))
+    pseudo = result.get("pseudo", username)
+    lang, log_lang = user_lang(interaction), guild_lang(interaction.guild)
+    await answer(interaction, tr("ban_ok", lang, pseudo=pseudo, duration=ban_duration_text(days, lang), reason=reason),
+                 private=True)
+    await mod_log(interaction.guild, tr("ban_log", log_lang, user=interaction.user.mention, pseudo=pseudo,
+                                        duration=ban_duration_text(days, log_lang), reason=reason))
 
 
-@moderation.command(name="unban", description="Réactiver un compte Splendor")
-async def mod_unban(interaction: discord.Interaction, pseudo: str):
+@moderation.command(name=_("unban"), description=_("Reactivate a Splendor account"))
+@app_commands.rename(username=_("username"))
+@app_commands.describe(username=_("Splendor username"))
+async def mod_unban(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
-    result = await call_api(interaction, api.unban, pseudo)
+    result = await call_api(interaction, api.unban, username)
     if result is None:
         return
-    await answer(interaction, "✅ **{}** réactivé.".format(result.get("pseudo", pseudo)), private=True)
-    await mod_log(interaction.guild, "✅ {} a réactivé **{}**".format(interaction.user.mention, result.get("pseudo", pseudo)))
+    pseudo = result.get("pseudo", username)
+    await answer(interaction, tr("unban_ok", user_lang(interaction), pseudo=pseudo), private=True)
+    await mod_log(interaction.guild, tr("unban_log", guild_lang(interaction.guild), user=interaction.user.mention,
+                                        pseudo=pseudo))
 
 
-@moderation.command(name="historique", description="15 dernières parties d'un joueur (repérer la triche)")
-async def mod_historique(interaction: discord.Interaction, pseudo: str):
+@moderation.command(name=_("history"), description=_("Last 15 games of a player (spot cheating)"))
+@app_commands.rename(username=_("username"))
+@app_commands.describe(username=_("Splendor username"))
+async def mod_history(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
-    result = await call_api(interaction, api.history, pseudo=pseudo)
+    result = await call_api(interaction, api.history, pseudo=username)
     if result is not None:
-        await answer(interaction, format_history(result), private=True)
+        await answer(interaction, format_history(result, lang=user_lang(interaction)), private=True)
 
 
-@moderation.command(name="annuler-partie", description="Annuler l'Elo d'une partie truquée (numéro de /mod historique)")
-async def mod_annuler(interaction: discord.Interaction, numero: app_commands.Range[int, 1]):
+@moderation.command(name=_("cancel-game"), description=_("Cancel the Elo of a rigged game (number from /mod history)"))
+@app_commands.rename(number=_("number"))
+@app_commands.describe(number=_("Game number"))
+async def mod_cancel(interaction: discord.Interaction, number: app_commands.Range[int, 1]):
     if await refuse_if_not_moderator(interaction):
         return
-    if await call_api(interaction, api.cancel_game, numero) is None:
+    if await call_api(interaction, api.cancel_game, number) is None:
         return
-    await answer(interaction, "↩️ Partie #{} annulée : Elo, parties et victoires rendus.".format(numero), private=True)
-    await mod_log(interaction.guild, "↩️ {} a annulé la partie #{}".format(interaction.user.mention, numero))
+    await answer(interaction, tr("cancel_ok", user_lang(interaction), number=number), private=True)
+    await mod_log(interaction.guild, tr("cancel_log", guild_lang(interaction.guild), user=interaction.user.mention,
+                                        number=number))
 
 
-@moderation.command(name="supprimer-compte", description="Supprimer un compte Splendor (demande RGPD)")
-async def mod_supprimer(interaction: discord.Interaction, pseudo: str):
+@moderation.command(name=_("delete-account"), description=_("Delete a Splendor account (GDPR request)"))
+@app_commands.rename(username=_("username"))
+@app_commands.describe(username=_("Splendor username"))
+async def mod_delete(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
-    if await call_api(interaction, api.delete_account, pseudo=pseudo) is None:
+    if await call_api(interaction, api.delete_account, pseudo=username) is None:
         return
-    await answer(interaction, "🗑️ Compte **{}** supprimé.".format(pseudo), private=True)
-    await mod_log(interaction.guild, "🗑️ {} a supprimé le compte **{}**".format(interaction.user.mention, pseudo))
+    await answer(interaction, tr("delete_ok", user_lang(interaction), pseudo=username), private=True)
+    await mod_log(interaction.guild, tr("delete_log", guild_lang(interaction.guild), user=interaction.user.mention,
+                                        pseudo=username))
 
 
 tree.add_command(moderation)
 
 
 # ---------------------------------------------------------------- Démarrage
+
+async def setup_hook():
+    await tree.set_translator(FrenchTranslator())
+
+client.setup_hook = setup_hook
+
 
 @client.event
 async def on_ready():

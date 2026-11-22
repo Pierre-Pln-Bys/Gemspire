@@ -11,8 +11,10 @@ Fonctionnement :
    redémarrage, le bot les reconnaît encore (et supprime ceux restés vides).
 5. Le salon #classement affiche le top 10, mis à jour toutes les 10 minutes
    (le bot modifie toujours le même message).
-6. Commandes slash pour tous (/classement, /profil, /lier...) et pour les
-   modérateurs (/ban, /historique...), journalisées dans #moderation.
+6. Commandes slash pour tous (/leaderboard, /profile, /link...) et pour les
+   modérateurs (/mod ban, /mod history...), journalisées dans #moderation.
+   Noms et textes en anglais, traduits en français (texts.py) selon la
+   langue de chaque membre ou du serveur.
 """
 
 import json
@@ -21,7 +23,10 @@ import time
 import unicodedata
 from collections import Counter
 
-CREATE_CHANNEL_NAME = "Crée ta partie"
+from texts import tr
+
+CREATE_CHANNEL_NAME = "Create a game"
+CREATE_CHANNEL_ALIASES = ["Crée ta partie", "Create a game"]  # acceptés en plus du nom réglé
 OFFER_RETRY_SECONDS = 10      # nouvelle tentative si le jeu n'est pas ouvert
 OFFER_RETRY_COUNT = 12        # pendant 2 minutes
 DELETE_DELAY_SECONDS = 30     # un salon vide est supprimé après ce délai
@@ -38,12 +43,15 @@ def normalize(name):
 
 
 def is_create_channel(channel_name, configured_name=CREATE_CHANNEL_NAME):
-    return channel_name is not None and normalize(channel_name) == normalize(configured_name)
+    if channel_name is None:
+        return False
+    names = [configured_name] + CREATE_CHANNEL_ALIASES
+    return any(normalize(channel_name) == normalize(name) for name in names)
 
 
-def temp_channel_name(display_name):
+def temp_channel_name(display_name, lang="en"):
     """Nom du salon temporaire (100 caractères au plus pour Discord)."""
-    name = "Partie de " + (display_name.strip() or "joueur")
+    name = tr("temp_channel", lang, name=display_name.strip() or tr("player", lang))
     return name[:100]
 
 
@@ -111,40 +119,48 @@ def win_rate(player):
     return player.get("wins", 0) * 100 // games if games else 0
 
 
-def format_ranking(players, updated_at=None):
-    """Texte du top 10 (salon #classement et /classement)."""
-    lines = ["🏆 **Classement Splendor** — top {}".format(RANKING_SIZE), ""]
+def format_ranking(players, updated_at=None, lang="en"):
+    """Texte du top 10 (salon #classement et /leaderboard)."""
+    lines = [tr("ranking_title", lang, size=RANKING_SIZE), ""]
     if not players:
-        lines.append("Personne n'a encore terminé de partie en ligne. Soyez le premier !")
+        lines.append(tr("ranking_empty", lang))
     for index, player in enumerate(players[:RANKING_SIZE]):
         place = MEDALS[index] if index < len(MEDALS) else "`{:>2}.`".format(index + 1)
-        lines.append("{} **{}** — {} Elo · {} parties · {} % de victoires".format(
-            place, player.get("pseudo", "?"), player.get("elo", 0), player.get("games", 0), win_rate(player)))
+        lines.append(tr("ranking_line", lang, place=place, pseudo=player.get("pseudo", "?"), elo=player.get("elo", 0),
+                        games=player.get("games", 0), rate=win_rate(player)))
     lines.append("")
-    footer = "Classement complet : <{}/classement>".format(SITE_URL)
+    footer = tr("ranking_footer", lang, url=site_page("leaderboard", lang))
     if updated_at is not None:
-        footer += " · mis à jour <t:{}:R>".format(int(updated_at))
+        footer += tr("ranking_updated", lang, when="<t:{}:R>".format(int(updated_at)))
     lines.append(footer)
     return "\n".join(lines)
 
 
+def site_page(page, lang="en"):
+    """Adresse d'une page du site, dans la bonne langue."""
+    path = {"leaderboard": "/leaderboard", "home": "/"}.get(page, "/")
+    return SITE_URL + path + ("?lang=fr" if lang == "fr" else "")
+
+
 def format_date(timestamp):
-    """Date Discord (affichée dans le fuseau de chacun)."""
+    """Date Discord (affichée dans le fuseau et la langue de chacun)."""
     return "<t:{}:f>".format(int(timestamp))
 
 
-def format_profile(profile):
-    """Texte de /profil."""
+def format_profile(profile, lang="en"):
+    """Texte de /profile."""
     if not profile.get("found") or not profile.get("pseudo"):
-        return "Aucun joueur Splendor trouvé."
+        return tr("no_player", lang)
     rank = profile.get("rank", 0)
     lines = ["**{}** — {} Elo{}".format(profile["pseudo"], profile.get("elo", 1000),
-                                       " · {}ᵉ au classement".format(rank) if rank else ""),
-             "{} parties · {} victoires ({} %)".format(profile.get("games", 0), profile.get("wins", 0),
-                                                       win_rate(profile))]
+                                       tr("profile_rank", lang, rank=rank) if rank else ""),
+             tr("profile_stats", lang, games=profile.get("games", 0), wins=profile.get("wins", 0),
+                rate=win_rate(profile))]
     if profile.get("banned"):
-        lines.append("⛔ Compte suspendu" + (" définitivement" if profile.get("banned_until") == -1
-                                             else " jusqu'au " + format_date(profile.get("banned_until", 0))))
+        if profile.get("banned_until") == -1:
+            lines.append(tr("banned_forever", lang))
+        else:
+            lines.append(tr("banned_until", lang, date=format_date(profile.get("banned_until", 0))))
     return "\n".join(lines)
 
 
@@ -163,37 +179,38 @@ def frequent_opponents(history, now=None, days=7):
     return counter.most_common()
 
 
-def format_history(history, now=None):
-    """Texte de /historique (modérateurs)."""
+def format_history(history, now=None, lang="en"):
+    """Texte de /mod history (modérateurs)."""
     if not history.get("found"):
-        return "Joueur introuvable."
-    lines = [format_profile(history), ""]
+        return tr("player_not_found", lang)
+    lines = [format_profile(history, lang), ""]
     games = history.get("games_list", [])
     if not games:
-        lines.append("Aucune partie en ligne.")
+        lines.append(tr("no_games", lang))
     for game in games:
         change = game.get("elo_change", 0)
-        lines.append("`#{}` {} · {} · {}ᵉ ({} pts) · {}{} Elo · {}{}".format(
-            game.get("id"), format_date(game.get("finished_at", 0)), game.get("mode", "?"), game.get("place", 0) + 1,
-            game.get("score", 0), "+" if change >= 0 else "", change, ", ".join(game.get("players", [])),
-            " · ~~annulée~~" if game.get("cancelled") else ""))
+        lines.append(tr("history_line", lang, id=game.get("id"), date=format_date(game.get("finished_at", 0)),
+                        mode=game.get("mode", "?"), place=game.get("place", 0) + 1, score=game.get("score", 0),
+                        change=("+" if change >= 0 else "") + str(change), players=", ".join(game.get("players", [])),
+                        cancelled=tr("cancelled", lang) if game.get("cancelled") else ""))
     suspicious = [(name, count) for name, count in frequent_opponents(history, now) if count >= 5]
     if suspicious:
         lines.append("")
-        lines.append("⚠️ Adversaires très fréquents (7 jours) : " + ", ".join(
-            "{} ({} parties)".format(name, count) for name, count in suspicious))
+        lines.append(tr("frequent", lang, list=", ".join(
+            tr("frequent_item", lang, name=name, count=count) for name, count in suspicious)))
     return "\n".join(lines)[:1900]
 
 
-def ban_duration_text(days):
-    return "définitivement" if int(days) == 0 else "pour {} jour{}".format(days, "s" if int(days) > 1 else "")
+def ban_duration_text(days, lang="en"):
+    return tr("forever", lang) if int(days) == 0 else tr("for_days", lang, days=days)
 
 
 class TempChannel:
     """Ce que le bot sait d'un salon temporaire qu'il a créé."""
 
-    def __init__(self, owner_id):
+    def __init__(self, owner_id, lang="en"):
         self.owner_id = owner_id
+        self.lang = lang          # langue du serveur Discord
         self.code = None          # code du salon Splendor lié
         self.announced = False    # code déjà annoncé dans le salon
         self.started = False      # partie lancée
@@ -210,26 +227,23 @@ def apply_event(temp, event):
         temp.code = None
         temp.announced = False
         temp.started = False
-        return 0, "La partie Splendor liée à ce salon a été annulée."
+        return 0, tr("lobby_closed", temp.lang)
     temp.code = event.get("code")
     seats = int(event.get("seats", 0))
     message = None
     if event.get("started") and not temp.started:
         temp.started = True
-        message = "La partie Splendor **{}** a commencé. Bon jeu !".format(temp.code)
+        message = tr("lobby_started", temp.lang, code=temp.code)
     elif not temp.announced:
         temp.announced = True
-        message = ("Partie Splendor créée : code **{}** ({} places). Rejoignez ce salon vocal, "
-                   "puis dans Splendor : Jouer en ligne > Rejoindre.").format(temp.code, seats)
+        message = tr("lobby_created", temp.lang, code=temp.code, seats=seats)
     return seats, message
 
 
-def offer_message(presence):
+def offer_message(presence, lang="en"):
     """Message écrit dans le salon temporaire selon la présence du joueur."""
     if not presence.get("linked"):
-        return ("Pour créer une partie Splendor ici, connectez-vous dans le jeu avec **Discord** "
-                "(Jouer en ligne > Se connecter avec Discord).")
+        return tr("offer_not_linked", lang)
     if not presence.get("online"):
-        return ("Lancez Splendor (connecté avec Discord) : la création de la partie s'ouvrira "
-                "dans le jeu. J'attends 2 minutes.")
-    return "Configurez la partie dans Splendor : la fenêtre vient de s'ouvrir dans le jeu."
+        return tr("offer_not_online", lang)
+    return tr("offer_sent", lang)
