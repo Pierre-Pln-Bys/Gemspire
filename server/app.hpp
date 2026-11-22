@@ -25,6 +25,9 @@ struct ServerConfig {
     std::string bot_key;           // clé partagée avec le bot Discord (SPLENDOR_BOT_KEY)
     bool dev_login = false;        // connexion sans OAuth, pour les tests en local
     int wait_seconds = 25;         // durée maximale d'une attente longue
+    int turn_seconds = 120;        // temps pour jouer son tour (SPLENDOR_TURN_SECONDS)
+    std::string contact_email;     // affichée sur le site (SPLENDOR_CONTACT_EMAIL), facultative
+    std::string discord_invite;    // invitation au serveur Discord (SPLENDOR_DISCORD_INVITE), facultative
 };
 
 ServerConfig config_from_environment();
@@ -44,6 +47,7 @@ public:
     explicit ServerApp(const ServerConfig& config);
     bool ok() const;
     void setup_routes(httplib::Server& server);
+    void tick();  // chaque seconde : temps écoulés dans les parties
 
 private:
     ServerConfig config_;

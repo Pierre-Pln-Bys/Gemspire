@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "../src/move_json.hpp"
+#include "pages.hpp"
 
 using nlohmann::json;
 
@@ -32,6 +33,12 @@ ServerConfig config_from_environment()
     config.discord_webhook = env("DISCORD_WEBHOOK_URL");
     config.bot_key = env("SPLENDOR_BOT_KEY");
     config.dev_login = env("SPLENDOR_DEV_LOGIN") == "1";
+    config.contact_email = env("SPLENDOR_CONTACT_EMAIL");
+    config.discord_invite = env("SPLENDOR_DISCORD_INVITE");
+    config.turn_seconds = std::atoi(env("SPLENDOR_TURN_SECONDS", "120").c_str());
+    if (config.turn_seconds < 5) {
+        config.turn_seconds = 120;
+    }
     return config;
 }
 
@@ -46,6 +53,18 @@ static void reply(httplib::Response& response, int status, const json& body)
 static void reply_error(httplib::Response& response, int status, const std::string& message)
 {
     reply(response, status, {{"error", message}});
+}
+
+// Page du site, avec des en-têtes de sécurité (pas de script, pas d'intégration)
+static void reply_site(httplib::Response& response, const std::string& html, int status = 200)
+{
+    response.status = status;
+    response.set_header("Content-Security-Policy",
+                        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'");
+    response.set_header("X-Content-Type-Options", "nosniff");
+    response.set_header("Referrer-Policy", "no-referrer");
+    response.set_header("Cache-Control", "public, max-age=60");
+    response.set_content(html, "text/html; charset=utf-8");
 }
 
 static void reply_page(httplib::Response& response, const std::string& title, const std::string& text)
@@ -161,6 +180,7 @@ static std::string oauth_identity(const ServerConfig& config, const std::string&
 ServerApp::ServerApp(const ServerConfig& config) : config_(config), store_(config.database), rooms_(store_)
 {
     rooms_.set_wait_seconds(config.wait_seconds);
+    rooms_.set_turn_seconds(config.turn_seconds);
     rooms_.on_lobby_created = [this](const Lobby& lobby) { announce_lobby(lobby); };
 }
 
@@ -191,6 +211,11 @@ void ServerApp::announce_lobby(const Lobby& lobby)
                       << std::endl;
         }
     }).detach();
+}
+
+void ServerApp::tick()
+{
+    rooms_.tick();
 }
 
 // Le bot Discord s'identifie avec la clé partagée SPLENDOR_BOT_KEY
@@ -532,6 +557,20 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"status", "ok"}});
     });
 
+    server.Post(R"(/games/(\d{1,9})/forfeit)", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Non connecté.");
+            return;
+        }
+        std::string error = rooms_.forfeit(std::atoi(request.matches[1].str().c_str()), id);
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        reply(response, 200, {{"status", "ok"}});
+    });
+
     // --- API du bot Discord (en-tête X-Bot-Key)
     server.Get("/bot/presence", [this](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
@@ -586,5 +625,24 @@ void ServerApp::setup_routes(httplib::Server& server)
                             {"wins", account.wins}});
         }
         reply(response, 200, {{"players", list}});
+    });
+
+    // --- Site web (accueil, classement, conditions, confidentialité)
+    SiteInfo site = {config_.contact_email, config_.discord_invite};
+    server.Get("/", [site](const httplib::Request&, httplib::Response& response) {
+        reply_site(response, page_home(site));
+    });
+    server.Get("/classement", [this, site](const httplib::Request&, httplib::Response& response) {
+        reply_site(response, page_leaderboard(site, store_.leaderboard(100)));
+    });
+    server.Get("/conditions", [site](const httplib::Request&, httplib::Response& response) {
+        reply_site(response, page_terms(site));
+    });
+    server.Get("/confidentialite", [site](const httplib::Request&, httplib::Response& response) {
+        reply_site(response, page_privacy(site));
+    });
+    server.Get("/robots.txt", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content("User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\n",
+                             "text/plain");
     });
 }

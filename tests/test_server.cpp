@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdio>
 #include <iostream>
+#include <chrono>
 #include <thread>
 
 #include "../server/app.hpp"
@@ -63,6 +64,7 @@ int main()
     config.dev_login = true;
     config.wait_seconds = 1;
     config.bot_key = "cle-de-test-du-bot";
+    config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -145,18 +147,59 @@ int main()
     int elo_alice = get(client, "/me", alice)["elo"];
     assert(elo_alice == 1000 + changes[0]);
 
+    // --- Temps écoulé et abandon : 3 tours manqués d'affilée = forfait
+    {
+        std::string timed = post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}})["code"];
+        post(client, "/lobbies/" + timed + "/join", bob, json::object());
+        int timed_id = post(client, "/lobbies/" + timed + "/start", alice, json::object())["game_id"];
+        std::string timed_path = "/games/" + std::to_string(timed_id);
+        json view = get(client, timed_path, alice);
+        assert(view.contains("turn_seconds_left"));
+        auto expire = [&]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            app.tick();
+        };
+        expire();  // Alice (1 tour manqué)
+        view = get(client, timed_path, alice);
+        assert(view["missed"][0] == 1 && view["log"].back().get<std::string>().find("à temps") != std::string::npos);
+        post(client, timed_path + "/move", bob, {{"type", "take"}, {"tokens", {1, 1, 1, 0, 0}}});
+        expire();  // Alice (2)
+        expire();  // Bob (1)
+        expire();  // Alice (3) : abandon, Bob gagne
+        view = get(client, timed_path, alice);
+        assert(view["over"] == true && view["missed"][0] == 3 && view["missed"][1] == 1);
+        std::vector<int> timed_changes = view["elo_changes"];
+        assert(timed_changes[0] < 0 && timed_changes[1] > 0);
+
+        // Abandon volontaire
+        std::string quit = post(client, "/lobbies", alice, {{"mode", "classique"}, {"seats", 2}})["code"];
+        post(client, "/lobbies/" + quit + "/join", bob, json::object());
+        int quit_id = post(client, "/lobbies/" + quit + "/start", alice, json::object())["game_id"];
+        std::string quit_path = "/games/" + std::to_string(quit_id);
+        post(client, quit_path + "/forfeit", "faux-jeton", json::object(), 401);
+        post(client, quit_path + "/forfeit", bob, json::object());
+        json quit_view = get(client, quit_path, alice);
+        assert(quit_view["over"] == true);
+        std::vector<int> quit_changes = quit_view["elo_changes"];
+        assert(quit_changes[0] > 0 && quit_changes[1] < 0);
+        post(client, quit_path + "/forfeit", alice, json::object(), 400);  // déjà finie
+    }
+
     // --- Informations cachées : Bob ne voit ni les pioches ni les réservées d'Alice
     std::string bob_text = get(client, path, bob)["save"];
     std::string hidden = "card 0 0 0 0 0 0 0";
-    size_t deck = bob_text.find("deck 1 ");
-    size_t visible = bob_text.find("visible 1 ");
-    assert(deck != std::string::npos && visible != std::string::npos);
-    // Entre « deck 1 » et « visible 1 », toutes les cartes sont cachées
-    std::string deck_part = bob_text.substr(deck, visible - deck);
+    // Entre « deck L » et « visible L », toutes les cartes sont cachées (une pioche
+    // peut être vide en fin de partie : on regarde les trois)
     size_t count = 0;
-    for (size_t at = deck_part.find("card "); at != std::string::npos; at = deck_part.find("card ", at + 1)) {
-        assert(deck_part.compare(at, hidden.size(), hidden) == 0);
-        count++;
+    for (int level = 1; level <= 3; level++) {
+        size_t deck = bob_text.find("deck " + std::to_string(level) + " ");
+        size_t visible = bob_text.find("visible " + std::to_string(level) + " ");
+        assert(deck != std::string::npos && visible != std::string::npos);
+        std::string deck_part = bob_text.substr(deck, visible - deck);
+        for (size_t at = deck_part.find("card "); at != std::string::npos; at = deck_part.find("card ", at + 1)) {
+            assert(deck_part.compare(at, hidden.size(), hidden) == 0);
+            count++;
+        }
     }
     assert(count > 0);
 

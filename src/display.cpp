@@ -535,6 +535,10 @@ std::string describe_event(const Game& game, const Event& event)
         return event.noble + " rend visite à " + name + " (+3 pts).";
     case EventType::Pass:
         return name + " ne peut rien faire et passe son tour.";
+    case EventType::Timeout:
+        return name + " n'a pas joué à temps et passe son tour.";
+    case EventType::Forfeit:
+        return name + " abandonne la partie (classé dernier).";
     }
     return "";
 }

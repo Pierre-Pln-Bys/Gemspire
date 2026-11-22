@@ -16,6 +16,9 @@
 #include "../src/move.hpp"
 #include "store.hpp"
 
+const int MAX_MISSED_TURNS = 3;         // tours manqués d'affilée avant l'abandon
+const int FINISHED_GAME_SECONDS = 3600; // une partie finie reste visible 1 heure
+
 // Une place dans un salon ou une partie en ligne
 struct Seat {
     int account;
@@ -44,6 +47,9 @@ struct OnlineGame {
     long version = 1;
     std::vector<int> elo_changes;      // rempli à la fin de la partie
     bool recorded = false;
+    long long turn_start = 0;          // début du tour en cours (secondes)
+    std::vector<int> missed;           // tours manqués d'affilée, par place
+    long long finished_at = 0;         // fin de la partie (pour l'oublier ensuite)
 };
 
 // Tous les salons et parties en cours (en mémoire), protégés par un verrou.
@@ -62,6 +68,12 @@ public:
     bool lobby_json(const std::string& code, long since, nlohmann::json& out);
 
     std::string play(int game_id, int account, const Move& move);
+    // Abandon volontaire d'un joueur (classé dernier, Elo perdu)
+    std::string forfeit(int game_id, int account);
+    // À appeler chaque seconde : temps écoulés (le tour passe ; après
+    // MAX_MISSED_TURNS tours manqués d'affilée, abandon) et ménage des
+    // parties finies depuis longtemps
+    void tick();
     // false si la partie n'existe pas
     bool game_json(int game_id, int account, long since, nlohmann::json& out);
 
@@ -77,6 +89,7 @@ public:
     void bot_events_json(long since, nlohmann::json& out);
 
     void set_wait_seconds(int seconds);
+    void set_turn_seconds(int seconds);
     // Appelée quand un salon est créé (annonce Discord, v3.2)
     std::function<void(const Lobby&)> on_lobby_created;
 
@@ -88,6 +101,7 @@ private:
     std::map<int, OnlineGame> games_;
     int next_game_ = 1;
     int wait_seconds_ = 25;
+    int turn_seconds_ = 120;
     std::mt19937 random_;
 
     std::map<int, long long> last_seen_;
@@ -100,6 +114,7 @@ private:
     void lobby_changed(const Lobby& lobby, bool closed);
     void remove_from_lobbies(int account);
     void finish_game(OnlineGame& online);
+    void after_change(OnlineGame& online, size_t events_before);
     void wait_for_change(std::unique_lock<std::mutex>& lock, const std::function<long()>& version, long since);
 };
 

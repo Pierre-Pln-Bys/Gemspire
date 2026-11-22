@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.3.0] - 2026-11-22
+
+### Ajouté
+- **Temps de jeu en ligne** : 2 minutes par tour (compte à rebours affiché).
+  Passé ce délai le tour passe ; après 3 tours manqués d'affilée le joueur
+  abandonne. Bouton **Abandonner** (deux clics). Celui qui abandonne est
+  classé dernier et perd de l'Elo ; la partie continue entre les autres.
+  Avant, quitter le jeu bloquait la partie et évitait la défaite.
+- **Site** https://splendor.epsilon-forge.fr : accueil et téléchargements,
+  **classement** public (`/classement`), **conditions d'utilisation** et
+  **politique de confidentialité**. HTML sans JavaScript, lisible sur mobile.
+- Logique : `Game::skip_turn`, `Game::forfeit` ; la sauvegarde garde les
+  abandons (ligne facultative `forfeited`).
+
+### Corrigé
+- Sélection des jetons : impossible de choisir des combinaisons interdites
+  (2 identiques dans une pile de moins de 4, plus de 3 couleurs).
+- Annonces bien visibles quand un noble rend visite à un joueur et quand le
+  dernier tour commence.
+- Le serveur oublie les parties terminées depuis plus d'une heure (mémoire).
+- Test du serveur instable (pioche de niveau I parfois vide en fin de partie).
+
 ## [3.2.2] - 2026-11-22
 
 ### Corrigé

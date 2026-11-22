@@ -124,7 +124,9 @@ static std::vector<Button> board_buttons(const App& app)
         return buttons;
     }
     if (online) {
-        add(buttons, ButtonId::BackOnline, "Menu en ligne", {790, 8, 290, 30});
+        add(buttons, ButtonId::BackOnline, "Menu en ligne", {790, 8, 140, 30});
+        bool confirm = GetTime() < app.online.forfeit_confirm;
+        add(buttons, ButtonId::Forfeit, confirm ? "Confirmer ?" : "Abandonner", {940, 8, 140, 30}, 0, true, confirm);
     } else {
         add(buttons, ButtonId::Menu, "Menu", {790, 8, 120, 30});
         add(buttons, ButtonId::Save, "Sauvegarder", {920, 8, 160, 30});
@@ -555,6 +557,13 @@ static void draw_header(const App& app)
     std::string mode = game.mode() == Mode::Classic ? "Partie classique" : "Partie rapide";
     text(app, mode, 30, 44, 13, false, SOFT_TEXT);
     text(app, "Tour " + std::to_string(game.round()), 30, 62, 13, false, SOFT_TEXT);
+    // En ligne : temps restant pour jouer ce tour
+    if (app.online.in_game && !game.is_over()) {
+        int left = static_cast<int>(app.online.turn_deadline - GetTime());
+        left = left < 0 ? 0 : left;
+        std::string clock = std::to_string(left / 60) + ":" + (left % 60 < 10 ? "0" : "") + std::to_string(left % 60);
+        text(app, "Temps : " + clock, 100, 62, 13, true, left <= 20 ? ERROR_TEXT : SOFT_TEXT);
+    }
     text(app, "Nobles", 30, 96, 15, true, WHITE_TEXT);
     if (game.is_last_round() && !game.is_over()) {
         text(app, "Dernier tour !", 30, 120, 14, true, ERROR_TEXT);

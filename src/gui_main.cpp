@@ -515,6 +515,7 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     online.game_version = version;
     online.my_seat = body.value("your_seat", -1);
     online.game_over = body.value("over", false);
+    online.turn_deadline = GetTime() + body.value("turn_seconds_left", 0);
     online.elo_changes = body.value("elo_changes", std::vector<int>());
     online.seat_elos.clear();
     for (const nlohmann::json& seat : body["seats"]) {
@@ -937,6 +938,16 @@ static void press_board_button(App& app, ButtonId id)
         break;
     case ButtonId::BackOnline:
         press_online_button(app, {ButtonId::BackOnline, "", true, {}, 0, false});
+        break;
+    case ButtonId::Forfeit:
+        // Deux clics : « Abandonner » puis « Confirmer ? » dans les 4 secondes
+        if (GetTime() < app.online.forfeit_confirm) {
+            app.online.forfeit_confirm = 0;
+            app.net.send(TagMove, "POST", "/games/" + std::to_string(app.online.game_id) + "/forfeit");
+        } else {
+            app.online.forfeit_confirm = GetTime() + 4;
+            set_message(app, "Abandonner compte comme une défaite (Elo perdu). Cliquez à nouveau pour confirmer.", true);
+        }
         break;
     default:
         break;

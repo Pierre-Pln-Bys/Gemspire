@@ -31,6 +31,7 @@
 //   board_nobles 3
 //   noble 3 4 4 0 0 0 Machiavel  (points, coût des 5 couleurs, nom)
 //   choices 0
+//   forfeited 1 0                (facultatif : joueurs qui ont abandonné, en ligne)
 //   end
 
 static const char* const STEP_NAMES[] = {"action", "discard", "choose_noble", "over"};
@@ -118,7 +119,22 @@ std::string write_game(const Game& game, int viewer)
     for (int choice : game.noble_choices_) {
         out << " " << choice;
     }
-    out << "\nend\n";
+    out << "\n";
+    // Écrit seulement si quelqu'un a abandonné (les anciennes versions lisent le reste)
+    std::vector<int> forfeited;
+    for (int index = 0; index < static_cast<int>(game.players_.size()); index++) {
+        if (game.players_[index].forfeited) {
+            forfeited.push_back(index);
+        }
+    }
+    if (!forfeited.empty()) {
+        out << "forfeited " << forfeited.size();
+        for (int index : forfeited) {
+            out << " " << index;
+        }
+        out << "\n";
+    }
+    out << "end\n";
     return out.str();
 }
 
@@ -321,7 +337,18 @@ std::string load_game(const std::string& text, std::unique_ptr<Game>& game)
         for (int k = 0; k < choice_count; k++) {
             loaded->noble_choices_.push_back(reader.number(0, board_count - 1));
         }
-        reader.expect("end");
+        // Ligne facultative : joueurs qui ont abandonné (parties en ligne)
+        std::string next = reader.word();
+        if (next == "forfeited") {
+            int forfeit_count = reader.number(1, count);
+            for (int k = 0; k < forfeit_count; k++) {
+                players[reader.number(0, count - 1)].forfeited = true;
+            }
+            next = reader.word();
+        }
+        if (next != "end") {
+            reader.fail("« end » attendu");
+        }
 
         loaded->players_ = players;
         loaded->bank_ = bank;

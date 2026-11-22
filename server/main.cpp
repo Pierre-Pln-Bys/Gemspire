@@ -1,7 +1,10 @@
 // Serveur de Splendor en ligne : comptes (Google / Discord, sans mot de
 // passe), salons, parties arbitrées par le serveur, classement Elo.
 // Réglages par variables d'environnement : voir server/README.md.
+#include <atomic>
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 #include "app.hpp"
 
@@ -19,7 +22,18 @@ int main()
     app.setup_routes(server);
     std::cout << "Serveur Splendor sur " << config.host << ":" << config.port << " (adresse publique "
               << config.public_url << ")" << (config.dev_login ? " [connexion de test activée]" : "") << std::endl;
-    if (!server.listen(config.host, config.port)) {
+    // Horloge des parties : temps écoulés, abandons, ménage
+    std::atomic<bool> running(true);
+    std::thread clock([&]() {
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            app.tick();
+        }
+    });
+    bool listened = server.listen(config.host, config.port);
+    running = false;
+    clock.join();
+    if (!listened) {
         std::cerr << "Impossible d'écouter sur le port " << config.port << "\n";
         return 1;
     }

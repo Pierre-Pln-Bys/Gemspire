@@ -1,4 +1,5 @@
 // Tests de la logique du jeu (rules et game). Lancer avec : make test
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <iostream>
@@ -6,6 +7,7 @@
 
 #include "../src/ai.hpp"
 #include "../src/data.hpp"
+#include "../src/elo.hpp"
 #include "../src/game.hpp"
 #include "../src/rules.hpp"
 #include "../src/save.hpp"
@@ -390,6 +392,49 @@ static void test_save()
     assert(!load_game_from_file("tests/absent.splendor", from_file).empty());
 }
 
+// Temps écoulé et abandon (parties en ligne)
+static void test_timeout_and_forfeit()
+{
+    // Temps écoulé : le joueur passe, on change de joueur
+    Game game({"A", "B", "C"}, 5, Mode::Quick);
+    assert(game.skip_turn().empty());
+    assert(game.current_index() == 1);
+    assert(game.events().back().type == EventType::Timeout);
+
+    // B abandonne pendant son tour : C joue ensuite, A puis C, B est sauté
+    assert(game.forfeit(1).empty());
+    assert(game.players()[1].forfeited);
+    assert(game.current_index() == 2);
+    assert(game.active_players() == 2);
+    assert(game.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(game.current_index() == 0);
+    assert(game.take_tokens({1, 1, 1, 0, 0}).empty());
+    assert(game.current_index() == 2);
+
+    // B a beaucoup de points mais il est classé dernier, et ne gagne pas
+    GameTester::player(game, 1).nobles = {all_nobles()[0], all_nobles()[1], all_nobles()[2]};
+    std::vector<int> places = final_places(game);
+    assert(places[1] == 2);
+    std::vector<int> win = game.winners();
+    assert(std::find(win.begin(), win.end(), 1) == win.end());
+
+    // La sauvegarde garde l'abandon
+    std::unique_ptr<Game> copy;
+    assert(load_game(save_game(game), copy).empty());
+    assert(copy->players()[1].forfeited && !copy->players()[0].forfeited);
+
+    // Il ne reste qu'un joueur : la partie est finie, il gagne
+    assert(game.forfeit(0).empty());
+    assert(game.is_over());
+    assert(game.winners() == std::vector<int>{2});
+
+    // Deux joueurs : un abandon termine la partie tout de suite
+    Game duel({"A", "B"}, 6, Mode::Classic);
+    assert(duel.forfeit(0).empty());
+    assert(duel.is_over() && duel.winners() == std::vector<int>{1});
+    assert(final_places(duel)[0] == 1 && final_places(duel)[1] == 0);
+}
+
 int main()
 {
     test_data();
@@ -402,6 +447,7 @@ int main()
     test_random_games();
     test_ai_tournament();
     test_save();
+    test_timeout_and_forfeit();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

@@ -7,9 +7,17 @@ std::vector<int> final_places(const Game& game)
     const std::vector<Player>& players = game.players();
     std::vector<int> places;
     for (const Player& player : players) {
-        // Place = nombre de joueurs strictement meilleurs
+        // Place = nombre de joueurs strictement meilleurs. Ceux qui ont abandonné
+        // sont derrière tous les autres (et à égalité entre eux).
         int better = 0;
         for (const Player& other : players) {
+            if (player.forfeited != other.forfeited) {
+                better += player.forfeited ? 1 : 0;
+                continue;
+            }
+            if (player.forfeited) {
+                continue;
+            }
             bool more_points = other.score() > player.score();
             bool fewer_cards = other.score() == player.score() && other.cards.size() < player.cards.size();
             if (more_points || fewer_cards) {

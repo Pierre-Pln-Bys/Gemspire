@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 
+#include "../src/ai.hpp"
 #include "../src/display.hpp"
 #include "../src/elo.hpp"
 #include "../src/save.hpp"
@@ -12,6 +13,16 @@ Rooms::Rooms(Store& store) : store_(store), random_(std::random_device{}()) {}
 void Rooms::set_wait_seconds(int seconds)
 {
     wait_seconds_ = seconds;
+}
+
+void Rooms::set_turn_seconds(int seconds)
+{
+    turn_seconds_ = seconds;
+}
+
+static long long now_seconds()
+{
+    return static_cast<long long>(std::time(nullptr));
 }
 
 // Code de salon de 5 caractères, sans lettres ambiguës (O/0, I/1)
@@ -184,6 +195,8 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
         online.id = next_game_;
         online.game.reset(new Game(names, random_(), lobby.mode));
         online.seats = lobby.members;
+        online.missed.assign(lobby.members.size(), 0);
+        online.turn_start = now_seconds();
         lobby.game_id = next_game_;
         lobby.version++;
         lobby_changed(lobby, false);
@@ -260,16 +273,105 @@ std::string Rooms::play(int game_id, int account, const Move& move)
         if (!error.empty()) {
             return error;
         }
-        for (size_t i = before; i < game.events().size(); i++) {
-            online.log.push_back(describe_event(game, game.events()[i]));
-        }
-        if (game.is_over() && !online.recorded) {
-            finish_game(online);
-        }
-        online.version++;
+        online.missed[current] = 0;  // il a joué lui-même
+        after_change(online, before);
     }
     changed_.notify_all();
     return "";
+}
+
+// Après un changement : historique, fin de partie, nouveau tour
+void Rooms::after_change(OnlineGame& online, size_t events_before)
+{
+    Game& game = *online.game;
+    for (size_t i = events_before; i < game.events().size(); i++) {
+        online.log.push_back(describe_event(game, game.events()[i]));
+    }
+    if (game.is_over() && !online.recorded) {
+        finish_game(online);
+        online.finished_at = now_seconds();
+    }
+    online.turn_start = now_seconds();
+    online.version++;
+}
+
+std::string Rooms::forfeit(int game_id, int account)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto found = games_.find(game_id);
+        if (found == games_.end()) {
+            return "Partie introuvable.";
+        }
+        OnlineGame& online = found->second;
+        Game& game = *online.game;
+        if (game.is_over()) {
+            return "La partie est terminée.";
+        }
+        int seat = -1;
+        for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
+            if (online.seats[i].account == account) {
+                seat = i;
+            }
+        }
+        if (seat < 0) {
+            return "Vous ne jouez pas dans cette partie.";
+        }
+        size_t before = game.events().size();
+        std::string error = game.forfeit(seat);
+        if (!error.empty()) {
+            return error;
+        }
+        after_change(online, before);
+    }
+    changed_.notify_all();
+    return "";
+}
+
+void Rooms::tick()
+{
+    bool any_change = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        long long now = now_seconds();
+        for (auto it = games_.begin(); it != games_.end();) {
+            OnlineGame& online = it->second;
+            Game& game = *online.game;
+            if (game.is_over()) {
+                // Partie finie depuis longtemps : on l'oublie (elle est enregistrée)
+                if (online.finished_at > 0 && now - online.finished_at > FINISHED_GAME_SECONDS) {
+                    it = games_.erase(it);
+                    continue;
+                }
+                ++it;
+                continue;
+            }
+            if (now - online.turn_start >= turn_seconds_) {
+                int late = game.current_index();
+                size_t before = game.events().size();
+                // Défausse ou choix du noble en attente : le serveur les termine
+                // (coups imposés, choisis par l'IA facile), puis le tour passe
+                while (!game.is_over() && game.current_index() == late && game.step() != TurnStep::Action) {
+                    if (!apply_move(game, ai_choose(game, false)).empty()) {
+                        break;
+                    }
+                }
+                if (!game.is_over() && game.current_index() == late && game.step() == TurnStep::Action) {
+                    game.skip_turn();
+                }
+                online.missed[late]++;
+                if (!game.is_over() && online.missed[late] >= MAX_MISSED_TURNS) {
+                    game.forfeit(late);
+                }
+                after_change(online, before);
+                any_change = true;
+            }
+            ++it;
+        }
+    }
+    if (any_change) {
+        changed_.notify_all();
+    }
 }
 
 bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
@@ -294,6 +396,10 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
     out["save"] = save_game_for(*online.game, my_seat);
     out["log"] = online.log;
     out["over"] = online.game->is_over();
+    // Secondes restantes pour jouer (le tour passe ensuite)
+    long long left = online.turn_start + turn_seconds_ - now_seconds();
+    out["turn_seconds_left"] = online.game->is_over() ? 0 : (left < 0 ? 0 : left);
+    out["missed"] = online.missed;
     out["elo_changes"] = online.elo_changes;
     out["seats"] = nlohmann::json::array();
     for (const Seat& seat : online.seats) {

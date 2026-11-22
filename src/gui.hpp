@@ -39,7 +39,7 @@ enum class ButtonId {
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
-    Take, Buy, Reserve, Cancel, Save, Journal, Menu,
+    Take, Buy, Reserve, Cancel, Save, Journal, Menu, Forfeit,
     // Fin de partie
     Replay
 };
@@ -132,6 +132,8 @@ struct OnlineState {
     int my_seat = -1;
     bool game_over = false;
     bool move_pending = false;       // coup envoyé, réponse attendue
+    double turn_deadline = 0;        // heure (GetTime) où le tour en cours passe
+    double forfeit_confirm = 0;      // « Abandonner » cliqué une fois : confirmer avant cette heure
     double next_game_poll = 0;       // nouvelle tentative après une coupure
     bool game_poll_running = false;
     bool lobby_poll_running = false;

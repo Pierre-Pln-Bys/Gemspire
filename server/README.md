@@ -29,6 +29,9 @@ cpp-httplib, nlohmann/json et SQLite sont inclus dans `third_party/`.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | identifiant OAuth Google | vide = désactivé |
 | `DISCORD_WEBHOOK_URL` | annonces de salons (v3.2) | vide |
 | `SPLENDOR_DEV_LOGIN` | `1` : connexion de test sans OAuth (**jamais en production**) | désactivé |
+| `SPLENDOR_TURN_SECONDS` | temps pour jouer un tour en ligne | `120` |
+| `SPLENDOR_CONTACT_EMAIL` | adresse de contact affichée sur le site | vide |
+| `SPLENDOR_DISCORD_INVITE` | lien d'invitation du serveur Discord (site) | vide |
 
 Les secrets ne vont jamais dans le dépôt : mettez-les dans un fichier
 `/etc/splendor.env` lisible seulement par le service (voir plus bas).
@@ -80,10 +83,34 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/lobbies/CODE?since=V` | état du salon (attente longue si version ≤ V) |
 | GET | `/games/ID?since=V` | état de la partie vu par ce joueur (pioches et réservées des autres cachées) |
 | POST | `/games/ID/move` | un coup (voir `src/move_json.hpp`) |
+| POST | `/games/ID/forfeit` | abandon (classé dernier, Elo perdu) |
 | GET | `/leaderboard` | 50 meilleurs Elo |
 
-## Installer sur le Raspberry Pi (v3.2)
+`GET /games/ID` donne aussi `turn_seconds_left` (temps restant du tour) et
+`missed` (tours manqués d'affilée par place).
 
-Prévu : service systemd, base dans `/var/lib/splendor`, accès HTTPS par un
-tunnel (Cloudflare Tunnel) ou un proxy (Caddy) devant `127.0.0.1:8080`. Ce sera
-détaillé quand l'accès SSH au Pi sera disponible.
+## Temps de jeu et abandon
+
+Chaque tour dure au plus `SPLENDOR_TURN_SECONDS` (2 minutes). Passé ce délai,
+le serveur termine la défausse ou le choix du noble s'il le faut, puis le tour
+passe. Après 3 tours manqués d'affilée, le joueur abandonne : il est classé
+dernier (Elo perdu) et la partie continue entre les autres ; s'il ne reste
+qu'un joueur, il gagne. Un temps écoulé ne compte pas comme « ne peut rien
+faire » (la partie n'est donc pas déclarée bloquée).
+
+## Site web
+
+| Chemin | Page |
+|---|---|
+| `/` | accueil, téléchargements |
+| `/classement` | classement Elo (100 premiers) |
+| `/conditions` | conditions d'utilisation |
+| `/confidentialite` | politique de confidentialité |
+
+Pages en HTML et CSS (`server/pages.cpp`), sans JavaScript, avec une
+politique de sécurité du contenu stricte.
+
+## Installer sur le Raspberry Pi
+
+Voir [deploy/README.md](../deploy/README.md) : services systemd, base dans
+`/var/lib/splendor`, HTTPS par Cloudflare Tunnel.

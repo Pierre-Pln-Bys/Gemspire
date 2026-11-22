@@ -81,8 +81,13 @@ Depuis l'accueil, « Jouer en ligne » :
    code.
 3. L'hôte lance la partie. Le serveur arbitre chaque coup ; chacun ne voit
    que ses propres cartes réservées.
-4. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
-   est visible depuis le menu en ligne.
+4. Chaque tour dure au plus **2 minutes** (temps affiché en haut à gauche) ;
+   ensuite le tour passe. **3 tours manqués d'affilée** ou le bouton
+   « Abandonner » (deux clics) : le joueur est classé dernier et perd de l'Elo,
+   les autres continuent.
+5. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
+   est visible depuis le menu en ligne et sur
+   [splendor.epsilon-forge.fr/classement](https://splendor.epsilon-forge.fr/classement).
 
 **Discord** :
 
@@ -174,6 +179,7 @@ une version mineure : `gh workflow run release.yml -f tag=vX.Y.Z`.
 
 ## Suite du projet
 
-Voir [ROADMAP.md](ROADMAP.md) pour la suite (v3.1 en ligne, v3.2 Discord, v4).
+Voir [ROADMAP.md](ROADMAP.md) : v3.4 (mobile), v3.5 (hub Discord), v4
+(publication et test d'intrusion), v5 (communauté).
 
 Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki).

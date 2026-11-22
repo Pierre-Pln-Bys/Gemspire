@@ -84,7 +84,18 @@ TurnStep Game::step() const { return step_; }
 bool Game::is_over() const { return step_ == TurnStep::Over; }
 const std::vector<Event>& Game::events() const { return events_; }
 const std::vector<int>& Game::noble_choices() const { return noble_choices_; }
-bool Game::is_blocked() const { return consecutive_passes_ >= static_cast<int>(players_.size()); }
+bool Game::is_blocked() const { return consecutive_passes_ >= active_players(); }
+
+int Game::active_players() const
+{
+    int count = 0;
+    for (const Player& player : players_) {
+        if (!player.forfeited) {
+            count++;
+        }
+    }
+    return count;
+}
 
 bool Game::valid_position(int level, int position) const
 {
@@ -425,7 +436,7 @@ void Game::after_discard()
 
 void Game::advance_one()
 {
-    if (current_player().score() >= WINNING_SCORE) {
+    if (!current_player().forfeited && current_player().score() >= WINNING_SCORE) {
         last_round_ = true;
     }
     current_ = (current_ + 1) % static_cast<int>(players_.size());
@@ -442,8 +453,12 @@ void Game::advance_one()
 void Game::next_player()
 {
     advance_one();
-    // Ceux qui ne peuvent rien faire passent leur tour
-    while (step_ != TurnStep::Over && !can_play()) {
+    // Ceux qui ont abandonné sont sautés ; ceux qui ne peuvent rien faire passent
+    while (step_ != TurnStep::Over && (current_player().forfeited || !can_play())) {
+        if (current_player().forfeited) {
+            advance_one();
+            continue;
+        }
         events_.push_back(Event(EventType::Pass, current_));
         consecutive_passes_++;
         // Partie bloquée : plus personne ne peut jouer
@@ -458,12 +473,50 @@ void Game::next_player()
     }
 }
 
+std::string Game::skip_turn()
+{
+    if (step_ != TurnStep::Action) {
+        return "On ne peut passer le tour qu'à l'étape Action.";
+    }
+    // Pas compté comme un « passe » : le joueur pouvait jouer, la partie
+    // n'est pas bloquée (les abandons finissent par la terminer)
+    events_.push_back(Event(EventType::Timeout, current_));
+    next_player();
+    return "";
+}
+
+std::string Game::forfeit(int player)
+{
+    if (player < 0 || player >= static_cast<int>(players_.size())) {
+        return "Joueur inconnu.";
+    }
+    if (step_ == TurnStep::Over || players_[player].forfeited) {
+        return "";
+    }
+    if (player == current_ && step_ != TurnStep::Action) {
+        return "Abandon impossible au milieu d'un tour (défausse ou choix du noble).";
+    }
+    players_[player].forfeited = true;
+    events_.push_back(Event(EventType::Forfeit, player));
+    if (active_players() <= 1) {
+        step_ = TurnStep::Over;
+        return "";
+    }
+    if (player == current_) {
+        next_player();
+    }
+    return "";
+}
+
 std::vector<int> Game::winners() const
 {
-    // Meilleur score, puis le moins de cartes achetées
+    // Meilleur score, puis le moins de cartes achetées (sans ceux qui ont abandonné)
     int best_score = -1;
     int fewest_cards = 0;
     for (const Player& player : players_) {
+        if (player.forfeited) {
+            continue;
+        }
         int cards = static_cast<int>(player.cards.size());
         if (player.score() > best_score
             || (player.score() == best_score && cards < fewest_cards)) {
@@ -474,7 +527,7 @@ std::vector<int> Game::winners() const
 
     std::vector<int> result;
     for (int i = 0; i < static_cast<int>(players_.size()); i++) {
-        if (players_[i].score() == best_score
+        if (!players_[i].forfeited && players_[i].score() == best_score
             && static_cast<int>(players_[i].cards.size()) == fewest_cards) {
             result.push_back(i);
         }

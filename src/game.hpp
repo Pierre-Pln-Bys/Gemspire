@@ -32,6 +32,7 @@ struct Player {
     std::vector<Card> cards;      // cartes achetées
     std::vector<Card> reserved;   // cartes réservées (mode classique)
     std::vector<Noble> nobles;    // nobles reçus
+    bool forfeited = false;       // a abandonné (partie en ligne) : ne joue plus, classé dernier
 
     int score() const;
     Resources bonuses() const;
@@ -49,7 +50,7 @@ enum class TurnStep {
 };
 
 // Ce qui s'est passé pendant la partie (pour l'historique et les messages)
-enum class EventType { TakeTokens, BuyCard, BuyReserved, Reserve, Discard, NobleVisit, Pass };
+enum class EventType { TakeTokens, BuyCard, BuyReserved, Reserve, Discard, NobleVisit, Pass, Timeout, Forfeit };
 
 struct Event {
     Event(EventType event_type, int event_player) : type(event_type), player(event_player) {}
@@ -114,6 +115,15 @@ public:
     // --- Étape ChooseNoble ---
     const std::vector<int>& noble_choices() const;  // indices (dans nobles()) des nobles possibles
     std::string choose_noble(int noble_index);
+
+    // --- Parties en ligne (décidé par le serveur, pas par le joueur) ---
+    // Temps écoulé : le joueur courant passe son tour (étape Action seulement)
+    std::string skip_turn();
+    // Abandon du joueur `player` : il ne joue plus et sera classé dernier. Si
+    // c'était son tour (étape Action), on passe au suivant. S'il ne reste
+    // qu'un joueur, la partie se termine.
+    std::string forfeit(int player);
+    int active_players() const;                     // joueurs qui n'ont pas abandonné
 
     // Indices des gagnants (plusieurs en cas d'égalité parfaite)
     std::vector<int> winners() const;
