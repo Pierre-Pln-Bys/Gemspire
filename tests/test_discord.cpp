@@ -90,6 +90,8 @@ int main()
                 subscribed = true;
             }
             if (message.value("cmd", std::string()) == "SET_ACTIVITY") {
+                // Comme le vrai Discord : réponse à la commande, avec "evt": null
+                write_frame(client, 1, json({{"cmd", "SET_ACTIVITY"}, {"evt", nullptr}, {"nonce", message["nonce"]}}).dump());
                 json activity = message["args"]["activity"];
                 details = activity.value("details", std::string());
                 secret = activity.contains("secrets") ? activity["secrets"].value("join", std::string()) : "";

@@ -316,8 +316,9 @@ static void run(std::shared_ptr<DiscordState> state)
             } else if (opcode == 2) {  // fermeture
                 pipe.close();
             } else if (opcode == 1) {
+                // Attention : Discord répond à chaque commande avec "evt": null
                 nlohmann::json message = nlohmann::json::parse(payload, nullptr, false);
-                if (message.is_object() && message.value("evt", std::string()) == "ACTIVITY_JOIN"
+                if (message.is_object() && message.contains("evt") && message["evt"] == "ACTIVITY_JOIN"
                     && message.contains("data") && message["data"].contains("secret")
                     && message["data"]["secret"].is_string()) {
                     std::lock_guard<std::mutex> lock(state->mutex);
