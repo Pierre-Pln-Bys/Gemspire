@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <iostream>
 #include <sstream>
 #include <thread>
 
@@ -167,8 +168,13 @@ ServerApp::ServerApp(const ServerConfig& config) : config_(config), store_(confi
 // la requête ne doit pas retarder la réponse au joueur)
 void ServerApp::announce_lobby(const Lobby& lobby)
 {
+    // Un salon créé depuis le bot a déjà son salon vocal : pas d'annonce
+    if (config_.discord_webhook.empty() || !lobby.voice_channel.empty()) {
+        return;
+    }
     const std::string prefix = "https://discord.com/api/webhooks/";
-    if (config_.discord_webhook.compare(0, prefix.size(), prefix) != 0 || !lobby.voice_channel.empty()) {
+    if (config_.discord_webhook.compare(0, prefix.size(), prefix) != 0) {
+        std::cerr << "Webhook Discord ignoré : l'adresse doit commencer par " << prefix << std::endl;
         return;
     }
     std::string path = config_.discord_webhook.substr(std::string("https://discord.com").size());
@@ -179,7 +185,11 @@ void ServerApp::announce_lobby(const Lobby& lobby)
     std::thread([path, body]() {
         httplib::SSLClient client("discord.com");
         client.set_connection_timeout(5);
-        client.Post(path, body, "application/json");
+        httplib::Result result = client.Post(path, body, "application/json");
+        if (!result || result->status / 100 != 2) {
+            std::cerr << "Webhook Discord : échec de l'annonce (HTTP " << (result ? result->status : 0) << ")"
+                      << std::endl;
+        }
     }).detach();
 }
 

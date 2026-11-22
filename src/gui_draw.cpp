@@ -195,7 +195,7 @@ static std::vector<Button> online_buttons(const App& app)
             add(buttons, ButtonId::CreateSeats, std::to_string(seats) + " joueurs", {410.0f + (seats - 2) * 155, 440, 145, 40},
                 seats, true, online.create_seats == seats);
         }
-        add(buttons, ButtonId::OfferCreate, "Créer la partie", {410, 510, 230, 50}, 0, app.net.pending() <= 2);
+        add(buttons, ButtonId::OfferCreate, "Créer la partie", {410, 510, 230, 50}, 0, app.net.pending() == 0);
         add(buttons, ButtonId::OfferIgnore, "Ignorer", {650, 510, 220, 50});
         return buttons;
     }

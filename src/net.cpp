@@ -32,10 +32,11 @@ const std::string& NetClient::server() const
     return server_;
 }
 
-void NetClient::send(int tag, const std::string& method, const std::string& path, const std::string& body)
+void NetClient::send(int tag, const std::string& method, const std::string& path, const std::string& body,
+                     bool background)
 {
     std::shared_ptr<NetQueue> queue = queue_;
-    {
+    if (!background) {
         std::lock_guard<std::mutex> lock(queue->mutex);
         queue->pending++;
     }
@@ -43,7 +44,7 @@ void NetClient::send(int tag, const std::string& method, const std::string& path
     std::string token = token_;
     // Un fil par requête : la fenêtre continue de s'afficher pendant l'attente.
     // Il ne touche qu'à la file partagée (shared_ptr), jamais à l'interface.
-    std::thread([queue, server, token, tag, method, path, body]() {
+    std::thread([queue, server, token, tag, method, path, body, background]() {
         NetResponse response = {tag, 0, ""};
         try {
             httplib::Client client(server);
@@ -64,7 +65,9 @@ void NetClient::send(int tag, const std::string& method, const std::string& path
             response.status = 0;  // adresse invalide, etc.
         }
         std::lock_guard<std::mutex> lock(queue->mutex);
-        queue->pending--;
+        if (!background) {
+            queue->pending--;
+        }
         queue->done.push_back(response);
     }).detach();
 }

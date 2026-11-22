@@ -252,6 +252,8 @@ static nlohmann::json activity_json(const PresenceInfo& info)
     if (!info.join_secret.empty()) {
         activity["secrets"] = {{"join", info.join_secret}};
     }
+    // Image « logo » téléversée dans le portail Discord (Rich Presence > Art Assets)
+    activity["assets"] = {{"large_image", "logo"}, {"large_text", "Splendor"}};
     activity["instance"] = false;
     return activity;
 }

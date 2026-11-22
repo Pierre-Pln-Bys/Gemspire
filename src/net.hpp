@@ -26,13 +26,16 @@ public:
     const std::string& server() const;
 
     // Envoie une requête (method = "GET" ou "POST", body = JSON) ; la réponse
-    // arrivera plus tard dans poll() avec le même `tag`
-    void send(int tag, const std::string& method, const std::string& path, const std::string& body = "");
+    // arrivera plus tard dans poll() avec le même `tag`. Une requête de fond
+    // (attente longue, rafraîchissement) ne compte pas dans pending() : elle
+    // ne doit pas griser les boutons.
+    void send(int tag, const std::string& method, const std::string& path, const std::string& body = "",
+              bool background = false);
 
     // Réponses arrivées depuis le dernier appel
     std::vector<NetResponse> poll();
 
-    int pending() const;  // requêtes en cours
+    int pending() const;  // requêtes en cours lancées par le joueur (hors requêtes de fond)
 
 private:
     std::string server_;

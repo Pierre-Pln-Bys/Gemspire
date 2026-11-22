@@ -417,7 +417,8 @@ static void poll_lobby(App& app)
         return;
     }
     online.lobby_poll_running = true;
-    app.net.send(TagLobby, "GET", "/lobbies/" + online.lobby_code + "?since=" + std::to_string(online.lobby_version));
+    app.net.send(TagLobby, "GET", "/lobbies/" + online.lobby_code + "?since=" + std::to_string(online.lobby_version), "",
+                 true);
 }
 
 static void poll_game(App& app)
@@ -427,7 +428,8 @@ static void poll_game(App& app)
         return;
     }
     online.game_poll_running = true;
-    app.net.send(TagGame, "GET", "/games/" + std::to_string(online.game_id) + "?since=" + std::to_string(online.game_version));
+    app.net.send(TagGame, "GET", "/games/" + std::to_string(online.game_id) + "?since=" + std::to_string(online.game_version),
+                 "", true);
 }
 
 static void enter_online_game(App& app, int game_id)
@@ -1116,8 +1118,8 @@ static void update_presence(App& app)
                                     : "Tour " + std::to_string(game.round()) + " · "
                                           + std::to_string(game.players()[seat].score()) + " pts";
     } else if (app.screen == Screen::Online || app.screen == Screen::Leaderboard) {
-        info.details = "En ligne";
-        info.state = online.pseudo.empty() ? "" : "Elo " + std::to_string(online.elo);
+        info.details = app.screen == Screen::Leaderboard ? "Consulte le classement" : "Cherche une partie en ligne";
+        info.state = online.pseudo.empty() ? "" : online.pseudo + " · Elo " + std::to_string(online.elo);
     } else {
         info.details = "Dans les menus";
     }
@@ -1144,7 +1146,7 @@ static void update(App& app, Vector2 mouse)
     // Connecté : on attend les notifications (sert aussi de présence pour le bot)
     if (online.account != 0 && !online.notification_poll_running && GetTime() >= online.next_game_poll) {
         online.notification_poll_running = true;
-        app.net.send(TagNotes, "GET", "/me/notifications?since=" + std::to_string(online.notification_last));
+        app.net.send(TagNotes, "GET", "/me/notifications?since=" + std::to_string(online.notification_last), "", true);
     }
     // Connexion en cours : on demande au serveur si le navigateur a fini
     if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
@@ -1241,9 +1243,9 @@ int main()
     App app;
     configure_network(app);
     app.screen_start = static_cast<long long>(std::time(nullptr));
-    app.net.send(TagConfig, "GET", "/config");
+    app.net.send(TagConfig, "GET", "/config", "", true);
     if (!read_first_line(SESSION_FILE).empty()) {
-        app.net.send(TagMeQuiet, "GET", "/me");
+        app.net.send(TagMeQuiet, "GET", "/me", "", true);
     }
     app.font = load_font_regular();
     app.bold = load_font_bold();
