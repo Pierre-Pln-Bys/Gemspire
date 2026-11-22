@@ -1,0 +1,20 @@
+# Republie l'annonce Discord d'une version (sans recompiler) :
+#   gh workflow run announce.yml -f tag=vX.Y.Z
+name: Announce on Discord
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version à annoncer (ex. v3.6.0)"
+        required: true
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Changelog sur Discord
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: python3 tools/discord_release.py "${{ inputs.tag }}"

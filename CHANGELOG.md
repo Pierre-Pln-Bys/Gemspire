@@ -1,275 +1,264 @@
 # Changelog
 
-Toutes les évolutions notables du projet. Format inspiré de
-[Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
-[SemVer](https://semver.org/lang/fr/).
+All notable changes to the project. Format based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
+[SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
 ## [3.6.0] - 2026-11-22
 
-### Modifié
-- **Le jeu s'appelle désormais Gemspire** : titre, site
-  (https://gemspire.epsilon-forge.fr, l'ancienne adresse redirige), bot,
-  exécutables (`gemspire-windows.exe`, `gemspire-linux`...), dépôt GitHub
-  `Pierre-Pln-Bys/Gemspire`. Les réglages et services du serveur gardent
-  leurs noms techniques (`SPLENDOR_*`, `splendor-server`).
-- **Licence GPL-3.0**.
+### Changed
+- **The game is now called Gemspire**: title, website
+  (https://gemspire.epsilon-forge.fr, the old address redirects), bot,
+  executables (`gemspire-windows.exe`, `gemspire-linux`...), GitHub repository
+  `Pierre-Pln-Bys/Gemspire`. Server settings and services keep their
+  technical names (`SPLENDOR_*`, `splendor-server`).
+- **GPL-3.0 license**.
 
-### Ajouté
-- **Changelog sur Discord** : chaque release publie ses nouveautés dans un
-  salon Discord (`tools/discord_release.py`, secret GitHub
+### Added
+- **Changelog on Discord**: every release posts its changes to a Discord
+  channel (`tools/discord_release.py`, GitHub secret
   `DISCORD_RELEASE_WEBHOOK`).
-- Bot : salons et rôles réglables par **identifiant** (`CREATE_CHANNEL_ID`,
-  `RANKING_CHANNEL_ID`, `MOD_LOG_CHANNEL_ID`, `MOD_ROLE_ID`, `PLAYER_ROLE_ID`),
-  les noms restant le choix par défaut.
+- Bot: channels and roles can be set by **ID** (`CREATE_CHANNEL_ID`,
+  `RANKING_CHANNEL_ID`, `MOD_LOG_CHANNEL_ID`, `MOD_ROLE_ID`, `PLAYER_ROLE_ID`);
+  names remain the default.
 
 ## [3.5.0] - 2026-11-22
 
-### Ajouté
-- **Jouer dans le navigateur**, sur ordinateur et téléphone :
-  https://splendor.epsilon-forge.fr/play/. Même code C++ compilé en
-  WebAssembly (Emscripten, `make web`) : réseau par `fetch`, saisie par la
-  boîte du navigateur (clavier du téléphone), session et sauvegarde gardées
-  dans le navigateur, connexion Discord / Google dans le même onglet (retour
-  automatique au jeu). Bouton « Jouer dans le navigateur » sur le site.
-- **Site en anglais et en français** (langue du navigateur ou `?lang=`),
-  adresses `/leaderboard`, `/terms`, `/privacy` (les françaises restent).
-- **Bot en anglais**, traduit en français pour les membres dont Discord est
-  en français : `/leaderboard`, `/profile`, `/link`, `/play`, `/rules`,
+### Added
+- **Play in your browser**, on computer and phone:
+  https://gemspire.epsilon-forge.fr/play/. Same C++ code compiled to
+  WebAssembly (Emscripten, `make web`): networking through `fetch`, text input
+  through the browser dialog (phone keyboard), session and save kept in the
+  browser, Discord / Google sign-in in the same tab (automatic return to the
+  game). « Play in your browser » button on the website.
+- **Website in English and French** (browser language or `?lang=`),
+  addresses `/leaderboard`, `/terms`, `/privacy` (the French ones still work).
+- **Bot in English**, translated into French for members whose Discord is
+  in French: `/leaderboard`, `/profile`, `/link`, `/play`, `/rules`,
   `/report`, `/mod ban|unban|history|cancel-game|delete-account`.
-- Release : archive `splendor-web.tar.gz`, installée par `deploy/install.sh`.
-  CI : compilation web.
+- Release: web archive installed by `deploy/install.sh`. CI: web build.
 
-### Corrigé
-- Le temps restant du tour était caché sous les tuiles des nobles.
+### Fixed
+- The remaining turn time was hidden under the noble tiles.
 
 ## [3.4.1] - 2026-11-22
 
-### Ajouté
-- **Version obligatoire** : le jeu envoie sa version au serveur ; une version
-  trop ancienne (ou sans version) est refusée et le jeu affiche l'écran
-  bloquant « Mise à jour nécessaire » (bouton de téléchargement, partie
-  locale en cours sauvegardée). Version minimale : `SPLENDOR_MIN_VERSION`,
-  par défaut celle du serveur. Les versions jusqu'à 3.4.0 ne peuvent donc
-  plus jouer en ligne une fois le serveur mis à jour.
+### Added
+- **Required version**: the game sends its version to the server; a version
+  that is too old (or missing) is refused and the game shows the blocking
+  « Update required » screen (download button, current local game saved).
+  Minimum version: `SPLENDOR_MIN_VERSION`, by default the server's own.
+  Versions up to 3.4.0 can no longer play online once the server is updated.
 
 ## [3.4.0] - 2026-11-22
 
-### Ajouté
-- **Bot Discord, hub du jeu** :
-  - salon `#classement` : top 10 mis à jour toutes les 10 minutes ;
-  - commandes `/classement`, `/profil`, `/lier` (rôle Joueur), `/jouer`,
-    `/regles`, `/signaler` ;
-  - modération `/mod ban` (suspension du compte de jeu, 0 jour = définitif),
-    `/mod unban`, `/mod historique` (alerte multi-comptes), `/mod
-    annuler-partie`, `/mod supprimer-compte` ; journal dans `#moderation`.
-- Serveur : comptes suspendus (connexion refusée, sessions fermées, parties
-  abandonnées, absents du classement), historique des parties, annulation
-  d'une partie, suppression de compte, routes `/bot/profile`,
-  `/bot/history`, `/bot/ban`, `/bot/unban`, `/bot/cancel-game`,
-  `/bot/delete-account`. Base migrée automatiquement.
-- Wiki « Serveur Discord » : rôles, salons et réglages conseillés.
+### Added
+- **Discord bot, the game's hub**:
+  - `#leaderboard` channel: top 10 updated every 10 minutes;
+  - commands to see the leaderboard and profiles, link an account (Player
+    role), get the download links and rules, report a player;
+  - moderation: `/mod ban` (game account suspension, 0 days = permanent),
+    `/mod unban`, `/mod history` (alert on multiple accounts),
+    `/mod cancel-game`, `/mod delete-account`; log in `#moderation`.
+- Server: suspended accounts (sign-in refused, sessions closed, games
+  forfeited, removed from the leaderboard), game history, game cancellation,
+  account deletion, routes `/bot/profile`, `/bot/history`, `/bot/ban`,
+  `/bot/unban`, `/bot/cancel-game`, `/bot/delete-account`. Database migrated
+  automatically.
+- « Discord server » wiki page: recommended roles, channels and settings.
 
-### Modifié
-- Le bot garde aussi l'identifiant du message du classement dans son fichier
-  d'état (l'ancien format est encore lu).
-- Lien d'invitation du bot : scope `applications.commands` et droits
-  « gérer les rôles », « intégrer des liens », « lire l'historique ».
+### Changed
+- The bot also keeps the leaderboard message ID in its state file (the old
+  format is still read).
+- Bot invite link: `applications.commands` scope and « manage roles »,
+  « embed links », « read message history » permissions.
 
 ## [3.3.0] - 2026-11-22
 
-### Ajouté
-- **Temps de jeu en ligne** : 2 minutes par tour (compte à rebours affiché).
-  Passé ce délai le tour passe ; après 3 tours manqués d'affilée le joueur
-  abandonne. Bouton **Abandonner** (deux clics). Celui qui abandonne est
-  classé dernier et perd de l'Elo ; la partie continue entre les autres.
-  Avant, quitter le jeu bloquait la partie et évitait la défaite.
-- **Site** https://splendor.epsilon-forge.fr : accueil et téléchargements,
-  **classement** public (`/classement`), **conditions d'utilisation** et
-  **politique de confidentialité**. HTML sans JavaScript, lisible sur mobile.
-- Logique : `Game::skip_turn`, `Game::forfeit` ; la sauvegarde garde les
-  abandons (ligne facultative `forfeited`).
+### Added
+- **Online turn time**: 2 minutes per turn (countdown shown). After that the
+  turn passes; after 3 missed turns in a row the player forfeits. **Forfeit**
+  button (two clicks). A player who forfeits is ranked last and loses Elo;
+  the game goes on between the others. Before, closing the game blocked the
+  game and avoided the loss.
+- **Website**: home page and downloads, public **leaderboard**, **terms of
+  use** and **privacy policy**. HTML without JavaScript, readable on phones.
+- Logic: `Game::skip_turn`, `Game::forfeit`; saves keep forfeits (optional
+  `forfeited` line).
 
-### Corrigé
-- Sélection des jetons : impossible de choisir des combinaisons interdites
-  (2 identiques dans une pile de moins de 4, plus de 3 couleurs).
-- Annonces bien visibles quand un noble rend visite à un joueur et quand le
-  dernier tour commence.
-- Le serveur oublie les parties terminées depuis plus d'une heure (mémoire).
-- Test du serveur instable (pioche de niveau I parfois vide en fin de partie).
+### Fixed
+- Token selection: forbidden combinations can no longer be picked (2 of the
+  same colour from a stack of less than 4, more than 3 colours).
+- Clearly visible announcements when a noble visits a player and when the
+  last round starts.
+- The server forgets games finished more than an hour ago (memory).
+- Unstable server test (level I deck sometimes empty at the end of a game).
 
 ## [3.2.2] - 2026-11-22
 
-### Corrigé
-- Windows : la version graphique ne se compilait plus (l'OpenSSL récent de
-  MSYS2 demande la bibliothèque `bcrypt`). La 3.2.1 n'a donc pas été publiée ;
-  la 3.2.2 contient tous ses changements.
+### Fixed
+- Windows: the graphical version no longer built (MSYS2's recent OpenSSL
+  needs the `bcrypt` library). 3.2.1 was therefore not published; 3.2.2
+  contains all its changes.
 
-### Ajouté
-- Image de couverture des invitations Discord (`assets/invite-cover.png`).
+### Added
+- Discord invite cover image (`assets/invite-cover.png`).
 
-## [3.2.1] - 2026-11-22 (non publiée)
+## [3.2.1] - 2026-11-22 (not published)
 
-Première version reliée au serveur officiel, après les essais réels.
+First version connected to the official server, after real-world testing.
 
-### Modifié
-- Le jeu se connecte par défaut au serveur officiel
-  `https://splendor.epsilon-forge.fr` (Raspberry Pi derrière un tunnel
-  Cloudflare). `serveur.txt` ou `SPLENDOR_SERVER` visent un autre serveur.
-- Rich Presence : logo du jeu et textes plus clairs (pseudo et Elo).
-- Bot : un salon temporaire vide est supprimé après 30 secondes ; la liste
-  des salons est gardée dans un fichier, pour s'en souvenir après un
-  redémarrage.
-- Déploiement : port 8090 (8080 souvent déjà pris), identifiants publics et
-  adresse du projet préremplis.
+### Changed
+- The game connects to the official server by default (Raspberry Pi behind a
+  Cloudflare tunnel). `serveur.txt` or `SPLENDOR_SERVER` point to another
+  server.
+- Rich Presence: game logo and clearer texts (username and Elo).
+- Bot: an empty temporary channel is deleted after 30 seconds; the channel
+  list is kept in a file so it survives a restart.
+- Deployment: port 8090 (8080 is often taken), public IDs and project
+  address prefilled.
 
-### Corrigé
-- Le jeu plantait au démarrage quand Discord était ouvert (réponse
-  `"evt": null` de Discord).
-- « Valider » (pseudo), « Créer le salon », « Rejoindre » et « Lancer la
-  partie » restaient grisés une fois connecté (attentes longues comptées
-  comme des requêtes en cours).
-- Serveur : un échec du webhook Discord est écrit dans le journal.
-- `install.sh` attend que le serveur réponde avant de tester `/health`.
+### Fixed
+- The game crashed at startup when Discord was open (Discord's
+  `"evt": null` reply).
+- « Confirm » (username), « Create lobby », « Join » and « Start game »
+  stayed greyed out once signed in (long polls counted as pending requests).
+- Server: a failed Discord webhook is logged.
+- `install.sh` waits for the server to answer before checking `/health`.
 
 ## [3.2.0] - 2026-11-20
 
-### Ajouté
-- **Rich Presence Discord** : le profil affiche le menu, la partie (mode,
-  tour, points) ou le salon (places) ; « Rejoindre » depuis Discord ouvre le
-  salon dans le jeu. Passe par l'IPC local de Discord (Linux et Windows),
-  sans SDK.
-- **Invitations** : bouton « Copier une invitation » dans le salon.
-- **Bot Discord « Crée ta partie »** (Python, discord.py) : salon vocal
-  temporaire, proposition de partie dans le jeu si Splendor est ouvert,
-  salon limité au nombre de places, supprimé quand il est vide.
-- Serveur : présence des joueurs, notifications du jeu, `/config`, API du
-  bot protégée par clé, salons liés à un salon vocal, annonces des nouveaux
-  salons par webhook Discord.
-- **Déploiement** sur le Raspberry Pi : `deploy/install.sh`, services
-  systemd durcis, modèle de réglages.
-- Tests : faux Discord local (`make test-discord`), bot et intégration
-  avec le serveur (`make test-bot`).
+### Added
+- **Discord Rich Presence**: the profile shows the menu, the game (mode,
+  round, points) or the lobby (seats); « Join » from Discord opens the lobby
+  in the game. Uses Discord's local IPC (Linux and Windows), no SDK.
+- **Invites**: « Copy an invite » button in the lobby.
+- **« Create a game » Discord bot** (Python, discord.py): temporary voice
+  channel, game offer in the game if it is open, channel limited to the
+  number of seats, deleted when empty.
+- Server: player presence, game notifications, `/config`, bot API protected
+  by a key, lobbies linked to a voice channel, new lobbies announced through
+  a Discord webhook.
+- **Deployment** on the Raspberry Pi: `deploy/install.sh`, hardened systemd
+  services, settings template.
+- Tests: local fake Discord (`make test-discord`), bot and integration with
+  the server (`make test-bot`).
 
 ## [3.1.0] - 2026-11-20
 
-### Ajouté
-- **Jeu en ligne** : connexion avec Discord ou Google (sans mot de passe),
-  choix d'un pseudo unique, salons avec code, parties arbitrées par le
-  serveur, classement **Elo** et leaderboard.
-- `splendor-server` (C++ : cpp-httplib, SQLite, OpenSSL) qui réutilise la
-  logique du jeu ; chaque joueur ne reçoit que ce qu'il a le droit de voir
-  (pioches et réservées des autres cachées) ; jetons de session stockés en
-  empreinte SHA-256.
-- Écrans connexion, pseudo, menu en ligne, salon, classement ; résultats
-  avec variation d'Elo.
-- `make test-server` : deux joueurs jouent une partie complète en ligne
-  (coups invalides refusés, Elo, classement, informations cachées).
+### Added
+- **Online play**: sign in with Discord or Google (no password), unique
+  username, lobbies with a code, games refereed by the server, **Elo**
+  ranking and leaderboard.
+- `splendor-server` (C++: cpp-httplib, SQLite, OpenSSL) reusing the game
+  logic; each player only receives what they are allowed to see (decks and
+  other players' reserved cards hidden); session tokens stored as SHA-256
+  fingerprints.
+- Sign-in, username, online menu, lobby and leaderboard screens; results
+  with Elo change.
+- `make test-server`: two players play a full online game (invalid moves
+  refused, Elo, leaderboard, hidden information).
 
-### Modifié
-- Format de coup commun (`Move`) pour la fenêtre, l'IA et le serveur ;
-  l'IA choisit un coup (`ai_choose`) sans le jouer.
-- La version graphique Linux utilise l'OpenSSL du système (libssl3).
+### Changed
+- Common move format (`Move`) for the window, the AI and the server; the AI
+  picks a move (`ai_choose`) without playing it.
+- The Linux graphical version uses the system's OpenSSL (libssl3).
 
 ## [3.0.0] - 2026-11-20
 
-### Ajouté
-- Nouvelle interface graphique en **raylib**, livrée en exécutable unique
-  pour Windows (`splendor-windows.exe`) et Linux (`splendor-linux`), sans
-  rien à installer.
-- Écrans d'accueil et de nouvelle partie dessinés dans le jeu (nom, couleur
-  et type de chaque joueur).
-- Journal de la partie (`J`), infobulles « il manque ... » au survol des
-  cartes et des nobles, raccourcis clavier (1 à 5, Entrée, R, Échap,
-  Ctrl+S).
-- Écran de passage entre deux joueurs humains en partie classique.
-- Symbole propre à chaque gemme (daltonisme).
-- Animations : jetons qui glissent, cartes qui partent vers le joueur, carte
-  qui se retourne en arrivant sur le plateau.
-- Police DejaVu Sans intégrée (accents) ; bouton « Menu » qui sauvegarde la
-  partie en cours.
+### Added
+- New graphical interface with **raylib**, shipped as a single executable
+  for Windows and Linux, nothing to install.
+- Home and new game screens drawn in the game (name, colour and type of
+  each player).
+- Game log (`J`), « missing ... » tooltips over cards and nobles, keyboard
+  shortcuts (1 to 5, Enter, R, Escape, Ctrl+S).
+- Hand-over screen between two human players in classic games.
+- A symbol for each gem (colour blindness).
+- Animations: sliding tokens, cards flying to the player, card flipping when
+  it arrives on the board.
+- Embedded DejaVu Sans font (accents); « Menu » button that saves the
+  current game.
 
-### Modifié
-- `enum class Color` devient `enum class Gem` (raylib a déjà un type
-  `Color`).
-- Releases : `splendor-windows.exe` / `splendor-linux` sont maintenant les
-  versions graphiques ; les versions console s'appellent
-  `splendor-console-*`.
+### Changed
+- `enum class Color` becomes `enum class Gem` (raylib already has a `Color`
+  type).
+- Releases: the graphical versions are now the main executables; the console
+  versions are called `*-console-*`.
 
-### Supprimé
-- Interface GTK 3 (remplacée par raylib) et dépendance à GTK.
+### Removed
+- GTK 3 interface (replaced by raylib) and the GTK dependency.
 
 ## [2.4.0] - 2026-11-20
 
-### Ajouté
-- Sauvegarde et reprise d'une partie (fichiers texte `.splendor`) : commande
-  `s` et option `--charger` dans la console, boutons « Sauvegarder » /
-  « Ouvrir… » (Ctrl+S / Ctrl+O) dans la fenêtre.
-- Tests : une partie rechargée se termine exactement comme l'originale ;
-  les fichiers invalides sont refusés proprement.
+### Added
+- Save and resume a game (`.splendor` text files): `s` command and
+  `--charger` option in the console, « Save » / « Open… » buttons
+  (Ctrl+S / Ctrl+O) in the window.
+- Tests: a reloaded game ends exactly like the original; invalid files are
+  refused cleanly.
 
 ## [2.3.0] - 2026-11-20
 
-### Ajouté
-- Adversaires ordinateur « facile » et « moyen », dans la console et dans la
-  fenêtre (colonne « Joué par » ; l'ordinateur joue avec une courte pause).
-- Tournoi de 1 000 parties entre ordinateurs dans les tests : aucune partie
-  ne plante ni ne perd de jeton, et l'IA moyenne bat l'IA facile.
+### Added
+- « Easy » and « medium » computer opponents, in the console and in the
+  window (« Played by » column; the computer plays after a short pause).
+- 1,000-game tournament between computers in the tests: no game crashes or
+  loses a token, and the medium AI beats the easy one.
 
 ## [2.2.0] - 2026-11-20
 
-### Ajouté
-- CI : compilation et tests à chaque push et pull request, sous Linux et
-  Windows.
-- Historique des actions : chaque action (prise de jetons, achat,
-  réservation, défausse, visite de noble, passe) est décrite dans la console
-  et dans la ligne d'état de la fenêtre.
-- Console : chaque joueur a sa couleur (nom, tableau des joueurs, résultats).
-- Tests du déroulement du tour (défausse avec or, choix entre deux nobles,
-  dernier tour, passes en chaîne, partie bloquée) et 300 parties complètes
-  simulées.
+### Added
+- CI: build and tests on every push and pull request, on Linux and Windows.
+- Action history: every action (taking tokens, buying, reserving,
+  discarding, noble visit, passing) is described in the console and in the
+  window's status line.
+- Console: each player has a colour (name, player table, results).
+- Turn flow tests (discard with gold, choice between two nobles, last round,
+  chained passes, blocked game) and 300 simulated full games.
 
-### Modifié
-- Le déroulement d'un tour (défausse, nobles, joueur suivant, passes) est
-  géré par `Game` lui-même ; la console et la fenêtre partagent ce code.
-- Actions GitHub mises à jour (plus d'avertissement Node.js 20).
+### Changed
+- The turn flow (discard, nobles, next player, passes) is handled by `Game`
+  itself; the console and the window share this code.
+- Updated GitHub Actions (no more Node.js 20 warning).
 
 ## [2.1.0] - 2026-11-20
 
-### Modifié
-- La 5e couleur de ressource s'appelle maintenant Noir (au lieu de Marron),
-  dans la console comme dans l'interface graphique.
-- Interface graphique : cartes achetables entourées en doré, sélection en
-  blanc.
+### Changed
+- The 5th resource colour is now called Black (instead of Maroon), in the
+  console and in the graphical interface.
+- Graphical interface: affordable cards outlined in gold, selection in
+  white.
 
-### Ajouté
-- Interface graphique : chaque joueur choisit sa couleur à la création de la
-  partie ; son panneau en est entouré pendant son tour et ses cartes
-  réservées en prennent le bord.
-- Workflow de release : lancement manuel possible pour publier un tag déjà
-  existant (onglet Actions ou `gh workflow run release.yml -f tag=vX.Y.Z`).
+### Added
+- Graphical interface: each player picks a colour when creating the game;
+  their panel is outlined with it during their turn and their reserved cards
+  use it as border.
+- Release workflow: can be started manually to publish an existing tag
+  (Actions tab or `gh workflow run release.yml -f tag=vX.Y.Z`).
 
 ## [2.0.0] - 2026-11-20
 
-### Ajouté
-- Interface graphique `splendor-gui` (GTK 3 + Cairo) : plateau dessiné
-  façon vraie table, jeu entièrement à la souris, dialogue de nouvelle
-  partie, écran de fin avec « Rejouer ».
-- Workflow GitHub Actions : à chaque version majeure (tag `vX.0.0`), les
-  exécutables Windows (.exe) et Linux sont attachés à la release.
-- Version console : couleurs et accents sous Windows, attente d'Entrée en fin
-  de partie pour ne pas fermer la fenêtre.
+### Added
+- `splendor-gui` graphical interface (GTK 3 + Cairo): board drawn like a real
+  table, played entirely with the mouse, new game dialog, end screen with
+  « Play again ».
+- GitHub Actions workflow: for every major version (`vX.0.0` tag), the
+  Windows (.exe) and Linux executables are attached to the release.
+- Console version: colours and accents on Windows, waits for Enter at the
+  end of the game so the window does not close.
 
 ## [1.0.0] - 2026-11-20
 
-### Ajouté
-- Jeu Splendor complet en C++17, dans le terminal.
-- Deux modes : partie rapide (sans or ni réservation) et partie classique
-  (jetons or, réservation de 3 cartes au maximum).
-- Plateau dessiné comme la vraie table : tuiles des nobles, rangées de cartes
-  avec leur pioche, réserve de jetons sur le côté, tableau des joueurs.
-- Options `--rapide`, `--classique`, `--version` et graine de partie.
-- Tests de la logique (`make test`).
-- Arrêt de la partie si plus aucun joueur ne peut jouer.
+### Added
+- Complete game in C++17, in the terminal.
+- Two modes: quick game (no gold, no reservations) and classic game (gold
+  tokens, up to 3 reserved cards).
+- Board drawn like a real table: noble tiles, card rows with their deck,
+  token bank on the side, player table.
+- `--rapide`, `--classique`, `--version` options and game seed.
+- Logic tests (`make test`).
+- The game stops if no player can play anymore.
 
-### Supprimé
-- Ancienne base C99 + ncurses (wrapper ncurses, exemples, splendor.h).
+### Removed
+- Old C99 + ncurses base (ncurses wrapper, examples, splendor.h).

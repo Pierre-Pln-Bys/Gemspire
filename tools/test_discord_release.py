@@ -15,11 +15,11 @@ CHANGELOG = """# Changelog
 
 ## [2.0.0] - 2026-11-22
 
-### Ajouté
+### Added
 - **Grande** nouveauté, décrite sur
   deux lignes.
 
-### Corrigé
+### Fixed
 - Un bug.
 - Bot :
   - une sous-puce
@@ -41,15 +41,15 @@ class ReleaseTests(unittest.TestCase):
 
     def test_discord_format(self):
         text = to_discord(changelog_section(CHANGELOG, "2.0.0"))
-        self.assertIn("**Ajouté**", text)
+        self.assertIn("**Added**", text)
         self.assertIn("- **Grande** nouveauté, décrite sur deux lignes.", text)  # lignes recollées
-        self.assertIn("**Corrigé**\n- Un bug.", text)
+        self.assertIn("**Fixed**\n- Un bug.", text)
         self.assertIn("- Bot :\n  - une sous-puce sur deux lignes ;", text)
 
     def test_message(self):
         message = release_message("2.0.0", "- " + "x" * 5000)
         embed = message["embeds"][0]
-        self.assertEqual(embed["title"], "Gemspire v2.0.0 est disponible")
+        self.assertEqual(embed["title"], "Gemspire v2.0.0 is out")
         self.assertTrue(embed["url"].endswith("/releases/tag/v2.0.0"))
         self.assertLessEqual(len(embed["description"]), 4096)
         self.assertEqual(message["allowed_mentions"], {"parse": []})  # jamais de @everyone

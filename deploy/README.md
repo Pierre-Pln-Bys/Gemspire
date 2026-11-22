@@ -121,6 +121,8 @@ gh secret set DISCORD_RELEASE_WEBHOOK
 
 (la commande demande l'adresse, qui n'apparaît ni dans le dépôt ni dans
 l'historique). Aperçu sans envoyer : `python3 tools/discord_release.py vX.Y.Z --dry-run`.
+Republier une annonce : `gh workflow run announce.yml -f tag=vX.Y.Z`.
+Le CHANGELOG est écrit en anglais, puisqu'il est publié tel quel.
 
 ## 5. Indiquer le serveur au jeu
 

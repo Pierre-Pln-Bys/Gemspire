@@ -64,14 +64,14 @@ def release_message(version, section):
         "username": "Gemspire",
         "allowed_mentions": {"parse": []},
         "embeds": [{
-            "title": "Gemspire {} est disponible".format(tag),
+            "title": "Gemspire {} is out".format(tag),
             "url": release_url,
             "color": GOLD,
             "description": description,
             "fields": [
-                {"name": "Jouer", "value": "[Dans le navigateur]({}/play/)".format(SITE), "inline": True},
-                {"name": "Télécharger", "value": "[Windows]({}) · [Linux]({})".format(downloads, linux), "inline": True},
-                {"name": "Détails", "value": "[Notes de version]({})".format(release_url), "inline": True},
+                {"name": "Play", "value": "[In your browser]({}/play/)".format(SITE), "inline": True},
+                {"name": "Download", "value": "[Windows]({}) · [Linux]({})".format(downloads, linux), "inline": True},
+                {"name": "Details", "value": "[Release notes]({})".format(release_url), "inline": True},
             ],
         }],
     }
