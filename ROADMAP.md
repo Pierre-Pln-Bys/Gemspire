@@ -8,7 +8,8 @@ Raspberry Pi, `https://gemspire.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
 v3.5 (jeu dans le navigateur, site et bot bilingues).
-**Prochaine étape** : la **v4 : publication et test d'intrusion**. La communauté passe en v5.
+**Prochaines étapes** : v3.6 (Gemspire), v3.7 (Activité Discord), puis la
+**v4 : publication et test d'intrusion**. La communauté passe en v5.
 
 Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -143,7 +144,23 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
   C++ compilé en WebAssembly (raylib + Emscripten), commandes tactiles,
   connexion Discord / Google et parties en ligne.
 - [x] Site en anglais et en français ; bot en anglais traduit en français.
-- [ ] Interface du jeu en anglais (choix de la langue).
+
+## v3.6 — Gemspire
+
+- [x] Nouveau nom **Gemspire** (jeu, site, bot, dépôt GitHub), licence GPL-3.0.
+- [x] Changelog publié sur Discord à chaque release ; bot réglable par
+  identifiants de salons et de rôles.
+- [ ] Adresse `gemspire.epsilon-forge.fr` (tunnel, Discord, Google, Pi), puis
+  release v3.6.0 avec les exécutables `gemspire-*`.
+- [ ] Interface du jeu en anglais, avec choix de la langue (anglais par
+  défaut, français).
+
+## v3.7 — Activité Discord
+
+- [ ] Gemspire comme **Activité Discord** : on lance une partie directement
+  dans un salon vocal, sans rien installer (la version navigateur intégrée à
+  Discord avec l'Embedded App SDK : connexion par Discord, réseau par le
+  proxy de Discord, partie liée au salon vocal).
 
 ## v4 — Publication et sécurité (version majeure)
 
@@ -171,6 +188,9 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 
 ## Plus tard
 
+- **Revendiquer le jeu sur Discord** (*Claim Your Game*) : possible seulement
+  quand Discord détecte Gemspire comme jeu publié (assez de joueurs, ou
+  sortie sur une boutique comme itch.io / Steam).
 - Version macOS.
 - Variantes de règles (score de victoire réglable).
 - Statistiques de fin de partie et historique des parties en ligne.
