@@ -53,5 +53,10 @@ fi
 
 echo "== État"
 systemctl --no-pager --lines=3 status splendor-server.service || true
-curl -fsS "http://127.0.0.1:$(grep '^SPLENDOR_PORT=' /etc/splendor/splendor.env | cut -d= -f2)/health" && echo
+# Le serveur met un instant à ouvrir son port : quelques essais
+port=$(grep '^SPLENDOR_PORT=' /etc/splendor/splendor.env | cut -d= -f2)
+for _ in 1 2 3 4 5; do
+    curl -fsS "http://127.0.0.1:$port/health" && echo && break
+    sleep 1
+done
 echo "Fini. Réglages : sudo nano /etc/splendor/splendor.env  (puis sudo systemctl restart splendor-server splendor-bot)"
