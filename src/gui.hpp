@@ -94,6 +94,16 @@ struct Flip {
     int index;
 };
 
+// Annonce affichée quelques secondes au milieu du plateau (visite d'un noble,
+// dernier tour). Les annonces passent l'une après l'autre.
+struct Banner {
+    std::string title;
+    std::string text;
+    int player;          // joueur concerné (couleur du cadre), -1 : aucun
+    double start = -1;   // heure d'affichage (-1 : pas encore affichée)
+};
+const double BANNER_SECONDS = 3.0;
+
 // Tout ce qui concerne le jeu en ligne
 struct OnlineState {
     bool in_game = false;            // le plateau affiche une partie en ligne
@@ -158,6 +168,7 @@ struct App {
     double ai_next_time = 0;                // heure du prochain coup de l'ordinateur
     std::vector<Animation> animations;
     std::vector<Flip> flips;
+    std::vector<Banner> banners;            // annonces en attente (la première est affichée)
     bool quit = false;
     NetClient net;
     OnlineState online;

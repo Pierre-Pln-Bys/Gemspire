@@ -938,6 +938,31 @@ static void draw_journal(const App& app)
     }
 }
 
+// Annonce au milieu du plateau (noble, dernier tour), qui apparaît puis s'efface
+static void draw_banner(const App& app)
+{
+    if (app.banners.empty() || app.banners.front().start < 0) {
+        return;
+    }
+    const Banner& banner = app.banners.front();
+    float t = static_cast<float>(GetTime() - banner.start);
+    float a = std::min({1.0f, t / 0.25f, static_cast<float>(BANNER_SECONDS - t) / 0.4f});
+    if (a <= 0) {
+        return;
+    }
+    Color frame = banner.player >= 0 ? player_color(app, banner.player) : GOLD_UI;
+    Rectangle r = {300, 300, 680, 150};
+    rounded({r.x + 4, r.y + 6, r.width, r.height}, 18, alpha({0, 0, 0, 140}, a));
+    rounded(r, 18, alpha({18, 52, 36, 245}, a));
+    outline(r, 18, 4, alpha(frame, a), 0);
+    float size = 32;
+    std::string title = fit(app, banner.title, r.width - 60, size, 20);
+    text_centered(app, title, 640, 350, size, true, alpha(GOLD_UI, a));
+    float small = 20;
+    std::string line = fit(app, banner.text, r.width - 60, small, 14);
+    text_centered(app, line, 640, 405, small, false, alpha(WHITE_TEXT, a));
+}
+
 // Écran de passage : cache les cartes réservées entre deux joueurs humains
 static void draw_curtain(const App& app)
 {
@@ -1000,6 +1025,9 @@ static void draw_board(const App& app, Vector2 mouse)
         draw_button(app, button, mouse);
     }
     draw_animations(app);
+    if (!app.curtain && !app.journal_open) {
+        draw_banner(app);
+    }
     if (app.journal_open) {
         draw_journal(app);
     } else if (app.curtain) {

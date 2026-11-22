@@ -72,6 +72,7 @@ static void start_board(App& app)
     app.last_player = app.game->current_index();
     app.animations.clear();
     app.flips.clear();
+    app.banners.clear();
     app.ai_next_time = GetTime() + 0.8;
     set_message(app, "À " + app.game->current_player().name + " de jouer.", false);
 }
@@ -92,6 +93,48 @@ static Snapshot take_snapshot(const Game& game)
     }
     snapshot.reserved = game.current_player().reserved;
     return snapshot;
+}
+
+// Ce qu'il faut comparer avant et après un coup pour faire les annonces
+struct Highlights {
+    std::vector<int> nobles;   // nombre de nobles de chaque joueur
+    bool last_round = false;
+};
+
+static Highlights take_highlights(const Game& game)
+{
+    Highlights h;
+    for (const Player& player : game.players()) {
+        h.nobles.push_back(static_cast<int>(player.nobles.size()));
+    }
+    h.last_round = game.is_last_round();
+    return h;
+}
+
+// Annonces : un noble rend visite à un joueur, quelqu'un atteint 15 points.
+// Fonctionne aussi en ligne (état rechargé depuis le serveur, sans événements).
+static void announce_changes(App& app, const Highlights& before)
+{
+    const Game& game = *app.game;
+    const std::vector<Player>& players = game.players();
+    for (int p = 0; p < static_cast<int>(players.size()) && p < static_cast<int>(before.nobles.size()); p++) {
+        for (int n = before.nobles[p]; n < static_cast<int>(players[p].nobles.size()); n++) {
+            const Noble& noble = players[p].nobles[n];
+            app.banners.push_back({noble.name + " rend visite à " + players[p].name,
+                                   "+" + std::to_string(noble.points) + " points de prestige", p});
+        }
+    }
+    if (game.is_last_round() && !before.last_round && !game.is_over()) {
+        int leader = 0;
+        for (int p = 0; p < static_cast<int>(players.size()); p++) {
+            if (players[p].score() > players[leader].score()) {
+                leader = p;
+            }
+        }
+        app.banners.push_back({"Dernier tour !", players[leader].name + " a atteint " + std::to_string(WINNING_SCORE)
+                                                     + " points : on termine le tour de table.",
+                               leader});
+    }
 }
 
 // Lance les animations correspondant aux nouveaux événements
@@ -165,6 +208,7 @@ static void show_new_events(App& app)
 static void play_move(App& app, const std::function<std::string()>& move)
 {
     Snapshot before = take_snapshot(*app.game);
+    Highlights highlights = take_highlights(*app.game);
     std::string error = move();
     if (!error.empty()) {
         set_message(app, error, true);
@@ -173,6 +217,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
     clear_selection(app);
     animate_events(app, before);
     show_new_events(app);
+    announce_changes(app, highlights);
     Game& game = *app.game;
     // Changement de joueur : écran de passage si plusieurs humains en partie classique
     if (game.current_index() != app.last_player) {
@@ -464,7 +509,9 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     }
     bool first = !app.game;
     int previous_player = app.game ? app.game->current_index() : -1;
+    Highlights highlights = app.game ? take_highlights(*app.game) : take_highlights(*loaded);
     app.game = std::move(loaded);
+    announce_changes(app, highlights);
     online.game_version = version;
     online.my_seat = body.value("your_seat", -1);
     online.game_over = body.value("over", false);
@@ -896,7 +943,9 @@ static void press_board_button(App& app, ButtonId id)
     }
 }
 
-// Clic sur un jeton de la réserve : 0 -> 1 -> 2 -> 0 jeton de cette couleur
+// Clic sur un jeton de la réserve : 0 -> 1 -> 2 -> 0 jeton de cette couleur, en
+// sautant les choix impossibles (2 identiques si la pile a moins de 4 jetons ou
+// si d'autres couleurs sont choisies, plus de 3 couleurs)
 static void toggle_token(App& app, int gem)
 {
     const Game& game = *app.game;
@@ -909,8 +958,30 @@ static void toggle_token(App& app, int gem)
         return;
     }
     app.target = Target::None;
-    app.selection[gem] = (app.selection[gem] + 1) % 3;
     app.message.clear();
+    Resources& selection = app.selection;
+    int other_colors = 0;    // autres couleurs déjà choisies
+    bool other_double = false;
+    for (int c = 0; c < COLOR_COUNT; c++) {
+        if (c != gem && selection[c] > 0) {
+            other_colors++;
+            other_double = other_double || selection[c] == 2;
+        }
+    }
+    if (selection[gem] == 0) {
+        // Nouvelle couleur : jamais avec 2 jetons identiques, et 3 couleurs au plus
+        if (other_double) {
+            clear_selection(app);
+        } else if (other_colors >= 3) {
+            set_message(app, "3 jetons de couleurs différentes au maximum.", true);
+            return;
+        }
+        selection[gem] = 1;
+    } else if (selection[gem] == 1 && other_colors == 0 && game.bank()[gem] >= MIN_STACK_FOR_DOUBLE) {
+        selection[gem] = 2;  // 2 jetons identiques : seule couleur choisie, pile d'au moins 4
+    } else {
+        selection[gem] = 0;
+    }
 }
 
 static void click_action_step(App& app, Vector2 mouse)
@@ -1136,6 +1207,18 @@ static void update(App& app, Vector2 mouse)
         app.screen_start = static_cast<long long>(std::time(nullptr));
     }
     update_presence(app);
+    // Annonces : la première s'affiche BANNER_SECONDS, puis la suivante
+    if (!app.banners.empty()) {
+        if (app.screen != Screen::Board) {
+            app.banners.clear();  // plus de plateau : annonces sans objet
+        } else if (app.banners.front().start < 0) {
+            if (!app.curtain && !app.journal_open) {  // attend que le plateau soit visible
+                app.banners.front().start = GetTime();
+            }
+        } else if (GetTime() - app.banners.front().start > BANNER_SECONDS) {
+            app.banners.erase(app.banners.begin());
+        }
+    }
     // « Rejoindre » cliqué dans Discord : le secret est le code du salon
     std::string join_code;
     if (app.discord.take_join(join_code) && join_code.size() == 5) {
