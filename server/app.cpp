@@ -847,8 +847,27 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, body);
     });
 
-    // --- Classement
-    server.Get("/leaderboard", [this](const httplib::Request&, httplib::Response& response) {
+    // --- Site web, en anglais et en français (?lang=, sinon langue du navigateur).
+    //     Les adresses françaises d'origine restent valables.
+    SiteInfo site = {config_.contact_email, config_.discord_invite, false};
+    auto lang_of = [](const httplib::Request& request, Lang fallback) {
+        return page_lang(request.get_param_value("lang"), request.get_header_value("Accept-Language"), fallback);
+    };
+    server.Get("/", [site, lang_of](const httplib::Request& request, httplib::Response& response) {
+        reply_site(response, page_home(site, lang_of(request, Lang::English)));
+    });
+    auto leaderboard_page = [this, site, lang_of](Lang fallback) {
+        return [this, site, lang_of, fallback](const httplib::Request& request, httplib::Response& response) {
+            reply_site(response, page_leaderboard(site, lang_of(request, fallback), store_.leaderboard(100)));
+        };
+    };
+    // /leaderboard : page pour un navigateur (il demande du HTML), JSON pour le
+    // jeu et le bot (50 meilleurs)
+    server.Get("/leaderboard", [this, leaderboard_page](const httplib::Request& request, httplib::Response& response) {
+        if (request.get_header_value("Accept").find("text/html") != std::string::npos) {
+            leaderboard_page(Lang::English)(request, response);
+            return;
+        }
         json list = json::array();
         for (const Account& account : store_.leaderboard(50)) {
             list.push_back({{"pseudo", account.pseudo}, {"elo", account.elo}, {"games", account.games},
@@ -856,21 +875,21 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         reply(response, 200, {{"players", list}});
     });
-
-    // --- Site web (accueil, classement, conditions, confidentialité)
-    SiteInfo site = {config_.contact_email, config_.discord_invite};
-    server.Get("/", [site](const httplib::Request&, httplib::Response& response) {
-        reply_site(response, page_home(site));
-    });
-    server.Get("/classement", [this, site](const httplib::Request&, httplib::Response& response) {
-        reply_site(response, page_leaderboard(site, store_.leaderboard(100)));
-    });
-    server.Get("/conditions", [site](const httplib::Request&, httplib::Response& response) {
-        reply_site(response, page_terms(site));
-    });
-    server.Get("/confidentialite", [site](const httplib::Request&, httplib::Response& response) {
-        reply_site(response, page_privacy(site));
-    });
+    server.Get("/classement", leaderboard_page(Lang::French));
+    auto terms_page = [site, lang_of](Lang fallback) {
+        return [site, lang_of, fallback](const httplib::Request& request, httplib::Response& response) {
+            reply_site(response, page_terms(site, lang_of(request, fallback)));
+        };
+    };
+    server.Get("/terms", terms_page(Lang::English));
+    server.Get("/conditions", terms_page(Lang::French));
+    auto privacy_page = [site, lang_of](Lang fallback) {
+        return [site, lang_of, fallback](const httplib::Request& request, httplib::Response& response) {
+            reply_site(response, page_privacy(site, lang_of(request, fallback)));
+        };
+    };
+    server.Get("/privacy", privacy_page(Lang::English));
+    server.Get("/confidentialite", privacy_page(Lang::French));
     server.Get("/robots.txt", [](const httplib::Request&, httplib::Response& response) {
         response.set_content("User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\n",
                              "text/plain");

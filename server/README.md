@@ -116,12 +116,15 @@ faire » (la partie n'est donc pas déclarée bloquée).
 
 ## Site web
 
+En anglais et en français : `?lang=en` / `?lang=fr`, sinon la langue du
+navigateur (`Accept-Language`). Lien « Français / English » sur chaque page.
+
 | Chemin | Page |
 |---|---|
 | `/` | accueil, téléchargements |
-| `/classement` | classement Elo (100 premiers) |
-| `/conditions` | conditions d'utilisation |
-| `/confidentialite` | politique de confidentialité |
+| `/leaderboard` (`/classement`) | classement Elo (100 premiers) ; JSON si le client ne demande pas de HTML |
+| `/terms` (`/conditions`) | conditions d'utilisation |
+| `/privacy` (`/confidentialite`) | politique de confidentialité |
 
 Pages en HTML et CSS (`server/pages.cpp`), sans JavaScript, avec une
 politique de sécurité du contenu stricte.
