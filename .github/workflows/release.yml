@@ -136,11 +136,17 @@ jobs:
       - name: Rendre les binaires Linux exécutables
         run: chmod +x gemspire-linux gemspire-console-linux
 
+      # Notes de version : la section du CHANGELOG (en anglais)
+      - name: Notes de version
+        run: |
+          python3 -c "import sys; sys.path.insert(0, 'tools'); from discord_release import changelog_section; print(changelog_section(open('CHANGELOG.md').read(), sys.argv[1].lstrip('v')) or '')" "${{ inputs.tag || github.ref_name }}" > release_notes.md
+          printf '\n**Play in your browser:** https://gemspire.epsilon-forge.fr/play/\n' >> release_notes.md
+
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: Gemspire ${{ inputs.tag || github.ref_name }}
-          generate_release_notes: true
+          body_path: release_notes.md
           files: |
             gemspire-windows.exe
             gemspire-linux
