@@ -38,3 +38,19 @@ jobs:
         run: make
       - name: Tests
         run: make test
+
+  web:
+    # Jeu dans le navigateur (WebAssembly, Emscripten)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          ./emsdk/emsdk install 4.0.10
+          ./emsdk/emsdk activate 4.0.10
+      - name: Compilation
+        run: |
+          source ./emsdk/emsdk_env.sh
+          make web
+          ls -l build/web

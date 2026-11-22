@@ -36,6 +36,7 @@ ServerConfig config_from_environment()
     config.bot_key = env("SPLENDOR_BOT_KEY");
     config.dev_login = env("SPLENDOR_DEV_LOGIN") == "1";
     config.min_version = env("SPLENDOR_MIN_VERSION", SPLENDOR_VERSION);
+    config.web_dir = env("SPLENDOR_WEB_DIR", config.web_dir);
     config.contact_email = env("SPLENDOR_CONTACT_EMAIL");
     config.discord_invite = env("SPLENDOR_DISCORD_INVITE");
     config.turn_seconds = std::atoi(env("SPLENDOR_TURN_SECONDS", "120").c_str());
@@ -413,6 +414,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             PendingLogin& pending = logins_[login];
             pending.provider = provider;
             pending.created = now;
+            pending.back_to_play = request.get_param_value("from") == "play";
         }
         response.set_redirect(authorize_url(config_, provider, login));
     });
@@ -428,11 +430,21 @@ void ServerApp::setup_routes(httplib::Server& server)
                 return;
             }
         }
+        bool back_to_play = false;
+        {
+            std::lock_guard<std::mutex> lock(logins_mutex_);
+            back_to_play = logins_[login].back_to_play;
+        }
         std::string user_id;
         std::string error = request.has_param("code")
                                 ? oauth_identity(config_, provider, request.get_param_value("code"), user_id)
                                 : "Connexion annulée.";
         finish_login(login, provider, user_id, error);
+        // Jeu dans le navigateur : retour au jeu, qui termine la connexion (/auth/poll)
+        if (back_to_play) {
+            response.set_redirect("/play/?login=" + login);
+            return;
+        }
         if (error.empty()) {
             reply_page(response, "Connexion réussie", "Vous pouvez fermer cette page et revenir dans Splendor.");
         } else {
@@ -850,6 +862,13 @@ void ServerApp::setup_routes(httplib::Server& server)
     // --- Site web, en anglais et en français (?lang=, sinon langue du navigateur).
     //     Les adresses françaises d'origine restent valables.
     SiteInfo site = {config_.contact_email, config_.discord_invite, false};
+    // Jeu dans le navigateur : fichiers de `make web` (index.html, .js, .wasm)
+    if (server.set_mount_point("/play/", config_.web_dir)) {
+        site.web_game = true;
+        server.Get("/play", [](const httplib::Request&, httplib::Response& response) {
+            response.set_redirect("/play/");
+        });
+    }
     auto lang_of = [](const httplib::Request& request, Lang fallback) {
         return page_lang(request.get_param_value("lang"), request.get_header_value("Accept-Language"), fallback);
     };

@@ -4,6 +4,26 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.5.0] - 2026-11-22
+
+### Ajouté
+- **Jouer dans le navigateur**, sur ordinateur et téléphone :
+  https://splendor.epsilon-forge.fr/play/. Même code C++ compilé en
+  WebAssembly (Emscripten, `make web`) : réseau par `fetch`, saisie par la
+  boîte du navigateur (clavier du téléphone), session et sauvegarde gardées
+  dans le navigateur, connexion Discord / Google dans le même onglet (retour
+  automatique au jeu). Bouton « Jouer dans le navigateur » sur le site.
+- **Site en anglais et en français** (langue du navigateur ou `?lang=`),
+  adresses `/leaderboard`, `/terms`, `/privacy` (les françaises restent).
+- **Bot en anglais**, traduit en français pour les membres dont Discord est
+  en français : `/leaderboard`, `/profile`, `/link`, `/play`, `/rules`,
+  `/report`, `/mod ban|unban|history|cancel-game|delete-account`.
+- Release : archive `splendor-web.tar.gz`, installée par `deploy/install.sh`.
+  CI : compilation web.
+
+### Corrigé
+- Le temps restant du tour était caché sous les tuiles des nobles.
+
 ## [3.4.1] - 2026-11-22
 
 ### Ajouté

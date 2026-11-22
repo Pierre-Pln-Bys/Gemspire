@@ -31,6 +31,7 @@ cpp-httplib, nlohmann/json et SQLite sont inclus dans `third_party/`.
 | `SPLENDOR_DEV_LOGIN` | `1` : connexion de test sans OAuth (**jamais en production**) | désactivé |
 | `SPLENDOR_TURN_SECONDS` | temps pour jouer un tour en ligne | `120` |
 | `SPLENDOR_MIN_VERSION` | version minimale du jeu acceptée | version du serveur |
+| `SPLENDOR_WEB_DIR` | jeu dans le navigateur (`make web`), servi sur `/play/` | `/opt/splendor/web` |
 | `SPLENDOR_CONTACT_EMAIL` | adresse de contact affichée sur le site | vide |
 | `SPLENDOR_DISCORD_INVITE` | lien d'invitation du serveur Discord (site) | vide |
 
@@ -125,6 +126,11 @@ navigateur (`Accept-Language`). Lien « Français / English » sur chaque page.
 | `/leaderboard` (`/classement`) | classement Elo (100 premiers) ; JSON si le client ne demande pas de HTML |
 | `/terms` (`/conditions`) | conditions d'utilisation |
 | `/privacy` (`/confidentialite`) | politique de confidentialité |
+| `/play/` | le jeu dans le navigateur (si `SPLENDOR_WEB_DIR` existe) |
+
+Connexion depuis le jeu dans le navigateur : `/auth/<fournisseur>/start?login=ID&from=play`
+fait revenir sur `/play/?login=ID` après Discord ou Google (même onglet, pas de
+fenêtre surgissante), et le jeu termine la connexion avec `/auth/poll`.
 
 Pages en HTML et CSS (`server/pages.cpp`), sans JavaScript, avec une
 politique de sécurité du contenu stricte.

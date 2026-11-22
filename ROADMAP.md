@@ -7,8 +7,8 @@ v3.2 (Discord : présence, invitations, bot vocal ; serveur en ligne sur le
 Raspberry Pi, `https://splendor.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
-**Prochaine étape** : v3.5 (jeu sur mobile), puis la **v4 : publication et
-test d'intrusion**. La communauté passe en v5.
+v3.5 (jeu dans le navigateur, site et bot bilingues).
+**Prochaine étape** : la **v4 : publication et test d'intrusion**. La communauté passe en v5.
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -139,9 +139,11 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 ## v3.5 — Jouer sur mobile
 
-- [ ] Version navigateur (`/jouer`) utilisable sur téléphone : le même code
+- [x] Version navigateur (`/play/`) utilisable sur téléphone : le même code
   C++ compilé en WebAssembly (raylib + Emscripten), commandes tactiles,
   connexion Discord / Google et parties en ligne.
+- [x] Site en anglais et en français ; bot en anglais traduit en français.
+- [ ] Interface du jeu en anglais (choix de la langue).
 
 ## v4 — Publication et sécurité (version majeure)
 

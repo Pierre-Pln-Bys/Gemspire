@@ -98,6 +98,34 @@ test-discord: tests/test_discord
 test-bot: $(SERVER_TARGET)
 	python3 -m unittest bot/test_bot.py bot/test_integration.py
 
+# --- Version navigateur (WebAssembly) : `make web` (Emscripten : emcc dans le PATH)
+# Même code que la version graphique ; réseau par fetch() du navigateur
+# (net_web.cpp), pas de Rich Presence (discord_rpc_web.cpp). Résultat dans
+# build/web (index.html, index.js, index.wasm), servi par le serveur sur /play.
+WEB_DIR = build/web
+WEB_RAYLIB = build/raylib-web/libraylib.a
+WEB_SOURCES = src/gui_main.cpp src/gui_draw.cpp src/net_web.cpp src/discord_rpc_web.cpp src/platform_web.cpp \
+              src/move_json.cpp src/display.cpp src/data.cpp src/rules.cpp src/game.cpp src/move.cpp src/ai.cpp \
+              src/save.cpp src/elo.cpp
+WEB_FLAGS = -std=c++17 -O2 -Wall -Wextra -Werror -fexceptions -isystem $(RAYLIB_DIR) -isystem third_party/json
+WEB_LINK = -sUSE_GLFW=3 -sFETCH -sALLOW_MEMORY_GROWTH -sFORCE_FILESYSTEM -lidbfs.js -fexceptions \
+           --shell-file web/shell.html
+
+web: $(WEB_DIR)/index.html
+
+# raylib pour le web, compilée dans une copie (les objets de bureau restent à part)
+$(WEB_RAYLIB):
+	rm -rf build/raylib-web-src
+	mkdir -p build/raylib-web
+	cp -r $(RAYLIB_DIR) build/raylib-web-src
+	rm -f build/raylib-web-src/*.o
+	$(MAKE) -C build/raylib-web-src PLATFORM=PLATFORM_WEB RAYLIB_RELEASE_PATH=$(CURDIR)/build/raylib-web
+
+$(WEB_DIR)/index.html: $(WEB_SOURCES) src/gui_font.c src/platform_web.hpp web/shell.html $(WEB_RAYLIB)
+	mkdir -p $(WEB_DIR)
+	emcc -std=c99 -O2 -isystem $(RAYLIB_DIR) -c src/gui_font.c -o build/gui_font_web.o
+	em++ $(WEB_FLAGS) $(WEB_SOURCES) build/gui_font_web.o $(WEB_RAYLIB) -o $@ $(WEB_LINK)
+
 clean:
 	$(RM) $(TARGET) $(GUI_TARGET) $(SERVER_TARGET) $(TARGET).exe $(GUI_TARGET).exe tests/test_rules tests/test_server tests/test_discord \
 	      src/*.o tests/*.o server/*.o
@@ -111,4 +139,4 @@ clean-all: clean-deps
 # Injecte les dépendances si présentes
 -include src/*.d tests/*.d server/*.d
 
-.PHONY: all clean clean-deps clean-all test test-server test-discord test-bot font
+.PHONY: all clean clean-deps clean-all test test-server test-discord test-bot font web

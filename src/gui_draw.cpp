@@ -72,7 +72,9 @@ static std::vector<Button> home_buttons()
     add(buttons, ButtonId::NewGame, "Nouvelle partie", {490, 390, 300, 54});
     add(buttons, ButtonId::PlayOnline, "Jouer en ligne", {490, 456, 300, 54});
     add(buttons, ButtonId::Resume, "Reprendre la sauvegarde", {490, 522, 300, 54}, 0, FileExists(SAVE_FILE));
-    add(buttons, ButtonId::Quit, "Quitter", {490, 588, 300, 54});
+#ifndef __EMSCRIPTEN__
+    add(buttons, ButtonId::Quit, "Quitter", {490, 588, 300, 54});  // dans le navigateur : on ferme l'onglet
+#endif
     return buttons;
 }
 
@@ -568,7 +570,7 @@ static void draw_header(const App& app)
         int left = static_cast<int>(app.online.turn_deadline - GetTime());
         left = left < 0 ? 0 : left;
         std::string clock = std::to_string(left / 60) + ":" + (left % 60 < 10 ? "0" : "") + std::to_string(left % 60);
-        text(app, "Temps : " + clock, 100, 62, 13, true, left <= 20 ? ERROR_TEXT : SOFT_TEXT);
+        text(app, "Temps : " + clock, 30, 78, 13, true, left <= 20 ? ERROR_TEXT : SOFT_TEXT);
     }
     text(app, "Nobles", 30, 96, 15, true, WHITE_TEXT);
     if (game.is_last_round() && !game.is_over()) {

@@ -94,8 +94,34 @@ jobs:
             splendor-windows.exe
             splendor-console-windows.exe
 
+  web:
+    # Jeu dans le navigateur (WebAssembly), servi par le serveur sur /play ;
+    # deploy/install.sh télécharge cette archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          ./emsdk/emsdk install 4.0.10
+          ./emsdk/emsdk activate 4.0.10
+
+      - name: Version navigateur
+        run: |
+          source ./emsdk/emsdk_env.sh
+          make web
+          tar czf splendor-web.tar.gz -C build/web .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web
+          path: splendor-web.tar.gz
+
   release:
-    needs: [linux, windows]
+    needs: [linux, windows, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -115,3 +141,4 @@ jobs:
             splendor-linux
             splendor-console-windows.exe
             splendor-console-linux
+            splendor-web.tar.gz

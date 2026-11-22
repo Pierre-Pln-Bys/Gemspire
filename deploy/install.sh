@@ -38,6 +38,23 @@ if [ ! -f /etc/splendor/splendor.env ]; then
     sed -i "s/^SPLENDOR_BOT_KEY=.*/SPLENDOR_BOT_KEY=$key/" /etc/splendor/splendor.env
 fi
 
+# Jeu dans le navigateur (/play) : compilé ici s'il existe (make web), sinon
+# l'archive de la dernière version publiée sur GitHub
+echo "== Jeu dans le navigateur"
+install -d -m 755 /opt/splendor/web
+if [ -f build/web/index.html ]; then
+    install -m 644 build/web/index.html build/web/index.js build/web/index.wasm /opt/splendor/web/
+else
+    tmp=$(mktemp -d)
+    if curl -fsSL -o "$tmp/web.tar.gz" https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest/download/splendor-web.tar.gz; then
+        tar xzf "$tmp/web.tar.gz" -C /opt/splendor/web
+        chmod 644 /opt/splendor/web/*
+    else
+        echo "Jeu dans le navigateur non installé (archive introuvable) : /play sera absent."
+    fi
+    rm -rf "$tmp"
+fi
+
 install -m 644 deploy/splendor-server.service deploy/splendor-bot.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now splendor-server.service

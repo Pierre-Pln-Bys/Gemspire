@@ -69,6 +69,18 @@ make clean      # make clean-all supprime aussi la raylib compilée
 - Chaque gemme a son symbole (cercle, losange, triangle, carré, hexagone, étoile
   pour l'or) en plus de sa couleur.
 
+## Jouer dans le navigateur (ordinateur, téléphone)
+
+Sans rien installer : https://splendor.epsilon-forge.fr/play/ (téléphone tenu
+à l'horizontale). Même jeu que la version à télécharger (même code C++,
+compilé en WebAssembly avec Emscripten), sans la Rich Presence Discord.
+
+Compiler soi-même (Emscripten installé, `emcc` dans le PATH) :
+
+```bash
+make web   # résultat dans build/web (index.html, index.js, index.wasm)
+```
+
 ## Jouer en ligne
 
 Depuis l'accueil, « Jouer en ligne » :

@@ -3,6 +3,7 @@
 // l'enchaînement des coups. Le dessin est dans gui_draw.cpp.
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -27,6 +28,13 @@
 #include "rules.hpp"
 #include "save.hpp"
 #include "version.hpp"
+
+#ifdef __EMSCRIPTEN__
+// Version navigateur : boucle confiée au navigateur, saisie et fichiers adaptés
+#include <emscripten/emscripten.h>
+
+#include "platform_web.hpp"
+#endif
 
 // ---------------------------------------------------------------- Outils
 
@@ -373,6 +381,12 @@ static void press_menu_button(App& app, const Button& button)
         break;
     case ButtonId::NameBox:
         setup.focused_name = button.value;
+#ifdef __EMSCRIPTEN__
+        // Navigateur : boîte de saisie (ouvre le clavier du téléphone)
+        web_prompt("Nom du joueur " + std::to_string(button.value + 1) + " :", setup.names[button.value]);
+        setup.names[button.value] = setup.names[button.value].substr(0, 32);
+        setup.focused_name = -1;
+#endif
         break;
     case ButtonId::Swatch:
         setup.colors[button.value / 10] = button.value % 10;
@@ -414,8 +428,13 @@ static void save_session(const std::string& token)
         std::remove(SESSION_FILE);
         return;
     }
-    std::ofstream file(SESSION_FILE);
-    file << token << "\n";
+    {
+        std::ofstream file(SESSION_FILE);
+        file << token << "\n";
+    }
+#ifdef __EMSCRIPTEN__
+    web_save_files();
+#endif
 }
 
 // Adresse du serveur : variable SPLENDOR_SERVER, sinon serveur.txt, sinon le serveur officiel
@@ -424,6 +443,9 @@ static void configure_network(App& app)
     const char* from_env = std::getenv("SPLENDOR_SERVER");
     std::string server = from_env != nullptr ? from_env : read_first_line(SERVER_FILE);
     app.net.set_server(server.empty() ? DEFAULT_SERVER : server);
+#ifdef __EMSCRIPTEN__
+    app.net.set_server(web_origin());  // le serveur qui a servi la page
+#endif
     app.net.set_token(read_first_line(SESSION_FILE));
     const char* dev = std::getenv("SPLENDOR_DEV");
     app.online.dev_login = dev != nullptr && std::string(dev) == "1";
@@ -452,7 +474,12 @@ static void start_login(App& app, const std::string& provider)
         return;
     }
     std::string url = app.net.server() + "/auth/" + provider + "/start?login=" + app.online.login_id;
+#ifdef __EMSCRIPTEN__
+    // Navigateur : même onglet ; le serveur ramène ensuite au jeu avec ?login=
+    web_go_to(url + "&from=play");
+#else
     OpenURL(url.c_str());
+#endif
 }
 
 static void poll_lobby(App& app)
@@ -816,12 +843,28 @@ static void press_online_button(App& app, const Button& button)
         break;
     case ButtonId::PseudoBox:
         online.focus = 1;
+#ifdef __EMSCRIPTEN__
+        web_prompt("Pseudo (3 à 16 caractères) :", online.pseudo_input);
+        online.focus = 0;
+#endif
         break;
     case ButtonId::PseudoOk:
         app.net.send(TagPseudo, "POST", "/me/pseudo", nlohmann::json({{"pseudo", online.pseudo_input}}).dump());
         break;
     case ButtonId::CodeBox:
         online.focus = 2;
+#ifdef __EMSCRIPTEN__
+        if (web_prompt("Code du salon (5 caractères) :", online.code_input)) {
+            std::string code;
+            for (char c : online.code_input) {
+                if (std::isalnum(static_cast<unsigned char>(c)) && code.size() < 5) {
+                    code += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                }
+            }
+            online.code_input = code;
+        }
+        online.focus = 0;
+#endif
         break;
     case ButtonId::CreateMode:
         online.create_mode = button.value == 1 ? Mode::Classic : Mode::Quick;
@@ -902,6 +945,9 @@ static void press_online_button(App& app, const Button& button)
 static void save_current_game(App& app)
 {
     std::string error = save_game_to_file(*app.game, SAVE_FILE);
+#ifdef __EMSCRIPTEN__
+    web_save_files();
+#endif
     if (error.empty()) {
         set_message(app, std::string("Partie sauvegardée (") + SAVE_FILE + ").", false);
     } else {
@@ -1352,12 +1398,35 @@ static void prepare_font(Font& font)
     SetTextureFilter(font.texture, TEXTURE_FILTER_TRILINEAR);
 }
 
+// Une image : entrées, mise à jour, dessin
+static void draw_frame(void* data)
+{
+    App& app = *static_cast<App*>(data);
+    Camera2D camera = board_camera();
+    Vector2 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
+    update(app, mouse);
+
+    BeginDrawing();
+    ClearBackground({5, 20, 13, 255});
+    BeginMode2D(camera);
+    draw_app(app, mouse);
+    EndMode2D();
+    EndDrawing();
+}
+
 int main()
 {
+#ifdef __EMSCRIPTEN__
+    // Navigateur : dessin de taille fixe, agrandi par la page (shell.html)
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
+#else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+#endif
     std::string title = std::string("Splendor ") + SPLENDOR_VERSION;
     InitWindow(1280, 800, title.c_str());
+#ifndef __EMSCRIPTEN__
     SetWindowMinSize(640, 400);
+#endif
     SetExitKey(KEY_NULL);  // Échap sert à annuler, pas à quitter
     SetTargetFPS(60);
 
@@ -1368,23 +1437,28 @@ int main()
     if (!read_first_line(SESSION_FILE).empty()) {
         app.net.send(TagMeQuiet, "GET", "/me", "", true);
     }
+#ifdef __EMSCRIPTEN__
+    // Retour de Discord / Google : on termine la connexion commencée avant
+    std::string returning_login = web_login_from_address();
+    if (!returning_login.empty()) {
+        app.online.login_id = returning_login;
+        app.online.next_login_poll = 0;
+        app.screen = Screen::Login;
+    }
+#endif
     app.font = load_font_regular();
     app.bold = load_font_bold();
     prepare_font(app.font);
     prepare_font(app.bold);
 
+#ifdef __EMSCRIPTEN__
+    // Le navigateur appelle draw_frame à chaque image (pas de boucle bloquante)
+    emscripten_set_main_loop_arg(draw_frame, &app, 0, true);
+#else
     while (!WindowShouldClose() && !app.quit) {
-        Camera2D camera = board_camera();
-        Vector2 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
-        update(app, mouse);
-
-        BeginDrawing();
-        ClearBackground({5, 20, 13, 255});
-        BeginMode2D(camera);
-        draw_app(app, mouse);
-        EndMode2D();
-        EndDrawing();
+        draw_frame(&app);
     }
+#endif
 
     // Les glyphes des polices sont des tableaux statiques : on ne libère que la texture
     UnloadTexture(app.font.texture);

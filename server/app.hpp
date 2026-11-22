@@ -26,6 +26,7 @@ struct ServerConfig {
     bool dev_login = false;        // connexion sans OAuth, pour les tests en local
     int wait_seconds = 25;         // durée maximale d'une attente longue
     int turn_seconds = 120;        // temps pour jouer son tour (SPLENDOR_TURN_SECONDS)
+    std::string web_dir = "/opt/splendor/web";  // jeu dans le navigateur (make web), servi sur /play
     std::string min_version = "0.0.0";  // version minimale du jeu (SPLENDOR_MIN_VERSION, défaut : celle du serveur)
     std::string contact_email;     // affichée sur le site (SPLENDOR_CONTACT_EMAIL), facultative
     std::string discord_invite;    // invitation au serveur Discord (SPLENDOR_DISCORD_INVITE), facultative
@@ -40,6 +41,7 @@ struct PendingLogin {
     std::string token;
     std::string error;
     long long created = 0;
+    bool back_to_play = false;       // commencée depuis le jeu dans le navigateur : y revenir après
 };
 
 // Le serveur : stockage, salons et parties, routes HTTP

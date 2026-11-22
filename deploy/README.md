@@ -97,6 +97,14 @@ Fonctionnement :
   `/mod annuler-partie`, `/mod supprimer-compte`, journalisées dans
   `#moderation`.
 
+## Jeu dans le navigateur
+
+`install.sh` installe le jeu WebAssembly dans `/opt/splendor/web` : celui de
+`build/web` s'il a été compilé sur place (`make web`), sinon l'archive
+`splendor-web.tar.gz` de la dernière release GitHub. Il est servi sur
+`https://splendor.epsilon-forge.fr/play/`, et le site affiche alors le bouton
+« Jouer dans le navigateur ».
+
 ## 5. Indiquer le serveur au jeu
 
 Le jeu utilise par défaut `https://splendor.epsilon-forge.fr` (constante

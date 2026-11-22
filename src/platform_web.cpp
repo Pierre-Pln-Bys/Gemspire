@@ -1,0 +1,87 @@
+// Fonctions propres au navigateur (voir platform_web.hpp). Compilé seulement
+// pour la version WebAssembly.
+#include "platform_web.hpp"
+
+#include <cstdlib>
+
+#include <emscripten/emscripten.h>
+
+// Boîte de saisie du navigateur ; renvoie une chaîne allouée (à libérer), ou 0 si annulée
+EM_JS(char*, ask_text, (const char* question, const char* current), {
+    var answer = window.prompt(UTF8ToString(question), UTF8ToString(current));
+    if (answer === null) {
+        return 0;
+    }
+    var size = lengthBytesUTF8(answer) + 1;
+    var text = _malloc(size);
+    stringToUTF8(answer, text, size);
+    return text;
+});
+
+// Recopie le système de fichiers (dossier /data) dans IndexedDB
+EM_JS(void, sync_files, (), {
+    if (typeof FS !== "undefined" && FS.syncfs) {
+        FS.syncfs(false, function(error) { if (error) console.warn("Sauvegarde du navigateur :", error); });
+    }
+});
+
+// Chaîne JavaScript -> chaîne allouée (à libérer)
+EM_JS(char*, page_origin, (), {
+    var text = window.location.origin;
+    var size = lengthBytesUTF8(text) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(text, copy, size);
+    return copy;
+});
+
+EM_JS(void, go_to, (const char* url), { window.location.href = UTF8ToString(url); });
+
+EM_JS(char*, take_login_parameter, (), {
+    var params = new URLSearchParams(window.location.search);
+    var login = params.get("login") || "";
+    if (login) {
+        history.replaceState(null, "", window.location.pathname);
+    }
+    var size = lengthBytesUTF8(login) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(login, copy, size);
+    return copy;
+});
+
+static std::string take_string(char* text)
+{
+    std::string result = text != nullptr ? text : "";
+    std::free(text);
+    return result;
+}
+
+std::string web_origin()
+{
+    return take_string(page_origin());
+}
+
+void web_go_to(const std::string& url)
+{
+    go_to(url.c_str());
+}
+
+std::string web_login_from_address()
+{
+    return take_string(take_login_parameter());
+}
+
+bool web_prompt(const std::string& question, std::string& value)
+{
+    char* answer = ask_text(question.c_str(), value.c_str());
+    if (answer == nullptr) {
+        return false;
+    }
+    value = answer;
+    std::free(answer);
+    return true;
+}
+
+void web_save_files()
+{
+    sync_files();
+}
