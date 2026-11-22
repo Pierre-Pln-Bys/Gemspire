@@ -4,7 +4,17 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
-## [3.2.1] - 2026-11-22
+## [3.2.2] - 2026-11-22
+
+### Corrigé
+- Windows : la version graphique ne se compilait plus (l'OpenSSL récent de
+  MSYS2 demande la bibliothèque `bcrypt`). La 3.2.1 n'a donc pas été publiée ;
+  la 3.2.2 contient tous ses changements.
+
+### Ajouté
+- Image de couverture des invitations Discord (`assets/invite-cover.png`).
+
+## [3.2.1] - 2026-11-22 (non publiée)
 
 Première version reliée au serveur officiel, après les essais réels.
 
