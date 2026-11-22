@@ -4,6 +4,30 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.2.1] - 2026-11-22
+
+Première version reliée au serveur officiel, après les essais réels.
+
+### Modifié
+- Le jeu se connecte par défaut au serveur officiel
+  `https://splendor.epsilon-forge.fr` (Raspberry Pi derrière un tunnel
+  Cloudflare). `serveur.txt` ou `SPLENDOR_SERVER` visent un autre serveur.
+- Rich Presence : logo du jeu et textes plus clairs (pseudo et Elo).
+- Bot : un salon temporaire vide est supprimé après 30 secondes ; la liste
+  des salons est gardée dans un fichier, pour s'en souvenir après un
+  redémarrage.
+- Déploiement : port 8090 (8080 souvent déjà pris), identifiants publics et
+  adresse du projet préremplis.
+
+### Corrigé
+- Le jeu plantait au démarrage quand Discord était ouvert (réponse
+  `"evt": null` de Discord).
+- « Valider » (pseudo), « Créer le salon », « Rejoindre » et « Lancer la
+  partie » restaient grisés une fois connecté (attentes longues comptées
+  comme des requêtes en cours).
+- Serveur : un échec du webhook Discord est écrit dans le journal.
+- `install.sh` attend que le serveur réponde avant de tester `/health`.
+
 ## [3.2.0] - 2026-11-20
 
 ### Ajouté

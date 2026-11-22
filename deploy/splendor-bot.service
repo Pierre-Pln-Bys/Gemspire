@@ -9,6 +9,9 @@ Group=splendor
 EnvironmentFile=/etc/splendor/splendor.env
 WorkingDirectory=/opt/splendor/bot
 ExecStart=/opt/splendor/bot/venv/bin/python splendor_bot.py
+# Liste des salons temporaires, gardée entre deux redémarrages
+StateDirectory=splendor-bot
+Environment=SPLENDOR_BOT_STATE=/var/lib/splendor-bot/temp_channels.json
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=yes

@@ -82,7 +82,8 @@ Fonctionnement : quand un membre rejoint « Crée ta partie », le bot crée
 « Partie de <nom> » et l'y déplace. Si son compte Splendor (connecté avec
 Discord) a le jeu ouvert, le jeu propose de créer la partie ; le salon vocal
 est alors limité au nombre de places, le code y est annoncé, et le salon est
-supprimé quand il se vide.
+supprimé quand il est resté vide 30 secondes (le bot s'en souvient même après
+un redémarrage : liste dans `/var/lib/splendor-bot`).
 
 ## 5. Indiquer le serveur au jeu
 

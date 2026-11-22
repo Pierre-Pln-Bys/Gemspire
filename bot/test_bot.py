@@ -13,7 +13,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from api import SplendorApi  # noqa: E402
-from logic import TempChannel, apply_event, is_create_channel, offer_message, should_delete, temp_channel_name  # noqa: E402
+import tempfile  # noqa: E402
+
+from logic import (TempChannel, apply_event, is_create_channel, load_channel_ids, offer_message,  # noqa: E402
+                   save_channel_ids, should_delete, temp_channel_name)
 
 
 class LogicTests(unittest.TestCase):
@@ -30,6 +33,19 @@ class LogicTests(unittest.TestCase):
         self.assertTrue(should_delete(True, 0))
         self.assertFalse(should_delete(True, 1))
         self.assertFalse(should_delete(False, 0))
+
+    def test_channel_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "temp_channels.json")
+            self.assertEqual(load_channel_ids(path), [])  # pas encore de fichier
+            save_channel_ids(path, {1574139585007718474, 42})
+            self.assertEqual(load_channel_ids(path), [42, 1574139585007718474])
+            with open(path, "w", encoding="utf-8") as file:
+                file.write("{abîmé")
+            self.assertEqual(load_channel_ids(path), [])
+            with open(path, "w", encoding="utf-8") as file:
+                file.write('[1, "2", true, 3]')
+            self.assertEqual(load_channel_ids(path), [1, 3])
 
     def test_events(self):
         temp = TempChannel(owner_id=1)

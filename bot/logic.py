@@ -6,12 +6,18 @@ Fonctionnement :
 2. Si le compte Splendor lié à ce Discord a le jeu ouvert, le serveur propose
    dans le jeu de créer la partie (mode, places).
 3. Le salon temporaire est limité au nombre de places de la partie, et
-   supprimé dès qu'il est vide.
+   supprimé quand il est resté vide 30 secondes.
+4. La liste des salons temporaires est gardée dans un fichier : après un
+   redémarrage, le bot les reconnaît encore (et supprime ceux restés vides).
 """
+
+import json
+import os
 
 CREATE_CHANNEL_NAME = "Crée ta partie"
 OFFER_RETRY_SECONDS = 10      # nouvelle tentative si le jeu n'est pas ouvert
 OFFER_RETRY_COUNT = 12        # pendant 2 minutes
+DELETE_DELAY_SECONDS = 30     # un salon vide est supprimé après ce délai
 
 
 def normalize(name):
@@ -30,8 +36,28 @@ def temp_channel_name(display_name):
 
 
 def should_delete(is_temp_channel, member_count):
-    """Un salon temporaire est supprimé dès qu'il est vide."""
+    """Un salon temporaire vide doit être supprimé (après DELETE_DELAY_SECONDS)."""
     return is_temp_channel and member_count == 0
+
+
+def load_channel_ids(path):
+    """Identifiants des salons temporaires enregistrés ([] si le fichier manque ou est abîmé)."""
+    try:
+        with open(path, encoding="utf-8") as file:
+            ids = json.load(file)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(ids, list):
+        return []
+    return [int(i) for i in ids if isinstance(i, int) and not isinstance(i, bool)]
+
+
+def save_channel_ids(path, ids):
+    """Enregistre les identifiants (fichier temporaire puis renommage : jamais de fichier à moitié écrit)."""
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as file:
+        json.dump(sorted(ids), file)
+    os.replace(temporary, path)
 
 
 class TempChannel:
