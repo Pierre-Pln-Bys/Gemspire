@@ -55,6 +55,37 @@ static void reply_error(httplib::Response& response, int status, const std::stri
     reply(response, status, {{"error", message}});
 }
 
+// Date lisible (jj/mm/aaaa, heure UTC)
+static std::string date_text(long long seconds)
+{
+    std::time_t time = static_cast<std::time_t>(seconds);
+    std::tm* parts = std::gmtime(&time);
+    char text[32] = "";
+    if (parts != nullptr) {
+        std::strftime(text, sizeof(text), "%d/%m/%Y %H:%M UTC", parts);
+    }
+    return text;
+}
+
+// Compte vu par le bot (commandes /profil, /historique, modération)
+static json account_json(Store& store, int id)
+{
+    Account account;
+    if (id == 0 || !store.get_account(id, account)) {
+        return {{"found", false}};
+    }
+    return {{"found", true},
+            {"pseudo", account.pseudo},
+            {"provider", account.provider},
+            {"elo", account.elo},
+            {"games", account.games},
+            {"wins", account.wins},
+            {"rank", store.rank_of(id)},
+            {"banned", account.banned()},
+            {"banned_until", account.banned_until},
+            {"ban_reason", account.ban_reason}};
+}
+
 // Page du site, avec des en-têtes de sécurité (pas de script, pas d'intégration)
 static void reply_site(httplib::Response& response, const std::string& html, int status = 200)
 {
@@ -273,9 +304,16 @@ void ServerApp::finish_login(const std::string& login, const std::string& provid
                              const std::string& error)
 {
     std::string token;
-    if (error.empty()) {
+    std::string refused = error;
+    if (refused.empty()) {
         int account = store_.find_or_create_account(provider, provider_id);
-        token = account == 0 ? "" : store_.create_session(account);
+        Account data;
+        if (account != 0 && store_.get_account(account, data) && data.banned()) {
+            refused = "Compte suspendu" + (data.ban_reason.empty() ? std::string() : " (" + data.ban_reason + ")")
+                      + (data.banned_until == BAN_FOREVER ? " définitivement." : " jusqu'au " + date_text(data.banned_until) + ".");
+        } else {
+            token = account == 0 ? "" : store_.create_session(account);
+        }
     }
     std::lock_guard<std::mutex> lock(logins_mutex_);
     PendingLogin& pending = logins_[login];
@@ -284,7 +322,7 @@ void ServerApp::finish_login(const std::string& login, const std::string& provid
         pending.token = token;
     } else {
         pending.status = "error";
-        pending.error = error.empty() ? "Erreur du serveur." : error;
+        pending.error = refused.empty() ? "Erreur du serveur." : refused;
     }
 }
 
@@ -583,6 +621,139 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"linked", linked},
                               {"online", linked && rooms_.is_online(account)},
                               {"pseudo", linked ? data.pseudo : ""}});
+    });
+
+    // --- Commandes du bot : profil, historique, modération
+    // Compte désigné par ?pseudo= ou ?discord_id= (ou les mêmes champs en JSON)
+    auto target = [this](const std::string& pseudo, const std::string& discord_id) {
+        if (!pseudo.empty()) {
+            return store_.find_by_pseudo(pseudo);
+        }
+        return discord_id.empty() ? 0 : store_.find_account("discord", discord_id);
+    };
+    auto json_text = [](const json& body, const char* key) {
+        return body.contains(key) && body[key].is_string() ? body[key].get<std::string>() : std::string();
+    };
+
+    server.Get("/bot/profile", [this, target](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        int id = target(request.get_param_value("pseudo"), request.get_param_value("discord_id"));
+        reply(response, 200, account_json(store_, id));
+    });
+
+    server.Get("/bot/history", [this, target](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        int id = target(request.get_param_value("pseudo"), request.get_param_value("discord_id"));
+        json body = account_json(store_, id);
+        if (id == 0) {
+            reply(response, 200, body);
+            return;
+        }
+        body["games_list"] = json::array();
+        for (const HistoryEntry& entry : store_.history(id, 15)) {
+            body["games_list"].push_back({{"id", entry.game_id},
+                                          {"mode", entry.mode},
+                                          {"finished_at", entry.finished_at},
+                                          {"place", entry.place},
+                                          {"score", entry.score},
+                                          {"elo_change", entry.elo_change},
+                                          {"cancelled", entry.cancelled},
+                                          {"players", entry.players}});
+        }
+        reply(response, 200, body);
+    });
+
+    server.Post("/bot/ban", [this, target, json_text](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        if (!parse_body(request, body) || !body.contains("days") || !body["days"].is_number_integer()) {
+            reply_error(response, 400, "Requête mal formée.");
+            return;
+        }
+        int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
+        int days = body["days"].get<int>();
+        std::string reason = json_text(body, "reason").substr(0, 200);
+        if (id == 0 || days < 0 || days > 3650) {
+            reply_error(response, 400, id == 0 ? "Joueur introuvable." : "Durée invalide (0 = définitif).");
+            return;
+        }
+        long long until = days == 0 ? BAN_FOREVER : static_cast<long long>(std::time(nullptr)) + days * 86400LL;
+        store_.ban(id, until, reason);
+        rooms_.remove_account(id);
+        std::cout << "Modération : compte " << id << " suspendu (" << (days == 0 ? std::string("définitif")
+                                                                                 : std::to_string(days) + " j")
+                  << ")" << std::endl;
+        reply(response, 200, account_json(store_, id));
+    });
+
+    server.Post("/bot/unban", [this, target, json_text](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        if (!parse_body(request, body)) {
+            reply_error(response, 400, "Requête mal formée.");
+            return;
+        }
+        int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
+        if (id == 0) {
+            reply_error(response, 400, "Joueur introuvable.");
+            return;
+        }
+        store_.unban(id);
+        std::cout << "Modération : compte " << id << " réactivé" << std::endl;
+        reply(response, 200, account_json(store_, id));
+    });
+
+    server.Post("/bot/cancel-game", [this](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        if (!parse_body(request, body) || !body.contains("game_id") || !body["game_id"].is_number_integer()) {
+            reply_error(response, 400, "Requête mal formée.");
+            return;
+        }
+        std::string error = store_.cancel_game(body["game_id"].get<int>());
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        std::cout << "Modération : partie " << body["game_id"].get<int>() << " annulée" << std::endl;
+        reply(response, 200, {{"status", "ok"}});
+    });
+
+    server.Post("/bot/delete-account", [this, target, json_text](const httplib::Request& request,
+                                                                 httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Clé du bot invalide.");
+            return;
+        }
+        if (!parse_body(request, body)) {
+            reply_error(response, 400, "Requête mal formée.");
+            return;
+        }
+        int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
+        if (id == 0) {
+            reply_error(response, 400, "Joueur introuvable.");
+            return;
+        }
+        rooms_.remove_account(id);
+        store_.delete_account(id);
+        std::cout << "Compte " << id << " supprimé à la demande" << std::endl;
+        reply(response, 200, {{"status", "ok"}});
     });
 
     server.Post("/bot/offer", [this](const httplib::Request& request, httplib::Response& response) {

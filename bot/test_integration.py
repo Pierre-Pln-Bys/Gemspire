@@ -13,11 +13,12 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from api import SplendorApi  # noqa: E402
+from api import ApiError, SplendorApi  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SERVER = os.path.join(ROOT, "splendor-server")
@@ -77,6 +78,28 @@ class IntegrationTests(unittest.TestCase):
         code = self.call("/lobbies", token, {"mode": "rapide", "seats": 4, "voice_channel": "555"})["code"]
         event = api.events(0)["events"][-1]
         self.assertEqual((event["code"], event["seats"], event["voice_channel"]), (code, 4, "555"))
+
+    def test_moderation(self):
+        login = "y" * 24
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=777&as=discord".format(login)).close()
+        token = self.call("/auth/poll?login=" + login)["token"]
+        self.call("/me/pseudo", token, {"pseudo": "Tricheur"})
+        api = SplendorApi(self.url, "cle-integration")
+        self.assertEqual(api.profile(discord_id=777)["pseudo"], "Tricheur")
+        self.assertEqual(api.history(pseudo="tricheur")["games_list"], [])
+        self.assertEqual(api.leaderboard(), [])
+        banned = api.ban("Tricheur", 3, "multi-comptes")
+        self.assertTrue(banned["banned"])
+        with self.assertRaises(urllib.error.HTTPError):
+            self.call("/me", token)  # session fermée
+        self.assertFalse(api.unban("Tricheur")["banned"])
+        with self.assertRaises(ApiError) as caught:
+            api.ban("Personne", 1)
+        self.assertEqual(str(caught.exception), "Joueur introuvable.")
+        with self.assertRaises(ApiError):
+            api.cancel_game(12345)
+        api.delete_account(pseudo="Tricheur")
+        self.assertFalse(api.profile(pseudo="Tricheur")["found"])
 
 
 if __name__ == "__main__":

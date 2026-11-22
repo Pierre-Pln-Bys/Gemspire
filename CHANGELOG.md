@@ -4,6 +4,29 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.0] - 2026-11-22
+
+### Ajouté
+- **Bot Discord, hub du jeu** :
+  - salon `#classement` : top 10 mis à jour toutes les 10 minutes ;
+  - commandes `/classement`, `/profil`, `/lier` (rôle Joueur), `/jouer`,
+    `/regles`, `/signaler` ;
+  - modération `/mod ban` (suspension du compte de jeu, 0 jour = définitif),
+    `/mod unban`, `/mod historique` (alerte multi-comptes), `/mod
+    annuler-partie`, `/mod supprimer-compte` ; journal dans `#moderation`.
+- Serveur : comptes suspendus (connexion refusée, sessions fermées, parties
+  abandonnées, absents du classement), historique des parties, annulation
+  d'une partie, suppression de compte, routes `/bot/profile`,
+  `/bot/history`, `/bot/ban`, `/bot/unban`, `/bot/cancel-game`,
+  `/bot/delete-account`. Base migrée automatiquement.
+- Wiki « Serveur Discord » : rôles, salons et réglages conseillés.
+
+### Modifié
+- Le bot garde aussi l'identifiant du message du classement dans son fichier
+  d'état (l'ancien format est encore lu).
+- Lien d'invitation du bot : scope `applications.commands` et droits
+  « gérer les rôles », « intégrer des liens », « lire l'historique ».
+
 ## [3.3.0] - 2026-11-22
 
 ### Ajouté

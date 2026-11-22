@@ -18,6 +18,24 @@ struct Account {
     int elo = 1000;
     int games = 0;
     int wins = 0;
+    long long banned_until = 0;   // 0 : pas suspendu ; BAN_FOREVER : définitif ; sinon date de fin
+    std::string ban_reason;
+
+    bool banned() const;          // suspendu en ce moment
+};
+
+const long long BAN_FOREVER = -1;
+
+// Une partie de l'historique d'un joueur (modération)
+struct HistoryEntry {
+    int game_id;                        // numéro dans la base (pour l'annuler)
+    std::string mode;
+    long long finished_at;
+    int place;
+    int score;
+    int elo_change;
+    bool cancelled;
+    std::vector<std::string> players;   // pseudos de tous les joueurs, dans l'ordre des places
 };
 
 // Résultat d'un joueur dans une partie en ligne terminée
@@ -55,7 +73,21 @@ public:
 
     // Enregistre une partie terminée et met à jour Elo, parties et victoires
     void record_game(Mode mode, const std::vector<GameResult>& results);
+    // Classement (sans les comptes suspendus)
     std::vector<Account> leaderboard(int limit);
+    int rank_of(int id);                         // place au classement (0 : pas classé)
+
+    // --- Modération (commandes du bot Discord)
+    int find_by_pseudo(const std::string& pseudo);  // 0 si aucun (sans casse)
+    // Suspend jusqu'à `until` (BAN_FOREVER : définitif) et ferme ses sessions
+    void ban(int id, long long until, const std::string& reason);
+    void unban(int id);
+    std::vector<HistoryEntry> history(int id, int limit);
+    // Annule une partie : rend l'Elo, les parties et victoires. "" ou l'erreur.
+    std::string cancel_game(int game_id);
+    // Supprime le compte (RGPD) : pseudo et identité effacés, sessions fermées ;
+    // ses anciennes parties restent, au nom d'un joueur supprimé
+    void delete_account(int id);
 
 private:
     sqlite3* db_ = nullptr;

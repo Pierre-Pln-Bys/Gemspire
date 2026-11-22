@@ -242,6 +242,66 @@ int main()
     assert(json::parse(events->body)["events"].back()["closed"] == true);
     assert(get(client, "/config", "")["discord_app_id"] == "");
 
+    // --- Modération (commandes du bot)
+    {
+        auto bot_get = [&](const std::string& path_query) {
+            auto result = client.Get(path_query, bot);
+            assert(result && result->status == 200);
+            return json::parse(result->body);
+        };
+        auto bot_post = [&](const std::string& route, const json& body, int expected = 200) {
+            auto result = client.Post(route, bot, body.dump(), "application/json");
+            assert(result && result->status == expected);
+            return json::parse(result->body, nullptr, false);
+        };
+        assert(client.Get("/bot/profile?pseudo=alice", bad_bot)->status == 403);
+        json profile = bot_get("/bot/profile?pseudo=ALICE");  // sans casse
+        assert(profile["found"] == true && profile["pseudo"] == "Alice" && profile["rank"].get<int>() >= 1);
+        assert(bot_get("/bot/profile?pseudo=personne")["found"] == false);
+        assert(bot_get("/bot/profile?discord_id=123456")["pseudo"] == "Carole");
+
+        // Historique : 3 parties pour Alice, avec les pseudos des joueurs
+        json history = bot_get("/bot/history?pseudo=Alice");
+        assert(history["games_list"].size() == 3);
+        json last_game = history["games_list"][0];
+        assert(last_game["players"].size() == 2);
+        int elo_before_cancel = bot_get("/bot/profile?pseudo=Alice")["elo"];
+        int change = last_game["elo_change"];
+        int last_id = last_game["id"];
+
+        // Annuler la dernière partie rend l'Elo ; une seconde fois : refusé
+        bot_post("/bot/cancel-game", {{"game_id", last_id}});
+        assert(bot_get("/bot/profile?pseudo=Alice")["elo"] == elo_before_cancel - change);
+        assert(bot_get("/bot/history?pseudo=Alice")["games_list"][0]["cancelled"] == true);
+        bot_post("/bot/cancel-game", {{"game_id", last_id}}, 400);
+        bot_post("/bot/cancel-game", {{"game_id", 999999}}, 400);
+
+        // Suspension : sessions fermées, reconnexion refusée, absent du classement
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"reason", "multi-comptes"}, {"days", 7}});
+        get(client, "/me", bob, 401);
+        auto page = client.Get("/auth/dev/start?login=bbbbbbbbbbbbbbbbbbbbbbb2&name=bob");
+        assert(page && page->status == 200);
+        json refused_login = get(client, "/auth/poll?login=bbbbbbbbbbbbbbbbbbbbbbb2", "");
+        assert(refused_login["status"] == "error");
+        assert(refused_login["error"].get<std::string>().find("suspendu") != std::string::npos);
+        for (const json& player : get(client, "/leaderboard", "")["players"]) {
+            assert(player["pseudo"] != "Bébert");
+        }
+        assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == true);
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"days", -1}}, 400);
+        bot_post("/bot/ban", {{"pseudo", "personne"}, {"days", 1}}, 400);
+        bot_post("/bot/unban", {{"pseudo", "Bébert"}});
+        assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == false);
+        bob = login(client, "bob", "bbbbbbbbbbbbbbbbbbbbbbb3");
+        assert(get(client, "/me", bob)["pseudo"] == "Bébert");
+
+        // Suppression du compte : le pseudo est libéré, l'historique reste
+        bot_post("/bot/delete-account", {{"discord_id", "123456"}});
+        get(client, "/me", carol, 401);
+        assert(bot_get("/bot/profile?pseudo=Carole")["found"] == false);
+        assert(bot_get("/bot/profile?discord_id=123456")["found"] == false);
+    }
+
     // Déconnexion
     post(client, "/auth/logout", alice, json::object());
     get(client, "/me", alice, 401);

@@ -15,8 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api import SplendorApi  # noqa: E402
 import tempfile  # noqa: E402
 
-from logic import (TempChannel, apply_event, is_create_channel, load_channel_ids, offer_message,  # noqa: E402
-                   save_channel_ids, should_delete, temp_channel_name)
+from api import ApiError  # noqa: E402
+from logic import (TempChannel, apply_event, can_moderate, channel_matches, format_history,  # noqa: E402
+                   format_profile, format_ranking, frequent_opponents, is_create_channel, load_state, offer_message,
+                   save_state, should_delete, temp_channel_name)
 
 
 class LogicTests(unittest.TestCase):
@@ -34,18 +36,57 @@ class LogicTests(unittest.TestCase):
         self.assertFalse(should_delete(True, 1))
         self.assertFalse(should_delete(False, 0))
 
-    def test_channel_file(self):
+    def test_state_file(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "temp_channels.json")
-            self.assertEqual(load_channel_ids(path), [])  # pas encore de fichier
-            save_channel_ids(path, {1574139585007718474, 42})
-            self.assertEqual(load_channel_ids(path), [42, 1574139585007718474])
+            self.assertEqual(load_state(path), {"channels": [], "ranking": {}})  # pas encore de fichier
+            save_state(path, {1574139585007718474, 42}, {111: 222})
+            self.assertEqual(load_state(path), {"channels": [42, 1574139585007718474], "ranking": {111: 222}})
             with open(path, "w", encoding="utf-8") as file:
                 file.write("{abîmé")
-            self.assertEqual(load_channel_ids(path), [])
+            self.assertEqual(load_state(path)["channels"], [])
             with open(path, "w", encoding="utf-8") as file:
-                file.write('[1, "2", true, 3]')
-            self.assertEqual(load_channel_ids(path), [1, 3])
+                file.write('[1, "2", true, 3]')  # ancien format : simple liste
+            self.assertEqual(load_state(path), {"channels": [1, 3], "ranking": {}})
+
+    def test_channel_names_and_roles(self):
+        self.assertTrue(channel_matches("🏆・classement", "classement"))
+        self.assertTrue(channel_matches("Modération", "moderation"))
+        self.assertFalse(channel_matches("général", "classement"))
+        self.assertFalse(channel_matches("classement", ""))
+        self.assertTrue(can_moderate(["@everyone", "Modérateur"], False, "Modérateur"))
+        self.assertTrue(can_moderate(["moderateur"], False, "Modérateur"))
+        self.assertTrue(can_moderate([], True, "Modérateur"))
+        self.assertFalse(can_moderate(["Joueur"], False, "Modérateur"))
+
+    def test_ranking_and_profile(self):
+        players = [{"pseudo": "P{}".format(i), "elo": 1200 - i, "games": 4, "wins": 1} for i in range(12)]
+        text = format_ranking(players, 1800000000)
+        self.assertIn("🥇 **P0**", text)
+        self.assertIn("`10.` **P9**", text)
+        self.assertNotIn("P10", text)  # top 10 seulement
+        self.assertIn("25 %", text)
+        self.assertIn("<t:1800000000:R>", text)
+        self.assertIn("Soyez le premier", format_ranking([]))
+        profile = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 10, "wins": 7, "rank": 2}
+        self.assertIn("2ᵉ au classement", format_profile(profile))
+        self.assertIn("70 %", format_profile(profile))
+        self.assertIn("suspendu définitivement", format_profile(dict(profile, banned=True, banned_until=-1)))
+        self.assertIn("Aucun joueur", format_profile({"found": False}))
+
+    def test_history_flags_repeated_opponents(self):
+        now = 1800000000
+        games = [{"id": i, "mode": "rapide", "finished_at": now - 3600 * i, "place": 0, "score": 15,
+                  "elo_change": 16, "cancelled": False, "players": ["Pierre", "Alt"]} for i in range(6)]
+        games.append({"id": 99, "mode": "classique", "finished_at": now - 30 * 86400, "place": 1, "score": 9,
+                      "elo_change": -12, "cancelled": False, "players": ["Autre", "Pierre"]})
+        history = {"found": True, "pseudo": "Pierre", "elo": 1100, "games": 7, "wins": 6, "games_list": games}
+        self.assertEqual(frequent_opponents(history, now), [("Alt", 6)])  # la partie d'il y a 30 jours ne compte pas
+        text = format_history(history, now)
+        self.assertIn("Alt (6 parties)", text)
+        self.assertIn("`#99`", text)
+        self.assertIn("-12 Elo", text)
+        self.assertEqual(format_history({"found": False}), "Joueur introuvable.")
 
     def test_events(self):
         temp = TempChannel(owner_id=1)
@@ -120,8 +161,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(api.events(0)["events"][0]["code"], "ABCDE")
 
     def test_bad_key(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ApiError) as caught:
             SplendorApi(self.url, "mauvaise").presence(42)
+        self.assertEqual(str(caught.exception), "Clé du bot invalide.")  # le message du serveur
 
 
 if __name__ == "__main__":

@@ -5,8 +5,10 @@ v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome),
 v3.1 (serveur, comptes, parties en ligne, Elo).
 v3.2 (Discord : présence, invitations, bot vocal ; serveur en ligne sur le
 Raspberry Pi, `https://splendor.epsilon-forge.fr`).
-**Prochaine étape** : v3.3 (corrections, site web), v3.4 (jeu sur mobile),
-puis la **v4 : publication et test d'intrusion**. La communauté passe en v5.
+v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
+commandes du bot, classement, modération).
+**Prochaine étape** : v3.5 (jeu sur mobile), puis la **v4 : publication et
+test d'intrusion**. La communauté passe en v5.
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -115,12 +117,27 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
   pile en a moins de 4 (ou avec d'autres couleurs), ni plus de 3 couleurs.
 - [x] Annonce bien visible quand un noble rend visite à un joueur.
 - [x] Annonce du dernier tour quand un joueur atteint 15 points.
-- [ ] Page d'accueil du site (`/`) : présentation, téléchargements, liens.
-- [ ] Classement public (`/classement`), lisible sur mobile.
-- [ ] Pages Conditions d'utilisation (`/conditions`) et Confidentialité
+- [x] Temps de jeu en ligne : 2 minutes par tour, tour passé, abandon après
+  3 tours manqués ou bouton « Abandonner » (classé dernier, Elo perdu).
+- [x] Page d'accueil du site (`/`) : présentation, téléchargements, liens.
+- [x] Classement public (`/classement`), lisible sur mobile.
+- [x] Pages Conditions d'utilisation (`/conditions`) et Confidentialité
   (`/confidentialite`), demandées par Google et Discord.
 
-## v3.4 — Jouer sur mobile
+## v3.4 — Discord, hub du jeu
+
+- [x] Salon `#classement` : top 10 mis à jour toutes les 10 minutes (un seul
+  message modifié).
+- [x] Commandes du bot : `/classement`, `/profil`, `/lier` (rôle Joueur),
+  `/jouer`, `/regles`, `/signaler`.
+- [x] Modération : `/mod ban` (compte de jeu suspendu, parties abandonnées,
+  retiré du classement), `/mod unban`, `/mod historique` (alerte sur les
+  adversaires trop fréquents), `/mod annuler-partie`, `/mod supprimer-compte`
+  (RGPD), journal dans `#moderation`.
+- [x] Plan du serveur Discord (rôles, salons, réglages) : wiki « Serveur
+  Discord ».
+
+## v3.5 — Jouer sur mobile
 
 - [ ] Version navigateur (`/jouer`) utilisable sur téléphone : le même code
   C++ compilé en WebAssembly (raylib + Emscripten), commandes tactiles,
@@ -143,7 +160,7 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 
 - [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
   mise en sourdine d'un joueur, réactions rapides.
-- [ ] Commandes du bot : `/classement`, `/stats @joueur`, `/defi @joueur`.
+- [ ] Commandes du bot : `/defi @joueur`, rôles de rang selon l'Elo.
 - [ ] Mode spectateur et rediffusion des parties (historique d'événements).
 - [ ] Saisons classées (Elo remis partiellement à zéro, badges).
 - [ ] Recherche de partie automatique à Elo proche.

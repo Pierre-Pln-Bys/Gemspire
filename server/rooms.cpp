@@ -328,6 +328,34 @@ std::string Rooms::forfeit(int game_id, int account)
     return "";
 }
 
+void Rooms::remove_account(int account)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        remove_from_lobbies(account);
+        for (auto& entry : games_) {
+            OnlineGame& online = entry.second;
+            Game& game = *online.game;
+            for (int seat = 0; seat < static_cast<int>(online.seats.size()); seat++) {
+                if (online.seats[seat].account != account || game.is_over()) {
+                    continue;
+                }
+                size_t before = game.events().size();
+                // Tour en cours à moitié joué (défausse, noble) : on le termine d'abord
+                while (!game.is_over() && game.current_index() == seat && game.step() != TurnStep::Action) {
+                    if (!apply_move(game, ai_choose(game, false)).empty()) {
+                        break;
+                    }
+                }
+                game.forfeit(seat);
+                after_change(online, before);
+            }
+        }
+        last_seen_.erase(account);
+    }
+    changed_.notify_all();
+}
+
 void Rooms::tick()
 {
     bool any_change = false;

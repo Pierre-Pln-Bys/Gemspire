@@ -70,6 +70,8 @@ public:
     std::string play(int game_id, int account, const Move& move);
     // Abandon volontaire d'un joueur (classé dernier, Elo perdu)
     std::string forfeit(int game_id, int account);
+    // Compte suspendu ou supprimé : il quitte ses salons et abandonne ses parties
+    void remove_account(int account);
     // À appeler chaque seconde : temps écoulés (le tour passe ; après
     // MAX_MISSED_TURNS tours manqués d'affilée, abandon) et ménage des
     // parties finies depuis longtemps

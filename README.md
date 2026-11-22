@@ -179,7 +179,7 @@ une version mineure : `gh workflow run release.yml -f tag=vX.Y.Z`.
 
 ## Suite du projet
 
-Voir [ROADMAP.md](ROADMAP.md) : v3.4 (mobile), v3.5 (hub Discord), v4
+Voir [ROADMAP.md](ROADMAP.md) : v3.5 (mobile), v4
 (publication et test d'intrusion), v5 (communauté).
 
 Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki).

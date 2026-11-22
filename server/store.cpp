@@ -72,6 +72,7 @@ struct Statement {
     bool row() { return sqlite3_step(stmt) == SQLITE_ROW; }
     bool done() { return sqlite3_step(stmt) == SQLITE_DONE; }
     int integer(int column) { return sqlite3_column_int(stmt, column); }
+    long long big(int column) { return sqlite3_column_int64(stmt, column); }
     std::string text(int column)
     {
         const unsigned char* value = sqlite3_column_text(stmt, column);
@@ -113,7 +114,19 @@ Store::Store(const std::string& path)
          " account_id INTEGER NOT NULL REFERENCES accounts(id),"
          " place INTEGER NOT NULL, score INTEGER NOT NULL,"
          " elo_before INTEGER NOT NULL, elo_after INTEGER NOT NULL);");
+    // Colonnes ajoutées en v3.5 (sans effet si elles existent déjà)
+    exec("ALTER TABLE accounts ADD COLUMN banned_until INTEGER NOT NULL DEFAULT 0;");
+    exec("ALTER TABLE accounts ADD COLUMN ban_reason TEXT NOT NULL DEFAULT '';");
+    exec("ALTER TABLE games ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;");
 }
+
+bool Account::banned() const
+{
+    return banned_until == BAN_FOREVER || banned_until > static_cast<long long>(std::time(nullptr));
+}
+
+// Condition SQL : compte pas suspendu en ce moment (paramètre : maintenant)
+static const char* const NOT_BANNED = "(banned_until = 0 OR (banned_until > 0 AND banned_until <= ?))";
 
 Store::~Store()
 {
@@ -165,7 +178,8 @@ int Store::find_account(const std::string& provider, const std::string& provider
 bool Store::get_account(int id, Account& account)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement get(db_, "SELECT id, provider, IFNULL(pseudo, ''), elo, games, wins FROM accounts WHERE id = ?");
+    Statement get(db_, "SELECT id, provider, IFNULL(pseudo, ''), elo, games, wins, banned_until, ban_reason"
+                       " FROM accounts WHERE id = ?");
     get.bind(1, static_cast<long long>(id));
     if (!get.row()) {
         return false;
@@ -176,6 +190,8 @@ bool Store::get_account(int id, Account& account)
     account.elo = get.integer(3);
     account.games = get.integer(4);
     account.wins = get.integer(5);
+    account.banned_until = get.big(6);
+    account.ban_reason = get.text(7);
     return true;
 }
 
@@ -256,9 +272,12 @@ void Store::record_game(Mode mode, const std::vector<GameResult>& results)
 std::vector<Account> Store::leaderboard(int limit)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement list(db_, "SELECT id, provider, pseudo, elo, games, wins FROM accounts"
-                        " WHERE pseudo IS NOT NULL AND games > 0 ORDER BY elo DESC, wins DESC LIMIT ?");
-    list.bind(1, static_cast<long long>(limit));
+    std::string sql = std::string("SELECT id, provider, pseudo, elo, games, wins FROM accounts"
+                                  " WHERE pseudo IS NOT NULL AND games > 0 AND ")
+                      + NOT_BANNED + " ORDER BY elo DESC, wins DESC LIMIT ?";
+    Statement list(db_, sql.c_str());
+    list.bind(1, static_cast<long long>(std::time(nullptr)));
+    list.bind(2, static_cast<long long>(limit));
     std::vector<Account> accounts;
     while (list.row()) {
         Account account;
@@ -271,4 +290,122 @@ std::vector<Account> Store::leaderboard(int limit)
         accounts.push_back(account);
     }
     return accounts;
+}
+
+int Store::rank_of(int id)
+{
+    Account account;
+    if (!get_account(id, account) || account.games == 0 || account.banned() || account.pseudo.empty()) {
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string sql = std::string("SELECT COUNT(*) FROM accounts WHERE pseudo IS NOT NULL AND games > 0 AND ")
+                      + NOT_BANNED + " AND (elo > ? OR (elo = ? AND wins > ?))";
+    Statement count(db_, sql.c_str());
+    count.bind(1, static_cast<long long>(std::time(nullptr)));
+    count.bind(2, static_cast<long long>(account.elo));
+    count.bind(3, static_cast<long long>(account.elo));
+    count.bind(4, static_cast<long long>(account.wins));
+    return count.row() ? count.integer(0) + 1 : 0;
+}
+
+int Store::find_by_pseudo(const std::string& pseudo)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT id FROM accounts WHERE pseudo = ? COLLATE NOCASE");
+    find.bind(1, pseudo);
+    return find.row() ? find.integer(0) : 0;
+}
+
+void Store::ban(int id, long long until, const std::string& reason)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement update(db_, "UPDATE accounts SET banned_until = ?, ban_reason = ? WHERE id = ?");
+    update.bind(1, until);
+    update.bind(2, reason);
+    update.bind(3, static_cast<long long>(id));
+    update.done();
+    Statement sessions(db_, "DELETE FROM sessions WHERE account_id = ?");
+    sessions.bind(1, static_cast<long long>(id));
+    sessions.done();
+}
+
+void Store::unban(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement update(db_, "UPDATE accounts SET banned_until = 0, ban_reason = '' WHERE id = ?");
+    update.bind(1, static_cast<long long>(id));
+    update.done();
+}
+
+std::vector<HistoryEntry> Store::history(int id, int limit)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<HistoryEntry> entries;
+    Statement list(db_, "SELECT g.id, g.mode, g.finished_at, p.place, p.score, p.elo_after - p.elo_before,"
+                        " g.cancelled FROM game_players p JOIN games g ON g.id = p.game_id"
+                        " WHERE p.account_id = ? ORDER BY g.id DESC LIMIT ?");
+    list.bind(1, static_cast<long long>(id));
+    list.bind(2, static_cast<long long>(limit));
+    while (list.row()) {
+        HistoryEntry entry;
+        entry.game_id = list.integer(0);
+        entry.mode = list.text(1);
+        entry.finished_at = list.big(2);
+        entry.place = list.integer(3);
+        entry.score = list.integer(4);
+        entry.elo_change = list.integer(5);
+        entry.cancelled = list.integer(6) != 0;
+        entries.push_back(entry);
+    }
+    for (HistoryEntry& entry : entries) {
+        Statement players(db_, "SELECT IFNULL(a.pseudo, '(supprimé)') FROM game_players p"
+                               " JOIN accounts a ON a.id = p.account_id WHERE p.game_id = ? ORDER BY p.place");
+        players.bind(1, static_cast<long long>(entry.game_id));
+        while (players.row()) {
+            entry.players.push_back(players.text(0));
+        }
+    }
+    return entries;
+}
+
+std::string Store::cancel_game(int game_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT cancelled FROM games WHERE id = ?");
+    find.bind(1, static_cast<long long>(game_id));
+    if (!find.row()) {
+        return "Partie introuvable.";
+    }
+    if (find.integer(0) != 0) {
+        return "Cette partie est déjà annulée.";
+    }
+    exec("BEGIN;");
+    Statement undo(db_, "UPDATE accounts SET"
+                        " elo = elo - (SELECT p.elo_after - p.elo_before FROM game_players p"
+                        "              WHERE p.game_id = ?1 AND p.account_id = accounts.id),"
+                        " games = games - 1,"
+                        " wins = wins - (SELECT CASE WHEN p.place = 0 THEN 1 ELSE 0 END FROM game_players p"
+                        "                WHERE p.game_id = ?1 AND p.account_id = accounts.id)"
+                        " WHERE id IN (SELECT account_id FROM game_players WHERE game_id = ?1)");
+    undo.bind(1, static_cast<long long>(game_id));
+    undo.done();
+    Statement mark(db_, "UPDATE games SET cancelled = 1 WHERE id = ?");
+    mark.bind(1, static_cast<long long>(game_id));
+    mark.done();
+    exec("COMMIT;");
+    return "";
+}
+
+void Store::delete_account(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement sessions(db_, "DELETE FROM sessions WHERE account_id = ?");
+    sessions.bind(1, static_cast<long long>(id));
+    sessions.done();
+    // L'identité Discord / Google est effacée : une nouvelle connexion crée un nouveau compte
+    Statement update(db_, "UPDATE accounts SET pseudo = NULL, provider = 'supprime',"
+                          " provider_id = 'supprime-' || id WHERE id = ?");
+    update.bind(1, static_cast<long long>(id));
+    update.done();
 }

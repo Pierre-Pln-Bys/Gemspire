@@ -66,24 +66,36 @@ sudo systemctl restart splendor-server
 sur `/config`. Dans le portail Discord, ajouter dans *Rich Presence > Art
 Assets* une image `logo` si on veut une icône.
 
-## 4. Bot « Crée ta partie »
+## 4. Bot Discord
 
 1. Portail développeur > votre application > **Bot** > *Reset Token* :
-   copier le jeton dans `DISCORD_BOT_TOKEN`.
-2. Inviter le bot sur le serveur Discord (remplacer `ID` par le Client ID) :
-   `https://discord.com/oauth2/authorize?client_id=ID&scope=bot&permissions=17828880`
-   (voir les salons, envoyer des messages, se connecter, gérer les salons,
-   déplacer des membres).
-3. Créer un salon vocal nommé **Crée ta partie** (ou changer
-   `CREATE_CHANNEL_NAME`).
-4. Relancer `sudo deploy/install.sh` : le bot démarre.
+   copier le jeton dans `DISCORD_BOT_TOKEN`. Laisser les trois *Privileged
+   Gateway Intents* **désactivés** (inutiles).
+2. Inviter le bot (ou le réinviter pour lui donner les nouveaux droits) :
+   `https://discord.com/oauth2/authorize?client_id=ID&scope=bot+applications.commands&permissions=286346256`
+   (voir les salons, envoyer des messages, intégrer des liens, lire
+   l'historique, gérer les salons, gérer les rôles, se connecter, déplacer
+   des membres).
+3. Créer le salon vocal **Crée ta partie**, et si on veut : `#classement`,
+   `#moderation`, les rôles `Modérateur` et `Joueur` (le rôle du bot doit être
+   **au-dessus** de `Joueur`). Plan complet du serveur : wiki, page
+   « Serveur Discord ».
+4. Relancer `sudo deploy/install.sh` : le bot démarre et publie ses commandes.
 
-Fonctionnement : quand un membre rejoint « Crée ta partie », le bot crée
-« Partie de <nom> » et l'y déplace. Si son compte Splendor (connecté avec
-Discord) a le jeu ouvert, le jeu propose de créer la partie ; le salon vocal
-est alors limité au nombre de places, le code y est annoncé, et le salon est
-supprimé quand il est resté vide 30 secondes (le bot s'en souvient même après
-un redémarrage : liste dans `/var/lib/splendor-bot`).
+Fonctionnement :
+
+- **Crée ta partie** : quand un membre rejoint ce salon, le bot crée « Partie
+  de <nom> » et l'y déplace. Si son compte Splendor (connecté avec Discord) a
+  le jeu ouvert, le jeu propose de créer la partie ; le salon vocal est alors
+  limité au nombre de places, le code y est annoncé, et le salon est supprimé
+  quand il est resté vide 30 secondes (le bot s'en souvient même après un
+  redémarrage : état dans `/var/lib/splendor-bot`).
+- **#classement** : top 10, un seul message modifié toutes les 10 minutes.
+- **Commandes** : `/classement`, `/profil`, `/lier` (donne le rôle Joueur),
+  `/jouer`, `/regles`, `/signaler` ; modérateurs (rôle `Modérateur` ou
+  administrateurs) : `/mod ban`, `/mod unban`, `/mod historique`,
+  `/mod annuler-partie`, `/mod supprimer-compte`, journalisées dans
+  `#moderation`.
 
 ## 5. Indiquer le serveur au jeu
 

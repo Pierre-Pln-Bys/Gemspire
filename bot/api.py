@@ -9,6 +9,10 @@ import urllib.parse
 import urllib.request
 
 
+class ApiError(RuntimeError):
+    """Refus du serveur, avec son message (« Joueur introuvable. »...)."""
+
+
 class SplendorApi:
     def __init__(self, base_url, bot_key, timeout=40):
         self.base_url = base_url.rstrip("/")
@@ -25,7 +29,19 @@ class SplendorApi:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            raise RuntimeError("Serveur Splendor : erreur {} sur {}".format(error.code, path)) from error
+            message = "Serveur Splendor : erreur {} sur {}".format(error.code, path.split("?")[0])
+            try:
+                message = json.loads(error.read().decode("utf-8")).get("error", message)
+            except (ValueError, AttributeError):
+                pass
+            raise ApiError(message) from error
+
+    @staticmethod
+    def _who(pseudo=None, discord_id=None):
+        """Paramètres qui désignent un joueur : par pseudo, sinon par compte Discord."""
+        if pseudo:
+            return {"pseudo": pseudo}
+        return {"discord_id": str(discord_id)}
 
     def presence(self, discord_id):
         """{"linked": bool, "online": bool, "pseudo": str}"""
@@ -39,3 +55,30 @@ class SplendorApi:
     def events(self, since):
         """Événements des salons liés à un salon vocal (attente longue)."""
         return self._request("GET", "/bot/events?since={}".format(int(since)))
+
+    # --- Classement et profils
+    def leaderboard(self):
+        """[{"pseudo", "elo", "games", "wins"}, ...] (50 meilleurs)"""
+        return self._request("GET", "/leaderboard").get("players", [])
+
+    def profile(self, pseudo=None, discord_id=None):
+        """{"found", "pseudo", "elo", "games", "wins", "rank", "banned", "banned_until", "ban_reason"}"""
+        return self._request("GET", "/bot/profile?" + urllib.parse.urlencode(self._who(pseudo, discord_id)))
+
+    def history(self, pseudo=None, discord_id=None):
+        """Profil + "games_list" : 15 dernières parties (id, mode, finished_at, place, players...)"""
+        return self._request("GET", "/bot/history?" + urllib.parse.urlencode(self._who(pseudo, discord_id)))
+
+    # --- Modération
+    def ban(self, pseudo, days, reason=""):
+        """Suspend le compte `days` jours (0 : définitif)."""
+        return self._request("POST", "/bot/ban", {"pseudo": pseudo, "days": int(days), "reason": reason})
+
+    def unban(self, pseudo):
+        return self._request("POST", "/bot/unban", {"pseudo": pseudo})
+
+    def cancel_game(self, game_id):
+        return self._request("POST", "/bot/cancel-game", {"game_id": int(game_id)})
+
+    def delete_account(self, pseudo=None, discord_id=None):
+        return self._request("POST", "/bot/delete-account", self._who(pseudo, discord_id))
