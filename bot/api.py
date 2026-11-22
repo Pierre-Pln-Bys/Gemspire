@@ -1,4 +1,4 @@
-"""Appels du bot au serveur Splendor (bibliothèque standard uniquement).
+"""Appels du bot au serveur Gemspire (bibliothèque standard uniquement).
 
 Le bot s'identifie avec la clé partagée SPLENDOR_BOT_KEY (en-tête X-Bot-Key).
 """
@@ -29,7 +29,7 @@ class SplendorApi:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            message = "Serveur Splendor : erreur {} sur {}".format(error.code, path.split("?")[0])
+            message = "Serveur Gemspire : erreur {} sur {}".format(error.code, path.split("?")[0])
             try:
                 message = json.loads(error.read().decode("utf-8")).get("error", message)
             except (ValueError, AttributeError):

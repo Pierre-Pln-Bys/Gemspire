@@ -4,13 +4,13 @@ Point de départ : v2.1.0 (20/11/2026). **Fait depuis** : v2.2 (fondations),
 v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome),
 v3.1 (serveur, comptes, parties en ligne, Elo).
 v3.2 (Discord : présence, invitations, bot vocal ; serveur en ligne sur le
-Raspberry Pi, `https://splendor.epsilon-forge.fr`).
+Raspberry Pi, `https://gemspire.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
 v3.5 (jeu dans le navigateur, site et bot bilingues).
 **Prochaine étape** : la **v4 : publication et test d'intrusion**. La communauté passe en v5.
 
-Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
+Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
 
 ## Ce que vise la v3
@@ -79,7 +79,7 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 - [x] Confort : historique des actions, survol (« il manque 2 Rouge »),
   raccourcis clavier, écran de passage entre joueurs, symbole par gemme
   (daltonisme), petites animations.
-- [x] Release : `splendor-windows.exe` et `splendor-linux` graphiques et
+- [x] Release : `gemspire-windows.exe` et `gemspire-linux` graphiques et
   autonomes, plus les versions console. GTK est retiré.
 
 ## v3.1 — Serveur, comptes et parties en ligne

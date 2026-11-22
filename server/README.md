@@ -1,4 +1,4 @@
-# Serveur Splendor en ligne
+# Serveur Gemspire en ligne
 
 `splendor-server` gère les comptes (connexion Google ou Discord, sans mot de
 passe), les salons, les parties en ligne et le classement Elo. Il réutilise la
@@ -93,7 +93,7 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 
 ## Version du jeu
 
-Le jeu envoie sa version dans l'en-tête `X-Splendor-Version`. Pour les routes
+Le jeu envoie sa version dans l'en-tête `X-Gemspire-Version`. Pour les routes
 du jeu (`/me`, `/lobbies`, `/games/`, `/auth/poll`, `/auth/logout`,
 `/config`), une version absente, mal écrite ou plus ancienne que
 `SPLENDOR_MIN_VERSION` est refusée avec **426** (`error`, `min_version`,

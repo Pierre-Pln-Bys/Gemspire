@@ -1,4 +1,4 @@
-// Serveur de Splendor en ligne : comptes (Google / Discord, sans mot de
+// Serveur de Gemspire en ligne : comptes (Google / Discord, sans mot de
 // passe), salons, parties arbitrées par le serveur, classement Elo.
 // Réglages par variables d'environnement : voir server/README.md.
 #include <atomic>
@@ -20,7 +20,7 @@ int main()
     // Assez de fils pour les attentes longues des joueurs connectés
     server.new_task_queue = [] { return new httplib::ThreadPool(64); };
     app.setup_routes(server);
-    std::cout << "Serveur Splendor sur " << config.host << ":" << config.port << " (adresse publique "
+    std::cout << "Serveur Gemspire sur " << config.host << ":" << config.port << " (adresse publique "
               << config.public_url << ")" << (config.dev_login ? " [connexion de test activée]" : "") << std::endl;
     // Horloge des parties : temps écoulés, abandons, ménage
     std::atomic<bool> running(true);

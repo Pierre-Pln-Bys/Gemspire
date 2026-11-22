@@ -21,7 +21,7 @@ const float BOARD_WIDTH = 1280;
 const float BOARD_HEIGHT = 800;
 const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
-const char* const DEFAULT_SERVER = "https://splendor.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
+const char* const DEFAULT_SERVER = "https://gemspire.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
 enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update };
 

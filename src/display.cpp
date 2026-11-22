@@ -420,7 +420,7 @@ static void show_reserved(const Game& game)
 void show_board(const Game& game)
 {
     std::string mode = game.mode() == Mode::Classic ? "classique" : "rapide";
-    std::string title = " SPLENDOR (" + mode + ") - tour " + std::to_string(game.round())
+    std::string title = " GEMSPIRE (" + mode + ") - tour " + std::to_string(game.round())
                         + " - au tour de ";
     std::cout << "\n" << repeat("━", 79) << "\n" << bold(title)
               << player_colored(game.current_index(), game.current_player().name) << "\n"

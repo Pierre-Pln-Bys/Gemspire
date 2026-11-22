@@ -561,7 +561,7 @@ static void draw_felt()
 static void draw_header(const App& app)
 {
     const Game& game = *app.game;
-    text(app, "SPLENDOR", 30, 8, 28, true, GOLD_UI);
+    text(app, "GEMSPIRE", 30, 8, 28, true, GOLD_UI);
     std::string mode = game.mode() == Mode::Classic ? "Partie classique" : "Partie rapide";
     text(app, mode, 30, 44, 13, false, SOFT_TEXT);
     text(app, "Tour " + std::to_string(game.round()), 30, 62, 13, false, SOFT_TEXT);
@@ -1063,7 +1063,7 @@ static void draw_home(const App& app, Vector2 mouse)
     for (int gem = 0; gem <= GOLD_INDEX; gem++) {
         draw_token(app, gem, {640 + (gem - 2.5f) * 78, 175}, 30, "", false);
     }
-    text_centered(app, "SPLENDOR", 640, 270, 96, true, GOLD_UI);
+    text_centered(app, "GEMSPIRE", 640, 270, 96, true, GOLD_UI);
     text_centered(app, std::string("Version ") + SPLENDOR_VERSION, 640, 335, 16, false, SOFT_TEXT);
     for (const Button& button : home_buttons()) {
         draw_button(app, button, mouse);
@@ -1240,7 +1240,7 @@ static void draw_update(const App& app, Vector2 mouse)
     rounded(r, 18, {0, 0, 0, 110});
     outline(r, 18, 3, GOLD_UI, 0);
     text_centered(app, "Mise à jour nécessaire", 640, 260, 38, true, GOLD_UI);
-    text_centered(app, "Cette version de Splendor (" + std::string(SPLENDOR_VERSION) + ") n'est plus acceptée", 640,
+    text_centered(app, "Cette version de Gemspire (" + std::string(SPLENDOR_VERSION) + ") n'est plus acceptée", 640,
                   330, 20, false, WHITE_TEXT);
     text_centered(app, "par le serveur. Téléchargez la version " + app.min_version + " ou plus récente.", 640, 362,
                   20, false, WHITE_TEXT);

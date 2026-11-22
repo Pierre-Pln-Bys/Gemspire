@@ -318,7 +318,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    std::cout << "=== SPLENDOR " << SPLENDOR_VERSION << " ===\n";
+    std::cout << "=== GEMSPIRE " << SPLENDOR_VERSION << " ===\n";
     std::unique_ptr<Game> game_holder;
     if (!load_path.empty()) {
         std::string error = load_game_from_file(load_path, game_holder);

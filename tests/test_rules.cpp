@@ -377,7 +377,7 @@ static void test_save()
     // Fichiers invalides : un message d'erreur, pas de plantage
     std::unique_ptr<Game> broken;
     assert(!load_game("", broken).empty());
-    assert(!load_game("SPLENDOR 2\n", broken).empty());
+    assert(!load_game("GEMSPIRE 2\n", broken).empty());
     Game game({"A", "B"}, 1, Mode::Quick);
     std::string text = save_game(game);
     assert(!load_game(text.substr(0, text.size() / 2), broken).empty());

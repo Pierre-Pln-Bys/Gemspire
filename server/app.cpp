@@ -85,7 +85,7 @@ static bool version_allowed(const std::string& version, const std::string& minim
 }
 
 // Routes appelées par le jeu : elles exigent une version assez récente
-// (en-tête X-Splendor-Version). Le site, le navigateur (OAuth) et le bot
+// (en-tête X-Gemspire-Version). Le site, le navigateur (OAuth) et le bot
 // ne sont pas concernés.
 static bool route_needs_version(const std::string& path)
 {
@@ -96,6 +96,18 @@ static bool route_needs_version(const std::string& path)
         }
     }
     return false;
+}
+
+// Pages du site (pas l'API du jeu ni du bot)
+static bool is_site_page(const std::string& path)
+{
+    const char* pages[] = {"/", "/classement", "/terms", "/conditions", "/privacy", "/confidentialite", "/play"};
+    for (const char* page : pages) {
+        if (path == page) {
+            return true;
+        }
+    }
+    return path.compare(0, 6, "/play/") == 0;
 }
 
 // Date lisible (jj/mm/aaaa, heure UTC)
@@ -143,7 +155,7 @@ static void reply_site(httplib::Response& response, const std::string& html, int
 
 static void reply_page(httplib::Response& response, const std::string& title, const std::string& text)
 {
-    response.set_content("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>Splendor</title>"
+    response.set_content("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>Gemspire</title>"
                          "<style>body{font-family:sans-serif;background:#0b2d1e;color:#eee;text-align:center;"
                          "padding-top:15vh}h1{color:#ffd140}</style></head><body><h1>"
                          + title + "</h1><p>" + text + "</p></body></html>",
@@ -274,7 +286,7 @@ void ServerApp::announce_lobby(const Lobby& lobby)
     std::string path = config_.discord_webhook.substr(std::string("https://discord.com").size());
     std::string text = "**" + lobby.members[0].pseudo + "** ouvre une partie "
                        + (lobby.mode == Mode::Classic ? "classique" : "rapide") + " (1/" + std::to_string(lobby.seats)
-                       + ") — code **" + lobby.code + "** à taper dans Splendor (Jouer en ligne > Rejoindre).";
+                       + ") — code **" + lobby.code + "** à taper dans Gemspire (Jouer en ligne > Rejoindre).";
     std::string body = json({{"content", text}, {"allowed_mentions", {{"parse", json::array()}}}}).dump();
     std::thread([path, body]() {
         httplib::SSLClient client("discord.com");
@@ -376,17 +388,26 @@ void ServerApp::setup_routes(httplib::Server& server)
     // Jeu trop ancien (ou sans version) : refusé avec 426, le jeu affiche
     // alors l'écran « Mise à jour nécessaire »
     server.set_pre_routing_handler([this](const httplib::Request& request, httplib::Response& response) {
+        // Ancienne adresse du site (ou toute autre que l'adresse publique) : les
+        // pages du site redirigent vers l'adresse publique (le jeu n'est pas concerné)
+        std::string host = request.get_header_value("Host");
+        std::string public_host = config_.public_url.substr(config_.public_url.find("://") + 3);
+        bool local = host.compare(0, 9, "127.0.0.1") == 0 || host.compare(0, 9, "localhost") == 0;
+        if (request.method == "GET" && !host.empty() && !local && host != public_host && is_site_page(request.path)) {
+            response.set_redirect(config_.public_url + request.target, 301);
+            return httplib::Server::HandlerResponse::Handled;
+        }
         if (!route_needs_version(request.path)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
-        std::string version = request.get_header_value("X-Splendor-Version");
+        std::string version = request.get_header_value("X-Gemspire-Version");
         if (version_allowed(version, config_.min_version)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
-        reply(response, 426, {{"error", "Cette version de Splendor est trop ancienne : téléchargez la version "
+        reply(response, 426, {{"error", "Cette version de Gemspire est trop ancienne : téléchargez la version "
                                         + config_.min_version + " ou plus récente."},
                               {"min_version", config_.min_version},
-                              {"download", "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest"}});
+                              {"download", "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"}});
         return httplib::Server::HandlerResponse::Handled;
     });
 
@@ -446,7 +467,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         if (error.empty()) {
-            reply_page(response, "Connexion réussie", "Vous pouvez fermer cette page et revenir dans Splendor.");
+            reply_page(response, "Connexion réussie", "Vous pouvez fermer cette page et revenir dans Gemspire.");
         } else {
             reply_page(response, "Connexion impossible", error);
         }
@@ -468,7 +489,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             logins_[login].created = std::time(nullptr);
         }
         finish_login(login, provider, name, "");
-        reply_page(response, "Connexion de test réussie", "Vous pouvez revenir dans Splendor.");
+        reply_page(response, "Connexion de test réussie", "Vous pouvez revenir dans Gemspire.");
     });
 
     server.Get("/auth/poll", [this](const httplib::Request& request, httplib::Response& response) {

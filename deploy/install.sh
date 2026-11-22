@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installe (ou met à jour) le serveur et le bot Splendor sur le Raspberry Pi.
+# Installe (ou met à jour) le serveur et le bot Gemspire sur le Raspberry Pi.
 # À lancer depuis la racine du dépôt cloné sur le Pi :  sudo deploy/install.sh
 # Le script ne touche jamais aux secrets déjà présents dans /etc/splendor/splendor.env.
 set -euo pipefail
@@ -46,7 +46,7 @@ if [ -f build/web/index.html ]; then
     install -m 644 build/web/index.html build/web/index.js build/web/index.wasm /opt/splendor/web/
 else
     tmp=$(mktemp -d)
-    if curl -fsSL -o "$tmp/web.tar.gz" https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest/download/splendor-web.tar.gz; then
+    if curl -fsSL -o "$tmp/web.tar.gz" https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest/download/gemspire-web.tar.gz; then
         tar xzf "$tmp/web.tar.gz" -C /opt/splendor/web
         chmod 644 /opt/splendor/web/*
     else

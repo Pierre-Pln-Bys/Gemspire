@@ -6,10 +6,10 @@
 # -f tag=v2.0.0`) pour (re)publier un tag existant.
 #
 # Fichiers attachés à la release GitHub (téléchargeables directement, sans zip) :
-#   - splendor-windows.exe          jeu graphique pour Windows (autonome)
-#   - splendor-linux                jeu graphique pour Linux x86_64 (autonome)
-#   - splendor-console-windows.exe  version console pour Windows
-#   - splendor-console-linux        version console pour Linux
+#   - gemspire-windows.exe          jeu graphique pour Windows (autonome)
+#   - gemspire-linux                jeu graphique pour Linux x86_64 (autonome)
+#   - gemspire-console-windows.exe  version console pour Windows
+#   - gemspire-console-linux        version console pour Linux
 name: Release majeure
 
 on:
@@ -44,19 +44,19 @@ jobs:
         run: |
           make splendor LDFLAGS=-static
           ./splendor --version
-          mv splendor splendor-console-linux
+          mv splendor gemspire-console-linux
 
       - name: Version graphique (raylib incluse)
         run: |
           make splendor-gui
-          mv splendor-gui splendor-linux
+          mv splendor-gui gemspire-linux
 
       - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: |
-            splendor-linux
-            splendor-console-linux
+            gemspire-linux
+            gemspire-console-linux
 
   windows:
     runs-on: windows-latest
@@ -80,19 +80,19 @@ jobs:
         run: |
           make splendor LDFLAGS=-static
           ./splendor.exe --version
-          mv splendor.exe splendor-console-windows.exe
+          mv splendor.exe gemspire-console-windows.exe
 
       - name: Version graphique (raylib incluse, sans DLL)
         run: |
           make splendor-gui
-          mv splendor-gui.exe splendor-windows.exe
+          mv splendor-gui.exe gemspire-windows.exe
 
       - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: |
-            splendor-windows.exe
-            splendor-console-windows.exe
+            gemspire-windows.exe
+            gemspire-console-windows.exe
 
   web:
     # Jeu dans le navigateur (WebAssembly), servi par le serveur sur /play ;
@@ -113,12 +113,12 @@ jobs:
         run: |
           source ./emsdk/emsdk_env.sh
           make web
-          tar czf splendor-web.tar.gz -C build/web .
+          tar czf gemspire-web.tar.gz -C build/web .
 
       - uses: actions/upload-artifact@v7
         with:
           name: web
-          path: splendor-web.tar.gz
+          path: gemspire-web.tar.gz
 
   release:
     needs: [linux, windows, web]
@@ -134,19 +134,19 @@ jobs:
           merge-multiple: true
 
       - name: Rendre les binaires Linux exécutables
-        run: chmod +x splendor-linux splendor-console-linux
+        run: chmod +x gemspire-linux gemspire-console-linux
 
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: Splendor ${{ inputs.tag || github.ref_name }}
+          name: Gemspire ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: |
-            splendor-windows.exe
-            splendor-linux
-            splendor-console-windows.exe
-            splendor-console-linux
-            splendor-web.tar.gz
+            gemspire-windows.exe
+            gemspire-linux
+            gemspire-console-windows.exe
+            gemspire-console-linux
+            gemspire-web.tar.gz
 
       # Annonce dans le salon Discord des nouveautés (secret DISCORD_RELEASE_WEBHOOK) ;
       # sans le secret, rien n'est envoyé. Un échec ne bloque pas la release.

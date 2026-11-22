@@ -1,5 +1,5 @@
 [Unit]
-Description=Bot Discord Splendor « Crée ta partie »
+Description=Bot Discord Gemspire « Crée ta partie »
 After=network-online.target splendor-server.service
 Wants=network-online.target
 

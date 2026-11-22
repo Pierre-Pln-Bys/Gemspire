@@ -2,7 +2,7 @@
 
 Swann PROUTEAU
 
-Splendor en C++17, en version graphique (fenêtre) ou dans le terminal,
+Gemspire en C++17, en version graphique (fenêtre) ou dans le terminal,
 avec deux modes :
 
 - **partie rapide** : sans jetons or ni réservation ;
@@ -11,20 +11,20 @@ avec deux modes :
 ## Télécharger
 
 Chaque version est publiée sur la page
-[Releases](https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases), avec
+[Releases](https://github.com/Pierre-Pln-Bys/Gemspire/releases), avec
 les exécutables à télécharger directement (pas de zip, rien à installer) :
 
 | Fichier | Système | Contenu |
 |---|---|---|
-| `splendor-windows.exe` | Windows | **jeu graphique**, double-cliquer pour jouer |
-| `splendor-linux` | Linux x86_64 | **jeu graphique** |
-| `splendor-console-windows.exe` | Windows | version console |
-| `splendor-console-linux` | Linux x86_64 | version console |
+| `gemspire-windows.exe` | Windows | **jeu graphique**, double-cliquer pour jouer |
+| `gemspire-linux` | Linux x86_64 | **jeu graphique** |
+| `gemspire-console-windows.exe` | Windows | version console |
+| `gemspire-console-linux` | Linux x86_64 | version console |
 
 Sous Linux, rendre le fichier exécutable une fois :
 
 ```bash
-chmod +x splendor-linux
+chmod +x gemspire-linux
 ```
 
 ## Compilation
@@ -71,7 +71,7 @@ make clean      # make clean-all supprime aussi la raylib compilée
 
 ## Jouer dans le navigateur (ordinateur, téléphone)
 
-Sans rien installer : https://splendor.epsilon-forge.fr/play/ (téléphone tenu
+Sans rien installer : https://gemspire.epsilon-forge.fr/play/ (téléphone tenu
 à l'horizontale). Même jeu que la version à télécharger (même code C++,
 compilé en WebAssembly avec Emscripten), sans la Rich Presence Discord.
 
@@ -99,7 +99,7 @@ Depuis l'accueil, « Jouer en ligne » :
    les autres continuent.
 5. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
    est visible depuis le menu en ligne et sur
-   [splendor.epsilon-forge.fr/classement](https://splendor.epsilon-forge.fr/classement).
+   [gemspire.epsilon-forge.fr/classement](https://gemspire.epsilon-forge.fr/classement).
 
 **Discord** :
 
@@ -109,12 +109,12 @@ Depuis l'accueil, « Jouer en ligne » :
 - **Inviter** : dans le salon, « Copier une invitation » met dans le
   presse-papiers un message prêt à coller (code + lien de téléchargement).
 - **Salon vocal « Crée ta partie »** : en le rejoignant, le bot Discord vous
-  crée un salon vocal temporaire ; si Splendor est ouvert (connecté avec
+  crée un salon vocal temporaire ; si Gemspire est ouvert (connecté avec
   Discord), le jeu propose de créer la partie, et le salon vocal est limité au
   nombre de places.
 
 Par défaut, le jeu se connecte au serveur officiel
-`https://splendor.epsilon-forge.fr`. Pour un autre serveur (par exemple
+`https://gemspire.epsilon-forge.fr`. Pour un autre serveur (par exemple
 `http://localhost:8080` en développement) : variable `SPLENDOR_SERVER` ou
 fichier `serveur.txt` à côté du jeu. Le serveur est décrit dans
 [server/README.md](server/README.md), le bot dans `bot/`, l'installation sur
@@ -194,4 +194,13 @@ une version mineure : `gh workflow run release.yml -f tag=vX.Y.Z`.
 Voir [ROADMAP.md](ROADMAP.md) : v3.5 (mobile), v4
 (publication et test d'intrusion), v5 (communauté).
 
-Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki).
+Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/Gemspire/wiki).
+
+## Licence
+
+Gemspire est distribué sous licence **GPL-3.0** (fichier [LICENSE](LICENSE)) :
+chacun peut l'utiliser, l'étudier, le modifier et le redistribuer, à
+condition que les versions modifiées restent sous GPL-3.0 et publient leur
+code. Les bibliothèques de `third_party/` gardent leur propre licence
+(raylib : zlib ; cpp-httplib, nlohmann/json : MIT ; SQLite : domaine public),
+toutes compatibles.

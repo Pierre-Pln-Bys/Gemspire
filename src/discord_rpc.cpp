@@ -253,7 +253,7 @@ static nlohmann::json activity_json(const PresenceInfo& info)
         activity["secrets"] = {{"join", info.join_secret}};
     }
     // Image « logo » téléversée dans le portail Discord (Rich Presence > Art Assets)
-    activity["assets"] = {{"large_image", "logo"}, {"large_text", "Splendor"}};
+    activity["assets"] = {{"large_image", "logo"}, {"large_text", "Gemspire"}};
     activity["instance"] = false;
     return activity;
 }

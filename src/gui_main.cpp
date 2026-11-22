@@ -1,4 +1,4 @@
-// Interface graphique de Splendor (raylib).
+// Interface graphique de Gemspire (raylib).
 // Ce fichier gère la fenêtre, les écrans, la souris, le clavier et
 // l'enchaînement des coups. Le dessin est dans gui_draw.cpp.
 #include <algorithm>
@@ -244,7 +244,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
               TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet };
 
-const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest";
+const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
 const char* const SESSION_FILE = "session.txt";   // jeton de connexion
 const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
@@ -909,7 +909,7 @@ static void press_online_button(App& app, const Button& button)
         set_message(app, "Code copié.", false);
         break;
     case ButtonId::Invite: {
-        std::string invitation = "Rejoins ma partie de Splendor ! Code : " + online.lobby_code
+        std::string invitation = "Rejoins ma partie de Gemspire ! Code : " + online.lobby_code
                                  + " (Jouer en ligne > Rejoindre). Télécharger le jeu : " + DOWNLOAD_URL;
         SetClipboardText(invitation.c_str());
         set_message(app, "Invitation copiée : collez-la dans Discord.", false);
@@ -1317,7 +1317,7 @@ static void update(App& app, Vector2 mouse)
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             for (const Button& button : visible_buttons(app)) {
                 if (point_in(mouse, button.rect) && button.id == ButtonId::Download) {
-                    OpenURL(app.download_url.empty() ? "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest"
+                    OpenURL(app.download_url.empty() ? "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"
                                                      : app.download_url.c_str());
                 } else if (point_in(mouse, button.rect) && button.id == ButtonId::Quit) {
                     app.quit = true;
@@ -1422,7 +1422,7 @@ int main()
 #else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
 #endif
-    std::string title = std::string("Splendor ") + SPLENDOR_VERSION;
+    std::string title = std::string("Gemspire ") + SPLENDOR_VERSION;
     InitWindow(1280, 800, title.c_str());
 #ifndef __EMSCRIPTEN__
     SetWindowMinSize(640, 400);

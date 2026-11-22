@@ -91,7 +91,7 @@ class LogicTests(unittest.TestCase):
         self.assertIn("70 %", format_profile(profile, "fr"))
         self.assertIn("suspended permanently", format_profile(dict(profile, banned=True, banned_until=-1)))
         self.assertIn("suspendu définitivement", format_profile(dict(profile, banned=True, banned_until=-1), "fr"))
-        self.assertIn("No Splendor player", format_profile({"found": False}))
+        self.assertIn("No Gemspire player", format_profile({"found": False}))
 
     def test_history_flags_repeated_opponents(self):
         now = 1800000000
@@ -125,7 +125,7 @@ class LogicTests(unittest.TestCase):
 
     def test_offer_messages(self):
         self.assertIn("Discord", offer_message({"linked": False}))
-        self.assertIn("Start Splendor", offer_message({"linked": True, "online": False}))
+        self.assertIn("Start Gemspire", offer_message({"linked": True, "online": False}))
         self.assertIn("Lancez", offer_message({"linked": True, "online": False}, "fr"))
         self.assertIn("fenêtre", offer_message({"linked": True, "online": True}, "fr"))
 
@@ -142,7 +142,7 @@ class LogicTests(unittest.TestCase):
 
 
 class FakeServer(BaseHTTPRequestHandler):
-    """Faux serveur Splendor : vérifie la clé et répond comme le vrai."""
+    """Faux serveur Gemspire : vérifie la clé et répond comme le vrai."""
 
     received = []
 

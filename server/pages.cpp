@@ -2,9 +2,9 @@
 
 #include <sstream>
 
-static const char* const RELEASES = "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest";
-static const char* const DOWNLOAD = "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest/download/";
-static const char* const REPOSITORY = "https://github.com/Pierre-Pln-Bys/ProjectSplendor";
+static const char* const RELEASES = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
+static const char* const DOWNLOAD = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest/download/";
+static const char* const REPOSITORY = "https://github.com/Pierre-Pln-Bys/Gemspire";
 
 // Le même texte en anglais ou en français
 static std::string T(Lang lang, const std::string& english, const std::string& french)
@@ -69,10 +69,10 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
         << "\"><head><meta charset=\"utf-8\">"
            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
            "<title>"
-        << html_escape(title) << " · Splendor</title><meta name=\"description\" content=\""
-        << T(lang, "Splendor online: a game of gems and nobles, 2 to 4 players, against the computer or online with "
+        << html_escape(title) << " · Gemspire</title><meta name=\"description\" content=\""
+        << T(lang, "Gemspire online: a game of gems and nobles, 2 to 4 players, against the computer or online with "
                    "an Elo leaderboard.",
-             "Splendor en ligne : jeu de gemmes et de nobles, 2 à 4 joueurs, contre l'ordinateur ou en ligne avec "
+             "Gemspire en ligne : jeu de gemmes et de nobles, 2 à 4 joueurs, contre l'ordinateur ou en ligne avec "
              "classement Elo.")
         << "\"><style>"
            ":root{--felt:#0f3d28;--felt2:#165636;--gold:#ffd140;--text:#eef3ef;--soft:#b9d2c2}"
@@ -112,7 +112,7 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
            "footer{max-width:960px;margin:0 auto;padding:20px;color:var(--soft);font-size:.85rem}"
            "@media (max-width:560px){h1{font-size:1.7rem}.hide-small{display:none}th,td{padding:8px 4px}}"
            "</style></head><body><header><a class=\"brand\" href=\""
-        << href("/", lang) << "\">SPLENDOR</a><nav>";
+        << href("/", lang) << "\">GEMSPIRE</a><nav>";
     struct Link {
         const char* path;
         std::string label;
@@ -133,10 +133,10 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
     out << "<a class=\"lang\" href=\"" << href(current.empty() ? "/" : current, other) << "\" hreflang=\""
         << T(other, "en", "fr") << "\">" << T(lang, "Français", "English") << "</a>";
     out << "</nav></header><main>" << body << "</main><footer>"
-        << T(lang, "Student project (ENSEIRB-MATMECA), free and open source. Unofficial adaptation of the Splendor "
-                   "board game, not affiliated with its publishers. ",
-             "Projet étudiant (ENSEIRB-MATMECA), libre et gratuit. Adaptation non officielle du jeu de société "
-             "Splendor, sans lien avec ses éditeurs. ")
+        << T(lang, "Student project (ENSEIRB-MATMECA), free and open source (GPL-3.0). Independent game, not "
+                   "affiliated with any board game publisher. ",
+             "Projet étudiant (ENSEIRB-MATMECA), libre et gratuit (GPL-3.0). Jeu indépendant, sans lien avec un "
+             "éditeur de jeux de société. ")
         << "<a href=\"" << REPOSITORY << "\">" << T(lang, "Source code", "Code source") << "</a>";
     if (!site.discord_invite.empty()) {
         out << " · <a href=\"" << html_escape(site.discord_invite) << "\">Discord</a>";
@@ -165,7 +165,7 @@ static std::string contact_html(const SiteInfo& site, Lang lang)
 std::string page_home(const SiteInfo& site, Lang lang)
 {
     std::ostringstream body;
-    body << "<section class=\"card\">" << tokens_html() << "<h1>Splendor</h1><p>"
+    body << "<section class=\"card\">" << tokens_html() << "<h1>Gemspire</h1><p>"
          << T(lang, "Collect gems, buy development cards and attract nobles. The first to reach 15 prestige points "
                     "triggers the last round.",
               "Collectionnez des gemmes, achetez des cartes de développement et attirez les nobles. Le premier à 15 "
@@ -180,9 +180,9 @@ std::string page_home(const SiteInfo& site, Lang lang)
         body << "<a class=\"button big\" href=\"" << href("/play", lang) << "\">"
              << T(lang, "▶ Play in your browser", "▶ Jouer dans le navigateur") << "</a><br>";
     }
-    body << "<a class=\"button\" href=\"" << DOWNLOAD << "splendor-windows.exe\">"
+    body << "<a class=\"button\" href=\"" << DOWNLOAD << "gemspire-windows.exe\">"
          << T(lang, "Download for Windows", "Télécharger pour Windows") << "</a>"
-         << "<a class=\"button\" href=\"" << DOWNLOAD << "splendor-linux\">"
+         << "<a class=\"button\" href=\"" << DOWNLOAD << "gemspire-linux\">"
          << T(lang, "Download for Linux", "Télécharger pour Linux") << "</a>"
          << "<a class=\"button ghost\" href=\"" << href("/leaderboard", lang) << "\">"
          << T(lang, "See the leaderboard", "Voir le classement") << "</a></section>";
@@ -205,11 +205,11 @@ std::string page_home(const SiteInfo& site, Lang lang)
     body << "<section class=\"card\"><h2>" << T(lang, "Install", "Installer") << "</h2><p>"
          << T(lang, "A single file, nothing to install: download it and run it. On Windows, if SmartScreen shows a "
                     "warning (unsigned executable), click <em>More info</em> then <em>Run anyway</em>. On Linux: "
-                    "<code>chmod +x splendor-linux</code> then <code>./splendor-linux</code>.",
+                    "<code>chmod +x gemspire-linux</code> then <code>./gemspire-linux</code>.",
               "Un seul fichier, rien à installer : téléchargez-le et lancez-le. Sous Windows, si SmartScreen "
               "affiche un avertissement (exécutable non signé), cliquez sur <em>Informations complémentaires</em> "
-              "puis <em>Exécuter quand même</em>. Sous Linux : <code>chmod +x splendor-linux</code> puis "
-              "<code>./splendor-linux</code>.")
+              "puis <em>Exécuter quand même</em>. Sous Linux : <code>chmod +x gemspire-linux</code> puis "
+              "<code>./gemspire-linux</code>.")
          << "</p><p>" << T(lang, "All versions (including the console version): ", "Toutes les versions (dont la version console) : ")
          << "<a href=\"" << RELEASES << "\">" << T(lang, "releases page", "page des versions") << "</a>.</p></section>";
     if (!site.discord_invite.empty()) {
@@ -260,12 +260,12 @@ std::string page_terms(const SiteInfo& site, Lang lang)
     body << "<h1>" << T(lang, "Terms of use", "Conditions d'utilisation") << "</h1><p class=\"soft\">"
          << T(lang, "Last updated: November 22, 2026", "Dernière mise à jour : 22 novembre 2026")
          << "</p><div class=\"card\"><h2>" << T(lang, "1. The service", "1. Le service") << "</h2><p>"
-         << T(lang, "Splendor is a free, open-source student project: a game (Windows, Linux, browser), an online "
-                    "game server, this website and a Discord bot. It is an unofficial adaptation of the Splendor "
-                    "board game, not affiliated with its authors or publishers.",
-              "Splendor est un projet étudiant, gratuit et libre : un jeu (Windows, Linux, navigateur), un serveur "
-              "de parties en ligne, ce site et un bot Discord. C'est une adaptation non officielle du jeu de société "
-              "Splendor, sans lien avec ses auteurs ni ses éditeurs.")
+         << T(lang, "Gemspire is a free, open-source student project: a game (Windows, Linux, browser), an online "
+                    "game server, this website and a Discord bot. It is an independent project, not affiliated with "
+                    "any board game author or publisher.",
+              "Gemspire est un projet étudiant, gratuit et libre : un jeu (Windows, Linux, navigateur), un serveur "
+              "de parties en ligne, ce site et un bot Discord. C'est un projet indépendant, sans lien avec un auteur "
+              "ou un éditeur de jeux de société.")
          << "</p><h2>" << T(lang, "2. Account", "2. Compte") << "</h2><p>"
          << T(lang, "You sign in with a Discord or Google account; no password is created or stored. You choose a "
                     "username visible to other players and on the leaderboard. It must not be insulting, "

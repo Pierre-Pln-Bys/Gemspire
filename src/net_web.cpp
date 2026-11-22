@@ -62,7 +62,7 @@ void NetClient::send(int tag, const std::string& method, const std::string& path
                      bool background)
 {
     WebRequest* request = new WebRequest{queue_, tag, background, body.empty() ? "{}" : body, {}, {}};
-    request->headers = {"X-Splendor-Version", SPLENDOR_VERSION, "Content-Type", "application/json"};
+    request->headers = {"X-Gemspire-Version", SPLENDOR_VERSION, "Content-Type", "application/json"};
     if (!token_.empty()) {
         request->headers.push_back("Authorization");
         request->headers.push_back("Bearer " + token_);

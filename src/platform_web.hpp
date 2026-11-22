@@ -17,7 +17,7 @@ bool web_prompt(const std::string& question, std::string& value);
 // Enregistre les fichiers dans le stockage du navigateur
 void web_save_files();
 
-// Adresse du site (https://splendor.epsilon-forge.fr) : le jeu parle au serveur qui l'a servi
+// Adresse du site (https://gemspire.epsilon-forge.fr) : le jeu parle au serveur qui l'a servi
 std::string web_origin();
 
 // Quitte le jeu pour cette adresse (connexion Discord / Google dans le même onglet)

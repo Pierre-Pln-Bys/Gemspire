@@ -6,6 +6,14 @@ Toutes les évolutions notables du projet. Format inspiré de
 
 ## [Non publié]
 
+### Modifié
+- **Le jeu s'appelle désormais Gemspire** : titre, site
+  (https://gemspire.epsilon-forge.fr, l'ancienne adresse redirige), bot,
+  exécutables (`gemspire-windows.exe`, `gemspire-linux`...), dépôt GitHub
+  `Pierre-Pln-Bys/Gemspire`. Les réglages et services du serveur gardent
+  leurs noms techniques (`SPLENDOR_*`, `splendor-server`).
+- **Licence GPL-3.0**.
+
 ### Ajouté
 - **Changelog sur Discord** : chaque release publie ses nouveautés dans un
   salon Discord (`tools/discord_release.py`, secret GitHub

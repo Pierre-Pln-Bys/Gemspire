@@ -11,40 +11,40 @@ TEXTS = {
     "temp_channel": {"en": "{name}'s game", "fr": "Partie de {name}"},
     "player": {"en": "player", "fr": "joueur"},
     "offer_not_linked": {
-        "en": "To create a Splendor game here, sign in to the game with **Discord** (Play online > Sign in with Discord).",
-        "fr": "Pour créer une partie Splendor ici, connectez-vous dans le jeu avec **Discord** "
+        "en": "To create a Gemspire game here, sign in to the game with **Discord** (Play online > Sign in with Discord).",
+        "fr": "Pour créer une partie Gemspire ici, connectez-vous dans le jeu avec **Discord** "
               "(Jouer en ligne > Se connecter avec Discord)."},
     "offer_not_online": {
-        "en": "Start Splendor (signed in with Discord): the game setup will open in the game. I'll wait 2 minutes.",
-        "fr": "Lancez Splendor (connecté avec Discord) : la création de la partie s'ouvrira dans le jeu. "
+        "en": "Start Gemspire (signed in with Discord): the game setup will open in the game. I'll wait 2 minutes.",
+        "fr": "Lancez Gemspire (connecté avec Discord) : la création de la partie s'ouvrira dans le jeu. "
               "J'attends 2 minutes."},
-    "offer_sent": {"en": "Set up the game in Splendor: the window just opened in the game.",
-                   "fr": "Configurez la partie dans Splendor : la fenêtre vient de s'ouvrir dans le jeu."},
-    "lobby_closed": {"en": "The Splendor game linked to this channel was cancelled.",
-                     "fr": "La partie Splendor liée à ce salon a été annulée."},
-    "lobby_started": {"en": "Splendor game **{code}** has started. Have fun!",
-                      "fr": "La partie Splendor **{code}** a commencé. Bon jeu !"},
+    "offer_sent": {"en": "Set up the game in Gemspire: the window just opened in the game.",
+                   "fr": "Configurez la partie dans Gemspire : la fenêtre vient de s'ouvrir dans le jeu."},
+    "lobby_closed": {"en": "The Gemspire game linked to this channel was cancelled.",
+                     "fr": "La partie Gemspire liée à ce salon a été annulée."},
+    "lobby_started": {"en": "Gemspire game **{code}** has started. Have fun!",
+                      "fr": "La partie Gemspire **{code}** a commencé. Bon jeu !"},
     "lobby_created": {
-        "en": "Splendor game created: code **{code}** ({seats} seats). Join this voice channel, then in Splendor: "
+        "en": "Gemspire game created: code **{code}** ({seats} seats). Join this voice channel, then in Gemspire: "
               "Play online > Join.",
-        "fr": "Partie Splendor créée : code **{code}** ({seats} places). Rejoignez ce salon vocal, puis dans "
-              "Splendor : Jouer en ligne > Rejoindre."},
+        "fr": "Partie Gemspire créée : code **{code}** ({seats} places). Rejoignez ce salon vocal, puis dans "
+              "Gemspire : Jouer en ligne > Rejoindre."},
     # --- Classement et profils
-    "ranking_title": {"en": "🏆 **Splendor leaderboard** — top {size}", "fr": "🏆 **Classement Splendor** — top {size}"},
+    "ranking_title": {"en": "🏆 **Gemspire leaderboard** — top {size}", "fr": "🏆 **Classement Gemspire** — top {size}"},
     "ranking_empty": {"en": "Nobody has finished an online game yet. Be the first!",
                       "fr": "Personne n'a encore terminé de partie en ligne. Soyez le premier !"},
     "ranking_line": {"en": "{place} **{pseudo}** — {elo} Elo · {games} games · {rate}% wins",
                      "fr": "{place} **{pseudo}** — {elo} Elo · {games} parties · {rate} % de victoires"},
     "ranking_footer": {"en": "Full leaderboard: <{url}>", "fr": "Classement complet : <{url}>"},
     "ranking_updated": {"en": " · updated {when}", "fr": " · mis à jour {when}"},
-    "no_player": {"en": "No Splendor player found.", "fr": "Aucun joueur Splendor trouvé."},
+    "no_player": {"en": "No Gemspire player found.", "fr": "Aucun joueur Gemspire trouvé."},
     "profile_rank": {"en": " · #{rank} on the leaderboard", "fr": " · {rank}ᵉ au classement"},
     "profile_stats": {"en": "{games} games · {wins} wins ({rate}%)", "fr": "{games} parties · {wins} victoires ({rate} %)"},
     "banned_forever": {"en": "⛔ Account suspended permanently", "fr": "⛔ Compte suspendu définitivement"},
     "banned_until": {"en": "⛔ Account suspended until {date}", "fr": "⛔ Compte suspendu jusqu'au {date}"},
     "not_linked_member": {
-        "en": "This member hasn't linked Splendor to Discord (in the game: Play online > Sign in with Discord).",
-        "fr": "Ce membre n'a pas lié Splendor à Discord (dans le jeu : Jouer en ligne > Se connecter avec Discord)."},
+        "en": "This member hasn't linked Gemspire to Discord (in the game: Play online > Sign in with Discord).",
+        "fr": "Ce membre n'a pas lié Gemspire à Discord (dans le jeu : Jouer en ligne > Se connecter avec Discord)."},
     # --- Historique (modérateurs)
     "player_not_found": {"en": "Player not found.", "fr": "Joueur introuvable."},
     "no_games": {"en": "No online games.", "fr": "Aucune partie en ligne."},
@@ -56,22 +56,22 @@ TEXTS = {
     "forever": {"en": "permanently", "fr": "définitivement"},
     "for_days": {"en": "for {days} day(s)", "fr": "pour {days} jour(s)"},
     # --- Commandes
-    "server_down": {"en": "❌ The Splendor server is not responding. Try again in a moment.",
-                    "fr": "❌ Le serveur Splendor ne répond pas. Réessayez dans un moment."},
+    "server_down": {"en": "❌ The Gemspire server is not responding. Try again in a moment.",
+                    "fr": "❌ Le serveur Gemspire ne répond pas. Réessayez dans un moment."},
     "link_missing": {
-        "en": "No Splendor account linked yet: in the game, **Play online > Sign in with Discord**, choose a "
+        "en": "No Gemspire account linked yet: in the game, **Play online > Sign in with Discord**, choose a "
               "username, then run `/link` again.",
-        "fr": "Pas encore de compte Splendor lié : dans le jeu, **Jouer en ligne > Se connecter avec Discord**, "
+        "fr": "Pas encore de compte Gemspire lié : dans le jeu, **Jouer en ligne > Se connecter avec Discord**, "
               "choisissez un pseudo, puis relancez `/lier`."},
-    "link_ok": {"en": "✅ Splendor account **{pseudo}** linked.", "fr": "✅ Compte Splendor **{pseudo}** lié."},
+    "link_ok": {"en": "✅ Gemspire account **{pseudo}** linked.", "fr": "✅ Compte Gemspire **{pseudo}** lié."},
     "role_added": {"en": " Role **{role}** added.", "fr": " Rôle **{role}** ajouté."},
     "role_denied": {"en": " (the bot can't give the {role} role: move its role above it)",
                     "fr": " (le bot ne peut pas donner le rôle {role} : placez son rôle au-dessus)"},
     "play": {
-        "en": "🎲 **Splendor** — Windows and Linux, a single file to run:\n• Download: <{download}>\n"
+        "en": "🎲 **Gemspire** — Windows and Linux, a single file to run:\n• Download: <{download}>\n"
               "• Play in your browser, website and leaderboard: <{site}>\n"
               "• Join the **{channel}** voice channel: the bot sets up your game.",
-        "fr": "🎲 **Splendor** — Windows et Linux, un seul fichier à lancer :\n• Téléchargement : <{download}>\n"
+        "fr": "🎲 **Gemspire** — Windows et Linux, un seul fichier à lancer :\n• Téléchargement : <{download}>\n"
               "• Jouer dans le navigateur, site et classement : <{site}>\n"
               "• Rejoignez le salon vocal **{channel}** : le bot prépare votre partie."},
     "rules": {
@@ -108,35 +108,35 @@ TEXTS = {
 # (Discord affiche la traduction aux membres dont Discord est en français)
 COMMAND_FR = {
     "leaderboard": "classement",
-    "Top 10 Splendor online players": "Top 10 des joueurs Splendor en ligne",
+    "Top 10 Gemspire online players": "Top 10 des joueurs Gemspire en ligne",
     "profile": "profil",
     "Elo, rank and wins of a player": "Elo, rang et victoires d'un joueur",
     "member": "membre",
     "Discord member (default: you)": "Membre Discord (par défaut : vous)",
     "username": "pseudo",
-    "Or Splendor username": "Ou pseudo Splendor",
-    "Splendor username": "Pseudo Splendor",
+    "Or Gemspire username": "Ou pseudo Gemspire",
+    "Gemspire username": "Pseudo Gemspire",
     "link": "lier",
-    "Link your Splendor account to Discord and get the Player role":
-        "Relie votre compte Splendor à Discord et donne le rôle Joueur",
+    "Link your Gemspire account to Discord and get the Player role":
+        "Relie votre compte Gemspire à Discord et donne le rôle Joueur",
     "play": "jouer",
-    "Download Splendor or play in your browser": "Télécharger Splendor ou jouer dans le navigateur",
+    "Download Gemspire or play in your browser": "Télécharger Gemspire ou jouer dans le navigateur",
     "rules": "regles",
-    "Splendor rules in short": "Les règles de Splendor en bref",
+    "Gemspire rules in short": "Les règles de Gemspire en bref",
     "report": "signaler",
     "Report a player to the moderators (cheating, username...)":
         "Signaler un joueur aux modérateurs (triche, pseudo...)",
     "reason": "raison",
     "What happened": "Ce qui s'est passé",
     "mod": "mod",
-    "Splendor moderation": "Modération de Splendor",
+    "Gemspire moderation": "Modération de Gemspire",
     "ban": "ban",
-    "Suspend a Splendor account (0 days = permanent)": "Suspendre un compte Splendor (0 jour = définitif)",
+    "Suspend a Gemspire account (0 days = permanent)": "Suspendre un compte Gemspire (0 jour = définitif)",
     "days": "jours",
     "Duration in days (0 = permanent)": "Durée en jours (0 = définitif)",
     "Reason": "Motif",
     "unban": "unban",
-    "Reactivate a Splendor account": "Réactiver un compte Splendor",
+    "Reactivate a Gemspire account": "Réactiver un compte Gemspire",
     "history": "historique",
     "Last 15 games of a player (spot cheating)": "15 dernières parties d'un joueur (repérer la triche)",
     "cancel-game": "annuler-partie",
@@ -145,7 +145,7 @@ COMMAND_FR = {
     "number": "numero",
     "Game number": "Numéro de la partie",
     "delete-account": "supprimer-compte",
-    "Delete a Splendor account (GDPR request)": "Supprimer un compte Splendor (demande RGPD)",
+    "Delete a Gemspire account (GDPR request)": "Supprimer un compte Gemspire (demande RGPD)",
 }
 
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Serveur Splendor en ligne
+Description=Serveur Gemspire en ligne
 After=network-online.target
 Wants=network-online.target
 

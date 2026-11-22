@@ -1,11 +1,11 @@
-"""Bot Discord de Splendor : « Create a game », #leaderboard et commandes.
+"""Bot Discord de Gemspire : « Create a game », #leaderboard et commandes.
 
 Commandes et textes en anglais, traduits en français pour les membres dont
 Discord est en français (texts.py).
 
 Réglages (variables d'environnement) :
   DISCORD_BOT_TOKEN    jeton du bot (portail développeur Discord)
-  SPLENDOR_API         adresse du serveur Splendor (défaut http://127.0.0.1:8080)
+  SPLENDOR_API         adresse du serveur Gemspire (défaut http://127.0.0.1:8080)
   SPLENDOR_BOT_KEY     clé partagée avec le serveur (même valeur des deux côtés)
   CREATE_CHANNEL_NAME  salon vocal « déclencheur » (défaut « Create a game » ; « Crée ta partie » marche aussi)
   SPLENDOR_BOT_STATE   fichier d'état du bot (défaut temp_channels.json)
@@ -152,7 +152,7 @@ async def delete_if_still_empty(channel_id):
     temp_channels.pop(channel_id, None)
     remember()
     try:
-        await channel.delete(reason="Splendor : salon temporaire vide")
+        await channel.delete(reason="Gemspire : salon temporaire vide")
         log.info("Salon temporaire %s supprimé", channel_id)
     except discord.NotFound:
         pass
@@ -166,7 +166,7 @@ async def on_voice_state_update(member, before, after):
         lang = guild_lang(guild)
         channel = await guild.create_voice_channel(temp_channel_name(member.display_name, lang),
                                                    category=after.channel.category,
-                                                   reason="Splendor: create a game")
+                                                   reason="Gemspire: create a game")
         temp_channels[channel.id] = TempChannel(member.id, lang)
         remember()
         await member.move_to(channel)
@@ -180,7 +180,7 @@ async def on_voice_state_update(member, before, after):
 
 
 async def follow_events():
-    """Suit les salons Splendor liés aux salons vocaux (places, lancement)."""
+    """Suit les salons Gemspire liés aux salons vocaux (places, lancement)."""
     since = 0
     while True:
         try:
@@ -198,7 +198,7 @@ async def follow_events():
                 continue  # le bot ne touche qu'aux salons qu'il a créés
             limit, message = apply_event(temp, event)
             if limit is not None and channel.user_limit != limit:
-                await channel.edit(user_limit=limit, reason="Splendor : places de la partie")
+                await channel.edit(user_limit=limit, reason="Gemspire : places de la partie")
             if message:
                 await channel.send(message)
 
@@ -246,12 +246,12 @@ async def call_api(interaction, function, *args, **kwargs):
     except ApiError as error:
         await answer(interaction, "❌ " + str(error), private=True)
     except Exception as error:  # serveur injoignable
-        log.warning("Serveur Splendor : %s", error)
+        log.warning("Serveur Gemspire : %s", error)
         await answer(interaction, tr("server_down", user_lang(interaction)), private=True)
     return None
 
 
-@tree.command(name=_("leaderboard"), description=_("Top 10 Splendor online players"))
+@tree.command(name=_("leaderboard"), description=_("Top 10 Gemspire online players"))
 async def leaderboard(interaction: discord.Interaction):
     players = await call_api(interaction, api.leaderboard)
     if players is not None:
@@ -260,7 +260,7 @@ async def leaderboard(interaction: discord.Interaction):
 
 @tree.command(name=_("profile"), description=_("Elo, rank and wins of a player"))
 @app_commands.rename(member=_("member"), username=_("username"))
-@app_commands.describe(member=_("Discord member (default: you)"), username=_("Or Splendor username"))
+@app_commands.describe(member=_("Discord member (default: you)"), username=_("Or Gemspire username"))
 async def profile(interaction: discord.Interaction, member: discord.Member = None, username: str = None):
     lang = user_lang(interaction)
     if username:
@@ -275,7 +275,7 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
     await answer(interaction, format_profile(result, lang))
 
 
-@tree.command(name=_("link"), description=_("Link your Splendor account to Discord and get the Player role"))
+@tree.command(name=_("link"), description=_("Link your Gemspire account to Discord and get the Player role"))
 async def link(interaction: discord.Interaction):
     lang = user_lang(interaction)
     presence = await call_api(interaction, api.presence, interaction.user.id)
@@ -294,14 +294,14 @@ async def link(interaction: discord.Interaction):
                                   guild.roles)
     if role is not None and isinstance(interaction.user, discord.Member):
         try:
-            await interaction.user.add_roles(role, reason="Splendor: account linked")
+            await interaction.user.add_roles(role, reason="Gemspire: account linked")
             text += tr("role_added", lang, role=role.name)
         except discord.Forbidden:
             text += tr("role_denied", lang, role=role.name)
     await answer(interaction, text, private=True)
 
 
-@tree.command(name=_("play"), description=_("Download Splendor or play in your browser"))
+@tree.command(name=_("play"), description=_("Download Gemspire or play in your browser"))
 async def play(interaction: discord.Interaction):
     lang = user_lang(interaction)
     channel = "<#{}>".format(create_channel_id) if create_channel_id is not None else create_name
@@ -309,16 +309,16 @@ async def play(interaction: discord.Interaction):
                  private=True)
 
 
-@tree.command(name=_("rules"), description=_("Splendor rules in short"))
+@tree.command(name=_("rules"), description=_("Gemspire rules in short"))
 async def rules(interaction: discord.Interaction):
     await answer(interaction, tr("rules", user_lang(interaction),
-                                 wiki="https://github.com/Pierre-Pln-Bys/ProjectSplendor/wiki/Regles-du-jeu"),
+                                 wiki="https://github.com/Pierre-Pln-Bys/Gemspire/wiki/Regles-du-jeu"),
                  private=True)
 
 
 @tree.command(name=_("report"), description=_("Report a player to the moderators (cheating, username...)"))
 @app_commands.rename(username=_("username"), reason=_("reason"))
-@app_commands.describe(username=_("Splendor username"), reason=_("What happened"))
+@app_commands.describe(username=_("Gemspire username"), reason=_("What happened"))
 async def report(interaction: discord.Interaction, username: str, reason: app_commands.Range[str, 5, 500]):
     await mod_log(interaction.guild, tr("report_log", guild_lang(interaction.guild), user=interaction.user.mention,
                                         pseudo=discord.utils.escape_markdown(username),
@@ -343,13 +343,13 @@ async def refuse_if_not_moderator(interaction):
     return True
 
 
-moderation = app_commands.Group(name=_("mod"), description=_("Splendor moderation"),
+moderation = app_commands.Group(name=_("mod"), description=_("Gemspire moderation"),
                                 default_permissions=discord.Permissions(moderate_members=True), guild_only=True)
 
 
-@moderation.command(name=_("ban"), description=_("Suspend a Splendor account (0 days = permanent)"))
+@moderation.command(name=_("ban"), description=_("Suspend a Gemspire account (0 days = permanent)"))
 @app_commands.rename(username=_("username"), days=_("days"), reason=_("reason"))
-@app_commands.describe(username=_("Splendor username"), days=_("Duration in days (0 = permanent)"),
+@app_commands.describe(username=_("Gemspire username"), days=_("Duration in days (0 = permanent)"),
                        reason=_("Reason"))
 async def mod_ban(interaction: discord.Interaction, username: str, days: app_commands.Range[int, 0, 3650],
                   reason: app_commands.Range[str, 3, 200]):
@@ -366,9 +366,9 @@ async def mod_ban(interaction: discord.Interaction, username: str, days: app_com
                                         duration=ban_duration_text(days, log_lang), reason=reason))
 
 
-@moderation.command(name=_("unban"), description=_("Reactivate a Splendor account"))
+@moderation.command(name=_("unban"), description=_("Reactivate a Gemspire account"))
 @app_commands.rename(username=_("username"))
-@app_commands.describe(username=_("Splendor username"))
+@app_commands.describe(username=_("Gemspire username"))
 async def mod_unban(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
@@ -383,7 +383,7 @@ async def mod_unban(interaction: discord.Interaction, username: str):
 
 @moderation.command(name=_("history"), description=_("Last 15 games of a player (spot cheating)"))
 @app_commands.rename(username=_("username"))
-@app_commands.describe(username=_("Splendor username"))
+@app_commands.describe(username=_("Gemspire username"))
 async def mod_history(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
@@ -405,9 +405,9 @@ async def mod_cancel(interaction: discord.Interaction, number: app_commands.Rang
                                         number=number))
 
 
-@moderation.command(name=_("delete-account"), description=_("Delete a Splendor account (GDPR request)"))
+@moderation.command(name=_("delete-account"), description=_("Delete a Gemspire account (GDPR request)"))
 @app_commands.rename(username=_("username"))
-@app_commands.describe(username=_("Splendor username"))
+@app_commands.describe(username=_("Gemspire username"))
 async def mod_delete(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return

@@ -12,8 +12,8 @@ import os
 import sys
 import urllib.request
 
-REPOSITORY = "https://github.com/Pierre-Pln-Bys/ProjectSplendor"
-SITE = "https://splendor.epsilon-forge.fr"
+REPOSITORY = "https://github.com/Pierre-Pln-Bys/Gemspire"
+SITE = "https://gemspire.epsilon-forge.fr"
 GOLD = 0xFFD140
 DESCRIPTION_LIMIT = 4000  # Discord : 4096 caractères au plus dans un embed
 
@@ -58,13 +58,13 @@ def release_message(version, section):
     description = to_discord(section)
     if len(description) > DESCRIPTION_LIMIT:
         description = description[:DESCRIPTION_LIMIT].rsplit("\n", 1)[0] + "\n…"
-    downloads = "{0}/releases/download/{1}/splendor-windows.exe".format(REPOSITORY, tag)
-    linux = "{0}/releases/download/{1}/splendor-linux".format(REPOSITORY, tag)
+    downloads = "{0}/releases/download/{1}/gemspire-windows.exe".format(REPOSITORY, tag)
+    linux = "{0}/releases/download/{1}/gemspire-linux".format(REPOSITORY, tag)
     return {
-        "username": "Splendor",
+        "username": "Gemspire",
         "allowed_mentions": {"parse": []},
         "embeds": [{
-            "title": "Splendor {} est disponible".format(tag),
+            "title": "Gemspire {} est disponible".format(tag),
             "url": release_url,
             "color": GOLD,
             "description": description,

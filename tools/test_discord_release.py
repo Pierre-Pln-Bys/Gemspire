@@ -49,7 +49,7 @@ class ReleaseTests(unittest.TestCase):
     def test_message(self):
         message = release_message("2.0.0", "- " + "x" * 5000)
         embed = message["embeds"][0]
-        self.assertEqual(embed["title"], "Splendor v2.0.0 est disponible")
+        self.assertEqual(embed["title"], "Gemspire v2.0.0 est disponible")
         self.assertTrue(embed["url"].endswith("/releases/tag/v2.0.0"))
         self.assertLessEqual(len(embed["description"]), 4096)
         self.assertEqual(message["allowed_mentions"], {"parse": []})  # jamais de @everyone

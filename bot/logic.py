@@ -3,7 +3,7 @@
 Fonctionnement :
 1. Un membre rejoint le salon vocal « Crée ta partie » : le bot crée un salon
    vocal temporaire « Partie de <nom> » et l'y déplace.
-2. Si le compte Splendor lié à ce Discord a le jeu ouvert, le serveur propose
+2. Si le compte Gemspire lié à ce Discord a le jeu ouvert, le serveur propose
    dans le jeu de créer la partie (mode, places).
 3. Le salon temporaire est limité au nombre de places de la partie, et
    supprimé quand il est resté vide 30 secondes.
@@ -32,8 +32,8 @@ OFFER_RETRY_COUNT = 12        # pendant 2 minutes
 DELETE_DELAY_SECONDS = 30     # un salon vide est supprimé après ce délai
 RANKING_SECONDS = 600         # mise à jour du salon #classement
 RANKING_SIZE = 10
-SITE_URL = "https://splendor.epsilon-forge.fr"
-DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest"
+SITE_URL = "https://gemspire.epsilon-forge.fr"
+DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"
 MEDALS = ["🥇", "🥈", "🥉"]
 
 
@@ -222,7 +222,7 @@ class TempChannel:
     def __init__(self, owner_id, lang="en"):
         self.owner_id = owner_id
         self.lang = lang          # langue du serveur Discord
-        self.code = None          # code du salon Splendor lié
+        self.code = None          # code du salon Gemspire lié
         self.announced = False    # code déjà annoncé dans le salon
         self.started = False      # partie lancée
 

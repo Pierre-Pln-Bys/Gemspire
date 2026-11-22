@@ -1,4 +1,4 @@
-# Déployer Splendor sur le Raspberry Pi
+# Déployer Gemspire sur le Raspberry Pi
 
 Ce dossier installe le **serveur** (`splendor-server`) et le **bot Discord**
 (`bot/`) comme services systemd sur le Raspberry Pi.
@@ -15,11 +15,11 @@ Ce dossier installe le **serveur** (`splendor-server`) et le **bot Discord**
 Sur le Pi (Raspberry Pi OS 64 bits ou Debian/Ubuntu) :
 
 ```bash
-git clone https://github.com/Pierre-Pln-Bys/ProjectSplendor.git
+git clone https://github.com/Pierre-Pln-Bys/Gemspire.git
 ```
 
 ```bash
-cd ProjectSplendor && sudo deploy/install.sh
+cd Gemspire && sudo deploy/install.sh
 ```
 
 Le serveur écoute sur `127.0.0.1:8090` (pas exposé directement ; 8080 est souvent déjà pris, par exemple par Nextcloud). Au premier
@@ -85,7 +85,7 @@ Assets* une image `logo` si on veut une icône.
 Fonctionnement :
 
 - **Crée ta partie** : quand un membre rejoint ce salon, le bot crée « Partie
-  de <nom> » et l'y déplace. Si son compte Splendor (connecté avec Discord) a
+  de <nom> » et l'y déplace. Si son compte Gemspire (connecté avec Discord) a
   le jeu ouvert, le jeu propose de créer la partie ; le salon vocal est alors
   limité au nombre de places, le code y est annoncé, et le salon est supprimé
   quand il est resté vide 30 secondes (le bot s'en souvient même après un
@@ -104,8 +104,8 @@ Fonctionnement :
 
 `install.sh` installe le jeu WebAssembly dans `/opt/splendor/web` : celui de
 `build/web` s'il a été compilé sur place (`make web`), sinon l'archive
-`splendor-web.tar.gz` de la dernière release GitHub. Il est servi sur
-`https://splendor.epsilon-forge.fr/play/`, et le site affiche alors le bouton
+`gemspire-web.tar.gz` de la dernière release GitHub. Il est servi sur
+`https://gemspire.epsilon-forge.fr/play/`, et le site affiche alors le bouton
 « Jouer dans le navigateur ».
 
 ## Changelog sur Discord
@@ -124,7 +124,7 @@ l'historique). Aperçu sans envoyer : `python3 tools/discord_release.py vX.Y.Z -
 
 ## 5. Indiquer le serveur au jeu
 
-Le jeu utilise par défaut `https://splendor.epsilon-forge.fr` (constante
+Le jeu utilise par défaut `https://gemspire.epsilon-forge.fr` (constante
 `DEFAULT_SERVER` dans `src/gui.hpp`). Pour un autre serveur : fichier
 `serveur.txt` à côté de l'exécutable contenant son adresse, ou variable
 `SPLENDOR_SERVER`.
