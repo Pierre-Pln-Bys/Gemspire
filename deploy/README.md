@@ -22,7 +22,7 @@ git clone https://github.com/Pierre-Pln-Bys/ProjectSplendor.git
 cd ProjectSplendor && sudo deploy/install.sh
 ```
 
-Le serveur écoute sur `127.0.0.1:8080` (pas exposé directement). Au premier
+Le serveur écoute sur `127.0.0.1:8090` (pas exposé directement ; 8080 est souvent déjà pris, par exemple par Nextcloud). Au premier
 lancement, `/etc/splendor/splendor.env` est créé avec une clé de bot
 aléatoire. Pour mettre à jour plus tard : `git pull` puis relancer le script.
 
@@ -39,11 +39,11 @@ cloudflared tunnel route dns splendor splendor.votre-domaine.fr
 ```
 
 Configuration du tunnel (`/etc/cloudflared/config.yml`) : diriger
-`splendor.votre-domaine.fr` vers `http://127.0.0.1:8080`, puis
+`splendor.votre-domaine.fr` vers `http://127.0.0.1:8090`, puis
 `sudo cloudflared service install`.
 
 Autre possibilité : rediriger les ports 80/443 de la box vers le Pi et
-mettre **Caddy** devant le serveur (`reverse_proxy 127.0.0.1:8080`, certificat
+mettre **Caddy** devant le serveur (`reverse_proxy 127.0.0.1:8090`, certificat
 automatique).
 
 Dans `/etc/splendor/splendor.env` : `SPLENDOR_PUBLIC_URL=https://splendor.votre-domaine.fr`.
@@ -102,5 +102,5 @@ journalctl -u splendor-server -u splendor-bot -f
 ```
 
 ```bash
-curl -s http://127.0.0.1:8080/health
+curl -s http://127.0.0.1:8090/health
 ```
