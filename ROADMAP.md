@@ -1,11 +1,12 @@
-# Roadmap vers la v3
+# Roadmap
 
 Point de départ : v2.1.0 (20/11/2026). **Fait depuis** : v2.2 (fondations),
 v2.3 (ordinateur), v2.4 (sauvegarde), v3.0 (interface raylib autonome),
 v3.1 (serveur, comptes, parties en ligne, Elo).
-v3.2 (Discord : présence, invitations, bot vocal ; kit de déploiement).
-**Prochaine étape** : installer sur le Raspberry Pi et valider avec les vraies
-applications Discord / Google, puis la v4 (communauté, audit de sécurité).
+v3.2 (Discord : présence, invitations, bot vocal ; serveur en ligne sur le
+Raspberry Pi, `https://splendor.epsilon-forge.fr`).
+**Prochaine étape** : v3.3 (corrections, site web), v3.4 (jeu sur mobile),
+puis la **v4 : publication et test d'intrusion**. La communauté passe en v5.
 
 Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -104,23 +105,50 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
   temporaire ; si le compte lié a le jeu ouvert, le jeu propose de créer la
   partie (mode, places) ; le salon est limité au nombre de places et supprimé
   quand il est vide.
-- [ ] Déploiement du serveur sur le Raspberry Pi du projet (HTTPS, démarrage
-  automatique) et documentation. *Kit prêt (`deploy/`) ; reste à l'installer
-  sur le Pi et à tester avec les vraies applications Discord et Google.*
+- [x] Déploiement du serveur sur le Raspberry Pi du projet (HTTPS par
+  Cloudflare Tunnel, démarrage automatique) et documentation ; testé avec les
+  vraies applications Discord et Google, sous Linux et Windows 11 (v3.2.2).
 
-## v4 — Communauté (idées validées, à détailler)
+## v3.3 — Corrections et site web
+
+- [x] Sélection des jetons : impossible de choisir 2 jetons identiques si la
+  pile en a moins de 4 (ou avec d'autres couleurs), ni plus de 3 couleurs.
+- [x] Annonce bien visible quand un noble rend visite à un joueur.
+- [x] Annonce du dernier tour quand un joueur atteint 15 points.
+- [ ] Page d'accueil du site (`/`) : présentation, téléchargements, liens.
+- [ ] Classement public (`/classement`), lisible sur mobile.
+- [ ] Pages Conditions d'utilisation (`/conditions`) et Confidentialité
+  (`/confidentialite`), demandées par Google et Discord.
+
+## v3.4 — Jouer sur mobile
+
+- [ ] Version navigateur (`/jouer`) utilisable sur téléphone : le même code
+  C++ compilé en WebAssembly (raylib + Emscripten), commandes tactiles,
+  connexion Discord / Google et parties en ligne.
+
+## v4 — Publication et sécurité (version majeure)
+
+- [ ] Google : écran de consentement complété (accueil, confidentialité,
+  e-mail d'assistance) et application **publiée** (plus seulement des
+  utilisateurs test).
+- [ ] Discord : application rattachée à une Team, liens Conditions et
+  Confidentialité, **vérification** de l'application et du bot.
+- [ ] Test d'intrusion autorisé du serveur, du Raspberry Pi, du tunnel et de
+  l'application (extension de pentest), rapport.
+- [ ] Corrections des failles trouvées, nouveau test.
+- [ ] Signature des exécutables Windows (plus d'avertissement SmartScreen) et
+  empreintes SHA-256 publiées avec chaque release.
+
+## v5 — Communauté (idées validées, à détailler)
 
 - [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
   mise en sourdine d'un joueur, réactions rapides.
-- [ ] Audit de sécurité complet (tests d'intrusion autorisés) du serveur, du
-  Raspberry Pi et de l'application, puis corrections.
 - [ ] Commandes du bot : `/classement`, `/stats @joueur`, `/defi @joueur`.
 - [ ] Mode spectateur et rediffusion des parties (historique d'événements).
 - [ ] Saisons classées (Elo remis partiellement à zéro, badges).
 - [ ] Recherche de partie automatique à Elo proche.
 - [ ] Liste d'amis, statut en ligne / en partie.
 - [ ] Succès (premier noble, victoire sans réserver...).
-- [ ] Page web publique du classement.
 
 ## Plus tard
 
@@ -133,12 +161,8 @@ Suivi des tâches : [GitHub Project « Splendor — Roadmap v3 »](https://githu
 Ces étapes demandent votre compte et ne peuvent pas être faites à votre
 place :
 
-- ~~**Wiki** : créer la première page sur GitHub~~ (fait).
-- **Discord** : créer une application sur le [portail développeur](https://discord.com/developers/applications)
-  (identifiant client pour la connexion et la Rich Presence, secret client
-  pour le serveur, adresse de retour OAuth). Créer un webhook dans le salon
-  qui recevra les invitations.
-- **Google** : créer un identifiant OAuth « Application de bureau » dans
-  Google Cloud Console.
-- **Hébergement** du serveur (v3.2) : le Raspberry Pi du projet ; donner un
-  accès SSH par clé et un nom de domaine (ou tunnel) pour le HTTPS.
+- ~~Wiki, application Discord, webhook, identifiant OAuth Google, accès au
+  Raspberry Pi et nom de domaine~~ (fait, v3.2).
+- **v4** : créer la Team Discord et y rattacher l'application ; publier
+  l'application Google une fois les pages du site en ligne ; choisir une
+  solution de signature des exécutables Windows.
