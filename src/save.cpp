@@ -6,7 +6,7 @@
 
 // Exemple de sauvegarde (une information par ligne) :
 //
-//   GEMSPIRE 1
+//   SPLENDOR 1                  (mot-clé technique, gardé après le passage au nom Gemspire)
 //   mode classique
 //   round 3
 //   current 1
@@ -79,7 +79,7 @@ static std::vector<Card> hidden_cards(const std::vector<Card>& cards)
 std::string write_game(const Game& game, int viewer)
 {
     std::ostringstream out;
-    out << "GEMSPIRE 1\n";
+    out << "SPLENDOR 1\n";
     out << "mode " << (game.mode_ == Mode::Classic ? "classique" : "rapide") << "\n";
     out << "round " << game.round_ << "\n";
     out << "current " << game.current_ << "\n";
@@ -265,7 +265,7 @@ std::string load_game(const std::string& text, std::unique_ptr<Game>& game)
 {
     try {
         Reader reader(text);
-        reader.expect("GEMSPIRE");
+        reader.expect("SPLENDOR");
         reader.number(1, 1);
         reader.expect("mode");
         std::string mode_name = reader.word();

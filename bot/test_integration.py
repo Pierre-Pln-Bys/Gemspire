@@ -54,7 +54,7 @@ class IntegrationTests(unittest.TestCase):
     def call(self, path, token=None, body=None):
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(self.url + path, data=data, method="POST" if data else "GET")
-        request.add_header("X-Gemspire-Version", "99.0.0")  # comme un jeu à jour
+        request.add_header("X-Splendor-Version", "99.0.0")  # comme un jeu à jour
         if token:
             request.add_header("Authorization", "Bearer " + token)
         with urllib.request.urlopen(request, timeout=40) as response:

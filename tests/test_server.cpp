@@ -81,11 +81,11 @@ int main()
         auto refused_config = old_game.Get("/config");
         assert(refused_config && refused_config->status == 426);
         assert(json::parse(refused_config->body)["min_version"] == SPLENDOR_VERSION);
-        auto too_old = old_game.Get("/me", {{"X-Gemspire-Version", "1.0.0"}});
+        auto too_old = old_game.Get("/me", {{"X-Splendor-Version", "1.0.0"}});
         assert(too_old && too_old->status == 426);
-        auto garbage = old_game.Get("/me", {{"X-Gemspire-Version", "9.x.0"}});
+        auto garbage = old_game.Get("/me", {{"X-Splendor-Version", "9.x.0"}});
         assert(garbage && garbage->status == 426);
-        auto newer = old_game.Get("/config", {{"X-Gemspire-Version", "99.0.0"}});
+        auto newer = old_game.Get("/config", {{"X-Splendor-Version", "99.0.0"}});
         assert(newer && newer->status == 200);
         assert(old_game.Get("/leaderboard")->status == 200);
         assert(old_game.Get("/")->status == 200);
@@ -94,7 +94,7 @@ int main()
 
     httplib::Client client("127.0.0.1", PORT);
     client.set_read_timeout(5);
-    client.set_default_headers({{"X-Gemspire-Version", SPLENDOR_VERSION}});
+    client.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
 
     // --- Comptes et pseudos
     std::string alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaaaa");

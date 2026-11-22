@@ -85,7 +85,7 @@ static bool version_allowed(const std::string& version, const std::string& minim
 }
 
 // Routes appelées par le jeu : elles exigent une version assez récente
-// (en-tête X-Gemspire-Version). Le site, le navigateur (OAuth) et le bot
+// (en-tête X-Splendor-Version). Le site, le navigateur (OAuth) et le bot
 // ne sont pas concernés.
 static bool route_needs_version(const std::string& path)
 {
@@ -400,7 +400,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         if (!route_needs_version(request.path)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
-        std::string version = request.get_header_value("X-Gemspire-Version");
+        std::string version = request.get_header_value("X-Splendor-Version");
         if (version_allowed(version, config_.min_version)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
