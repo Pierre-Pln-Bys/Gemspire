@@ -8,8 +8,9 @@ Raspberry Pi, `https://gemspire.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
 v3.5 (jeu dans le navigateur, site et bot bilingues).
-**Prochaines étapes** : v3.6 (Gemspire), v3.7 (Activité Discord), puis la
-**v4 : publication et test d'intrusion**. La communauté passe en v5.
+**Prochaines étapes** : v3.7 (Activité Discord, jeu en anglais), v3.8
+(communauté), v3.9 (compétition), puis la **v4 : publication et test
+d'intrusion**, qui couvrira tout cela.
 
 Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -150,17 +151,32 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Nouveau nom **Gemspire** (jeu, site, bot, dépôt GitHub), licence GPL-3.0.
 - [x] Changelog publié sur Discord à chaque release ; bot réglable par
   identifiants de salons et de rôles.
-- [ ] Adresse `gemspire.epsilon-forge.fr` (tunnel, Discord, Google, Pi), puis
+- [x] Adresse `gemspire.epsilon-forge.fr` (tunnel, Discord, Google, Pi),
   release v3.6.0 avec les exécutables `gemspire-*`.
+
+## v3.7 — Activité Discord et jeu en anglais
+
 - [ ] Interface du jeu en anglais, avec choix de la langue (anglais par
   défaut, français).
-
-## v3.7 — Activité Discord
-
 - [ ] Gemspire comme **Activité Discord** : on lance une partie directement
   dans un salon vocal, sans rien installer (la version navigateur intégrée à
   Discord avec l'Embedded App SDK : connexion par Discord, réseau par le
   proxy de Discord, partie liée au salon vocal).
+
+## v3.8 — Communauté
+
+- [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
+  mise en sourdine d'un joueur, réactions rapides.
+- [ ] Liste d'amis, statut en ligne / en partie.
+- [ ] Commandes du bot : `/challenge @joueur` (défi), rôles de rang selon
+  l'Elo.
+- [ ] Succès (premier noble, victoire sans réserver...).
+
+## v3.9 — Compétition
+
+- [ ] Mode spectateur et rediffusion des parties (historique d'événements).
+- [ ] Saisons classées (Elo remis partiellement à zéro, badges).
+- [ ] Recherche de partie automatique à Elo proche.
 
 ## v4 — Publication et sécurité (version majeure)
 
@@ -174,17 +190,6 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [ ] Corrections des failles trouvées, nouveau test.
 - [ ] Signature des exécutables Windows (plus d'avertissement SmartScreen) et
   empreintes SHA-256 publiées avec chaque release.
-
-## v5 — Communauté (idées validées, à détailler)
-
-- [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
-  mise en sourdine d'un joueur, réactions rapides.
-- [ ] Commandes du bot : `/defi @joueur`, rôles de rang selon l'Elo.
-- [ ] Mode spectateur et rediffusion des parties (historique d'événements).
-- [ ] Saisons classées (Elo remis partiellement à zéro, badges).
-- [ ] Recherche de partie automatique à Elo proche.
-- [ ] Liste d'amis, statut en ligne / en partie.
-- [ ] Succès (premier noble, victoire sans réserver...).
 
 ## Plus tard
 
