@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "httplib.h"
+#include "version.hpp"
 
 struct NetQueue {
     std::mutex mutex;
@@ -50,7 +51,8 @@ void NetClient::send(int tag, const std::string& method, const std::string& path
             httplib::Client client(server);
             client.set_connection_timeout(5);
             client.set_read_timeout(40);  // plus long que l'attente longue du serveur
-            httplib::Headers headers;
+            // Le serveur refuse les versions trop anciennes (réponse 426)
+            httplib::Headers headers = {{"X-Splendor-Version", SPLENDOR_VERSION}};
             if (!token.empty()) {
                 headers.emplace("Authorization", "Bearer " + token);
             }

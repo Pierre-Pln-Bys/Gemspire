@@ -560,12 +560,25 @@ static std::string error_of(const NetResponse& response, const nlohmann::json& b
     return "Erreur du serveur (" + std::to_string(response.status) + ").";
 }
 
+static void save_current_game(App& app);  // plus bas
+
 static void handle_responses(App& app)
 {
     OnlineState& online = app.online;
     for (const NetResponse& response : app.net.poll()) {
         nlohmann::json body = nlohmann::json::parse(response.body, nullptr, false);
         bool ok = response.status == 200 && body.is_object();
+        // Jeu trop ancien : le serveur refuse tout, on bloque sur l'écran de mise à jour
+        if (response.status == 426) {
+            app.min_version = body.is_object() ? body.value("min_version", std::string("?")) : std::string("?");
+            app.download_url = body.is_object() ? body.value("download", std::string()) : std::string();
+            if (app.screen == Screen::Board && app.game && !online.in_game && !app.game->is_over()) {
+                save_current_game(app);  // partie locale gardée pour après la mise à jour
+            }
+            app.screen = Screen::Update;
+            online.in_game = false;
+            continue;
+        }
         switch (response.tag) {
         case TagMeQuiet:
             // Au démarrage : session encore valide ? (sans changer d'écran)
@@ -1252,6 +1265,20 @@ static void update(App& app, Vector2 mouse)
     }
     if (online.in_game) {
         poll_game(app);
+    }
+    if (app.screen == Screen::Update) {
+        // Bloqué : seulement « Télécharger » et « Quitter »
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            for (const Button& button : visible_buttons(app)) {
+                if (point_in(mouse, button.rect) && button.id == ButtonId::Download) {
+                    OpenURL(app.download_url.empty() ? "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest"
+                                                     : app.download_url.c_str());
+                } else if (point_in(mouse, button.rect) && button.id == ButtonId::Quit) {
+                    app.quit = true;
+                }
+            }
+        }
+        return;
     }
     if (app.screen == Screen::Board && online.in_game && !app.game) {
         return;  // la partie arrive du serveur

@@ -12,6 +12,7 @@
 #include "../src/ai.hpp"
 #include "../src/move_json.hpp"
 #include "../src/save.hpp"
+#include "../src/version.hpp"
 
 using nlohmann::json;
 
@@ -64,6 +65,7 @@ int main()
     config.dev_login = true;
     config.wait_seconds = 1;
     config.bot_key = "cle-de-test-du-bot";
+    config.min_version = SPLENDOR_VERSION;
     config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
     ServerApp app(config);
     assert(app.ok());
@@ -72,8 +74,27 @@ int main()
     std::thread thread([&]() { server.listen("127.0.0.1", PORT); });
     server.wait_until_ready();
 
+    // --- Version du jeu : sans en-tête ou trop ancienne, refusé (426) ; le site,
+    //     le classement public et le bot ne sont pas concernés
+    {
+        httplib::Client old_game("127.0.0.1", PORT);
+        auto refused_config = old_game.Get("/config");
+        assert(refused_config && refused_config->status == 426);
+        assert(json::parse(refused_config->body)["min_version"] == SPLENDOR_VERSION);
+        auto too_old = old_game.Get("/me", {{"X-Splendor-Version", "1.0.0"}});
+        assert(too_old && too_old->status == 426);
+        auto garbage = old_game.Get("/me", {{"X-Splendor-Version", "9.x.0"}});
+        assert(garbage && garbage->status == 426);
+        auto newer = old_game.Get("/config", {{"X-Splendor-Version", "99.0.0"}});
+        assert(newer && newer->status == 200);
+        assert(old_game.Get("/leaderboard")->status == 200);
+        assert(old_game.Get("/")->status == 200);
+        assert(old_game.Get("/health")->status == 200);
+    }
+
     httplib::Client client("127.0.0.1", PORT);
     client.set_read_timeout(5);
+    client.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
 
     // --- Comptes et pseudos
     std::string alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaaaa");

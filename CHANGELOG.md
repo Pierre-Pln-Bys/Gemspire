@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.1] - 2026-11-22
+
+### Ajouté
+- **Version obligatoire** : le jeu envoie sa version au serveur ; une version
+  trop ancienne (ou sans version) est refusée et le jeu affiche l'écran
+  bloquant « Mise à jour nécessaire » (bouton de téléchargement, partie
+  locale en cours sauvegardée). Version minimale : `SPLENDOR_MIN_VERSION`,
+  par défaut celle du serveur. Les versions jusqu'à 3.4.0 ne peuvent donc
+  plus jouer en ligne une fois le serveur mis à jour.
+
 ## [3.4.0] - 2026-11-22
 
 ### Ajouté

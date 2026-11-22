@@ -23,7 +23,7 @@ const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 const char* const DEFAULT_SERVER = "https://splendor.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
-enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard };
+enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -35,7 +35,7 @@ enum class ButtonId {
     // En ligne
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
-    Invite, OfferCreate, OfferIgnore,
+    Invite, OfferCreate, OfferIgnore, Download,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -175,6 +175,8 @@ struct App {
     NetClient net;
     OnlineState online;
     DiscordPresence discord;
+    std::string min_version;               // version exigée par le serveur (écran « Mise à jour »)
+    std::string download_url;
     long long screen_start = 0;            // pour le chronomètre de la Rich Presence
     Screen presence_screen = Screen::Home; // écran affiché lors du dernier calcul de présence
 

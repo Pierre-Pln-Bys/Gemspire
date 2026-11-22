@@ -5,8 +5,10 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include "../src/move_json.hpp"
+#include "../src/version.hpp"
 #include "pages.hpp"
 
 using nlohmann::json;
@@ -33,6 +35,7 @@ ServerConfig config_from_environment()
     config.discord_webhook = env("DISCORD_WEBHOOK_URL");
     config.bot_key = env("SPLENDOR_BOT_KEY");
     config.dev_login = env("SPLENDOR_DEV_LOGIN") == "1";
+    config.min_version = env("SPLENDOR_MIN_VERSION", SPLENDOR_VERSION);
     config.contact_email = env("SPLENDOR_CONTACT_EMAIL");
     config.discord_invite = env("SPLENDOR_DISCORD_INVITE");
     config.turn_seconds = std::atoi(env("SPLENDOR_TURN_SECONDS", "120").c_str());
@@ -53,6 +56,45 @@ static void reply(httplib::Response& response, int status, const json& body)
 static void reply_error(httplib::Response& response, int status, const std::string& message)
 {
     reply(response, status, {{"error", message}});
+}
+
+// « 3.4.1 » -> {3, 4, 1} ; une version mal écrite donne {-1, -1, -1}
+static std::vector<int> version_parts(const std::string& text)
+{
+    std::vector<int> parts;
+    std::istringstream in(text);
+    std::string piece;
+    while (std::getline(in, piece, '.')) {
+        if (piece.empty() || piece.size() > 4 || piece.find_first_not_of("0123456789") != std::string::npos) {
+            return {-1, -1, -1};
+        }
+        parts.push_back(std::atoi(piece.c_str()));
+    }
+    if (parts.size() != 3) {
+        return {-1, -1, -1};
+    }
+    return parts;
+}
+
+// Le jeu qui envoie `version` est-il assez récent ?
+static bool version_allowed(const std::string& version, const std::string& minimum)
+{
+    std::vector<int> mine = version_parts(version);
+    return mine[0] >= 0 && mine >= version_parts(minimum);
+}
+
+// Routes appelées par le jeu : elles exigent une version assez récente
+// (en-tête X-Splendor-Version). Le site, le navigateur (OAuth) et le bot
+// ne sont pas concernés.
+static bool route_needs_version(const std::string& path)
+{
+    const char* prefixes[] = {"/me", "/lobbies", "/games/", "/auth/poll", "/auth/logout", "/config"};
+    for (const char* prefix : prefixes) {
+        if (path.compare(0, std::string(prefix).size(), prefix) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Date lisible (jj/mm/aaaa, heure UTC)
@@ -330,6 +372,23 @@ void ServerApp::setup_routes(httplib::Server& server)
 {
     server.set_payload_max_length(16 * 1024);
 
+    // Jeu trop ancien (ou sans version) : refusé avec 426, le jeu affiche
+    // alors l'écran « Mise à jour nécessaire »
+    server.set_pre_routing_handler([this](const httplib::Request& request, httplib::Response& response) {
+        if (!route_needs_version(request.path)) {
+            return httplib::Server::HandlerResponse::Unhandled;
+        }
+        std::string version = request.get_header_value("X-Splendor-Version");
+        if (version_allowed(version, config_.min_version)) {
+            return httplib::Server::HandlerResponse::Unhandled;
+        }
+        reply(response, 426, {{"error", "Cette version de Splendor est trop ancienne : téléchargez la version "
+                                        + config_.min_version + " ou plus récente."},
+                              {"min_version", config_.min_version},
+                              {"download", "https://github.com/Pierre-Pln-Bys/ProjectSplendor/releases/latest"}});
+        return httplib::Server::HandlerResponse::Handled;
+    });
+
     server.Get("/health", [](const httplib::Request&, httplib::Response& response) {
         reply(response, 200, {{"status", "ok"}});
     });
@@ -455,7 +514,7 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     // Réglages publics utiles au jeu (identifiant public de l'application Discord)
     server.Get("/config", [this](const httplib::Request&, httplib::Response& response) {
-        reply(response, 200, {{"discord_app_id", config_.discord_client_id}});
+        reply(response, 200, {{"discord_app_id", config_.discord_client_id}, {"min_version", config_.min_version}});
     });
 
     server.Post("/me/pseudo", [this](const httplib::Request& request, httplib::Response& response) {

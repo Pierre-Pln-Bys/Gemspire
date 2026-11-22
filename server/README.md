@@ -30,6 +30,7 @@ cpp-httplib, nlohmann/json et SQLite sont inclus dans `third_party/`.
 | `DISCORD_WEBHOOK_URL` | annonces de salons (v3.2) | vide |
 | `SPLENDOR_DEV_LOGIN` | `1` : connexion de test sans OAuth (**jamais en production**) | désactivé |
 | `SPLENDOR_TURN_SECONDS` | temps pour jouer un tour en ligne | `120` |
+| `SPLENDOR_MIN_VERSION` | version minimale du jeu acceptée | version du serveur |
 | `SPLENDOR_CONTACT_EMAIL` | adresse de contact affichée sur le site | vide |
 | `SPLENDOR_DISCORD_INVITE` | lien d'invitation du serveur Discord (site) | vide |
 
@@ -88,6 +89,21 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 
 `GET /games/ID` donne aussi `turn_seconds_left` (temps restant du tour) et
 `missed` (tours manqués d'affilée par place).
+
+## Version du jeu
+
+Le jeu envoie sa version dans l'en-tête `X-Splendor-Version`. Pour les routes
+du jeu (`/me`, `/lobbies`, `/games/`, `/auth/poll`, `/auth/logout`,
+`/config`), une version absente, mal écrite ou plus ancienne que
+`SPLENDOR_MIN_VERSION` est refusée avec **426** (`error`, `min_version`,
+`download`) : le jeu affiche alors l'écran « Mise à jour nécessaire » et se
+bloque. Le site, `/leaderboard`, `/health`, la connexion dans le navigateur et
+le bot ne sont pas concernés. Par défaut, la version minimale est celle du
+serveur : mettre à jour le serveur oblige à mettre à jour le jeu.
+
+Un jeu modifié peut annoncer une fausse version : ce contrôle sert à écarter
+les versions périmées, pas la triche (le serveur arbitre de toute façon
+chaque coup).
 
 ## Temps de jeu et abandon
 

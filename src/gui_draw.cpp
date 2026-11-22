@@ -250,6 +250,12 @@ std::vector<Button> visible_buttons(const App& app)
         add(buttons, ButtonId::BackOnline, "Retour", {540, 700, 200, 46});
         return buttons;
     }
+    case Screen::Update: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::Download, "Télécharger la mise à jour", {440, 470, 400, 54});
+        add(buttons, ButtonId::Quit, "Quitter", {540, 540, 200, 46});
+        return buttons;
+    }
     case Screen::Board: break;
     }
     return board_buttons(app);
@@ -1224,6 +1230,22 @@ static void draw_lobby(const App& app, Vector2 mouse)
     draw_message_line(app, 760);
 }
 
+// Jeu trop ancien : le serveur exige une version plus récente
+static void draw_update(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    Rectangle r = {290, 200, 700, 410};
+    rounded(r, 18, {0, 0, 0, 110});
+    outline(r, 18, 3, GOLD_UI, 0);
+    text_centered(app, "Mise à jour nécessaire", 640, 260, 38, true, GOLD_UI);
+    text_centered(app, "Cette version de Splendor (" + std::string(SPLENDOR_VERSION) + ") n'est plus acceptée", 640,
+                  330, 20, false, WHITE_TEXT);
+    text_centered(app, "par le serveur. Téléchargez la version " + app.min_version + " ou plus récente.", 640, 362,
+                  20, false, WHITE_TEXT);
+    text_centered(app, "Votre partie locale en cours est sauvegardée.", 640, 410, 16, false, SOFT_TEXT);
+    draw_buttons_of(app, visible_buttons(app), mouse);
+}
+
 static void draw_leaderboard(const App& app, Vector2 mouse)
 {
     const OnlineState& online = app.online;
@@ -1264,6 +1286,7 @@ void draw_app(const App& app, Vector2 mouse)
     case Screen::Online: draw_online(app, mouse); break;
     case Screen::Lobby: draw_lobby(app, mouse); break;
     case Screen::Leaderboard: draw_leaderboard(app, mouse); break;
+    case Screen::Update: draw_update(app, mouse); break;
     case Screen::Board:
         if (app.game) {
             draw_board(app, mouse);
