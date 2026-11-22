@@ -86,10 +86,10 @@ supprimé quand il se vide.
 
 ## 5. Indiquer le serveur au jeu
 
-Dans le jeu : fichier `serveur.txt` à côté de l'exécutable contenant
-`https://splendor.votre-domaine.fr` (ou variable `SPLENDOR_SERVER`). Une fois
-l'adresse définitive connue, elle deviendra l'adresse par défaut des
-releases.
+Le jeu utilise par défaut `https://splendor.epsilon-forge.fr` (constante
+`DEFAULT_SERVER` dans `src/gui.hpp`). Pour un autre serveur : fichier
+`serveur.txt` à côté de l'exécutable contenant son adresse, ou variable
+`SPLENDOR_SERVER`.
 
 ## Vérifier
 

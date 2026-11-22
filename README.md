@@ -96,8 +96,10 @@ Depuis l'accueil, « Jouer en ligne » :
   Discord), le jeu propose de créer la partie, et le salon vocal est limité au
   nombre de places.
 
-L'adresse du serveur se règle avec la variable `SPLENDOR_SERVER` ou un fichier
-`serveur.txt` à côté du jeu. Le serveur est décrit dans
+Par défaut, le jeu se connecte au serveur officiel
+`https://splendor.epsilon-forge.fr`. Pour un autre serveur (par exemple
+`http://localhost:8080` en développement) : variable `SPLENDOR_SERVER` ou
+fichier `serveur.txt` à côté du jeu. Le serveur est décrit dans
 [server/README.md](server/README.md), le bot dans `bot/`, l'installation sur
 le Raspberry Pi dans [deploy/README.md](deploy/README.md).
 

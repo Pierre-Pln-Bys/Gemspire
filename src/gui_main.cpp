@@ -373,12 +373,12 @@ static void save_session(const std::string& token)
     file << token << "\n";
 }
 
-// Adresse du serveur : variable SPLENDOR_SERVER, sinon serveur.txt, sinon local
+// Adresse du serveur : variable SPLENDOR_SERVER, sinon serveur.txt, sinon le serveur officiel
 static void configure_network(App& app)
 {
     const char* from_env = std::getenv("SPLENDOR_SERVER");
     std::string server = from_env != nullptr ? from_env : read_first_line(SERVER_FILE);
-    app.net.set_server(server.empty() ? "http://localhost:8080" : server);
+    app.net.set_server(server.empty() ? DEFAULT_SERVER : server);
     app.net.set_token(read_first_line(SESSION_FILE));
     const char* dev = std::getenv("SPLENDOR_DEV");
     app.online.dev_login = dev != nullptr && std::string(dev) == "1";
