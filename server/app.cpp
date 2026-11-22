@@ -393,7 +393,9 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string host = request.get_header_value("Host");
         std::string public_host = config_.public_url.substr(config_.public_url.find("://") + 3);
         bool local = host.compare(0, 9, "127.0.0.1") == 0 || host.compare(0, 9, "localhost") == 0;
-        if (request.method == "GET" && !host.empty() && !local && host != public_host && is_site_page(request.path)) {
+        bool page = is_site_page(request.path)
+                    || (request.path == "/leaderboard" && request.get_header_value("Accept").find("text/html") != std::string::npos);
+        if (request.method == "GET" && !host.empty() && !local && host != public_host && page) {
             response.set_redirect(config_.public_url + request.target, 301);
             return httplib::Server::HandlerResponse::Handled;
         }
