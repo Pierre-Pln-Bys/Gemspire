@@ -25,7 +25,7 @@ NET_CFLAGS = -isystem third_party/httplib -DCPPHTTPLIB_OPENSSL_SUPPORT
 
 ifeq ($(OS),Windows_NT)
     # Windows (MinGW) : exécutable autonome, sans fenêtre de console
-    GUI_LIBS = $(RAYLIB_LIB) -lssl -lcrypto -lws2_32 -lcrypt32 -lopengl32 -lgdi32 -lwinmm -static -mwindows
+    GUI_LIBS = $(RAYLIB_LIB) -lssl -lcrypto -lws2_32 -lcrypt32 -lbcrypt -lopengl32 -lgdi32 -lwinmm -static -mwindows
 else
     # Linux : bibliothèques C++ liées statiquement, OpenGL et X11 du système
     # OpenSSL 3 (libssl.so.3) est présent sur toutes les distributions récentes
