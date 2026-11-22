@@ -124,6 +124,11 @@ jobs:
     needs: [linux, windows, web]
     runs-on: ubuntu-latest
     steps:
+      # Le dépôt (CHANGELOG.md, tools/) pour l'annonce Discord
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
@@ -142,3 +147,11 @@ jobs:
             splendor-console-windows.exe
             splendor-console-linux
             splendor-web.tar.gz
+
+      # Annonce dans le salon Discord des nouveautés (secret DISCORD_RELEASE_WEBHOOK) ;
+      # sans le secret, rien n'est envoyé. Un échec ne bloque pas la release.
+      - name: Changelog sur Discord
+        continue-on-error: true
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: python3 tools/discord_release.py "${{ inputs.tag || github.ref_name }}"

@@ -16,7 +16,7 @@ from api import SplendorApi  # noqa: E402
 import tempfile  # noqa: E402
 
 from api import ApiError  # noqa: E402
-from logic import (TempChannel, apply_event, can_moderate, channel_matches, format_history,  # noqa: E402
+from logic import (TempChannel, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
                    format_profile, format_ranking, frequent_opponents, is_create_channel, load_state, offer_message,
                    save_state, should_delete, temp_channel_name)
 
@@ -60,6 +60,16 @@ class LogicTests(unittest.TestCase):
         self.assertTrue(can_moderate(["moderateur"], False, "Modérateur"))
         self.assertTrue(can_moderate([], True, "Modérateur"))
         self.assertFalse(can_moderate(["Joueur"], False, "Modérateur"))
+        # Rôle réglé par identifiant : le nom ne suffit plus
+        self.assertTrue(can_moderate(["X"], False, "Modérateur", [111, 1234567890123456789], 1234567890123456789))
+        self.assertFalse(can_moderate(["Modérateur"], False, "Modérateur", [111], 1234567890123456789))
+
+    def test_parse_id(self):
+        self.assertEqual(parse_id(" 1574139585007718474 "), 1574139585007718474)
+        self.assertIsNone(parse_id(""))
+        self.assertIsNone(parse_id(None))
+        self.assertIsNone(parse_id("classement"))
+        self.assertIsNone(parse_id("123"))
 
     def test_ranking_and_profile(self):
         players = [{"pseudo": "P{}".format(i), "elo": 1200 - i, "games": 4, "wins": 1} for i in range(12)]

@@ -108,10 +108,21 @@ def channel_matches(channel_name, wanted):
     return bool(target) and target in normalize_channel(channel_name)
 
 
-def can_moderate(role_names, is_admin, moderator_role):
-    """Modérateur : administrateur du serveur, ou rôle de modération."""
+def parse_id(text):
+    """Identifiant Discord (salon, rôle) écrit dans un réglage, ou None s'il est vide ou mal écrit."""
+    text = (text or "").strip()
+    return int(text) if text.isdigit() and 15 <= len(text) <= 21 else None
+
+
+def can_moderate(role_names, is_admin, moderator_role, role_ids=(), moderator_role_id=None):
+    """Modérateur : administrateur du serveur, ou rôle de modération (par
+    identifiant s'il est réglé, sinon par nom)."""
+    if is_admin:
+        return True
+    if moderator_role_id is not None:
+        return moderator_role_id in role_ids
     wanted = normalize_channel(moderator_role)
-    return is_admin or any(normalize_channel(role) == wanted for role in role_names)
+    return any(normalize_channel(role) == wanted for role in role_names)
 
 
 def win_rate(player):

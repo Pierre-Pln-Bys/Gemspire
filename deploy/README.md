@@ -91,6 +91,9 @@ Fonctionnement :
   quand il est resté vide 30 secondes (le bot s'en souvient même après un
   redémarrage : état dans `/var/lib/splendor-bot`).
 - **#classement** : top 10, un seul message modifié toutes les 10 minutes.
+- Salons et rôles : par **identifiant** si `CREATE_CHANNEL_ID`,
+  `RANKING_CHANNEL_ID`, `MOD_LOG_CHANNEL_ID`, `MOD_ROLE_ID`, `PLAYER_ROLE_ID`
+  sont remplis (un salon renommé reste reconnu), sinon par nom.
 - **Commandes** : `/classement`, `/profil`, `/lier` (donne le rôle Joueur),
   `/jouer`, `/regles`, `/signaler` ; modérateurs (rôle `Modérateur` ou
   administrateurs) : `/mod ban`, `/mod unban`, `/mod historique`,
@@ -104,6 +107,20 @@ Fonctionnement :
 `splendor-web.tar.gz` de la dernière release GitHub. Il est servi sur
 `https://splendor.epsilon-forge.fr/play/`, et le site affiche alors le bouton
 « Jouer dans le navigateur ».
+
+## Changelog sur Discord
+
+À chaque release, le workflow publie la section du CHANGELOG de la version
+dans un salon Discord (`tools/discord_release.py`). Créer un webhook dans le
+salon des annonces (*Paramètres du salon > Intégrations > Webhooks*), puis
+l'enregistrer comme secret GitHub, depuis le dossier du dépôt :
+
+```bash
+gh secret set DISCORD_RELEASE_WEBHOOK
+```
+
+(la commande demande l'adresse, qui n'apparaît ni dans le dépôt ni dans
+l'historique). Aperçu sans envoyer : `python3 tools/discord_release.py vX.Y.Z --dry-run`.
 
 ## 5. Indiquer le serveur au jeu
 

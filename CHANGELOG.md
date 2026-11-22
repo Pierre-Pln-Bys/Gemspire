@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon
 [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+- **Changelog sur Discord** : chaque release publie ses nouveautés dans un
+  salon Discord (`tools/discord_release.py`, secret GitHub
+  `DISCORD_RELEASE_WEBHOOK`).
+- Bot : salons et rôles réglables par **identifiant** (`CREATE_CHANNEL_ID`,
+  `RANKING_CHANNEL_ID`, `MOD_LOG_CHANNEL_ID`, `MOD_ROLE_ID`, `PLAYER_ROLE_ID`),
+  les noms restant le choix par défaut.
+
 ## [3.5.0] - 2026-11-22
 
 ### Ajouté

@@ -96,7 +96,7 @@ test-discord: tests/test_discord
 
 # Bot Discord (Python) : logique, client du serveur, intégration avec splendor-server
 test-bot: $(SERVER_TARGET)
-	python3 -m unittest bot/test_bot.py bot/test_integration.py
+	python3 -m unittest bot/test_bot.py bot/test_integration.py tools/test_discord_release.py
 
 # --- Version navigateur (WebAssembly) : `make web` (Emscripten : emcc dans le PATH)
 # Même code que la version graphique ; réseau par fetch() du navigateur
