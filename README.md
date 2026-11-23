@@ -55,7 +55,13 @@ make clean      # make clean-all supprime aussi la raylib compilée
 - **Langue** : anglais ou français, selon la langue du système (ou du
   navigateur) au premier lancement ; bouton « Français » / « English » en haut
   à droite de l'accueil (choix gardé dans `langue.txt`).
-- **Accueil** : nouvelle partie, reprise de la sauvegarde, quitter.
+- **Accueil** : nouvelle partie, jouer en ligne, reprise de la sauvegarde,
+  quitter. En haut à gauche : **Règles** (les règles en bref) et **Thème** du
+  plateau (Tapis vert, Nuit, Bois, Contraste élevé, Clair ; choix gardé dans
+  `theme.txt`).
+- **Plein écran** : `F11` (fenêtre sans bord ; dans le navigateur, F11 du
+  navigateur). Le dessin s'adapte à la taille réelle de l'écran (net aussi sur
+  les écrans Retina et sous Windows agrandi à 125 % ou 150 %).
 - **Nouvelle partie** : mode, nombre de joueurs, puis pour chacun son nom, sa
   couleur (Violet, Orange, Turquoise, Rose, Marron ; Purple, Orange, Turquoise, Pink, Brown en anglais) et qui le joue (humain,
   ordinateur facile ou moyen).
@@ -111,7 +117,9 @@ Depuis l'accueil, « Jouer en ligne » :
    rapides, sourdine d'un joueur. **Amis** (menu en ligne) : ajout par
    pseudo, statut en ligne / en partie. **Succès** : 11 à débloquer, liste
    dans le menu en ligne.
-7. **Compétition** : « Trouver un adversaire » (Elo proche), « En cours »
+7. **Lier Google / Discord** (menu en ligne) : ajoute l'autre mode de
+   connexion au même compte (même pseudo, même Elo).
+8. **Compétition** : « Trouver un adversaire » (Elo proche), « En cours »
    pour regarder une partie, « Mes parties » pour revoir les siennes coup par
    coup, saisons classées avec badges pour le top 10.
 
@@ -128,7 +136,9 @@ Depuis l'accueil, « Jouer en ligne » :
   nombre de places.
 - **Bot** : `/challenge @membre` crée un salon à 2 places et prévient le
   membre défié ; rôles de rang selon l'Elo (Pearl, Ruby, Sapphire, Emerald,
-  Diamond).
+  Diamond). Les administrateurs ont `/dev` (état du serveur, inscriptions,
+  pause des parties, annonce, gestion d'un joueur) et le panel web
+  `/panel-admin` (voir [server/README.md](server/README.md)).
 
 Par défaut, le jeu se connecte au serveur officiel
 `https://gemspire.epsilon-forge.fr`. Pour un autre serveur (par exemple

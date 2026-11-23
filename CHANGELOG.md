@@ -4,6 +4,24 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [Unreleased]
+
+### Added
+- **Rules** button on the home screen: the rules in short, in two columns.
+- **Board themes**: Green felt, Night, Wood, High contrast and Light (Theme
+  button on the home screen, remembered in `theme.txt`).
+- **Sharper display**: the browser version draws at the real screen size
+  (Retina screens included) instead of stretching a 1280 × 800 picture; on
+  Windows the window follows the display scaling. **F11** toggles full screen.
+- **Link Google and Discord** to the same account (online menu): sign in with
+  either, same username and Elo.
+- **Admin panel** at `/panel-admin` (Discord sign-in, administrators only):
+  server state, close sign-ups, pause new games, in-game announcement, account
+  search and management (rename, Elo, season badges, sign out everywhere,
+  ban, delete, cancel a game), admin log.
+- Bot **`/dev`** commands for the administrators: `status`, `signups`,
+  `games`, `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`.
+
 ## [3.9.0] - 2026-11-23
 
 ### Added

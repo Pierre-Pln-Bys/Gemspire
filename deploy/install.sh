@@ -46,6 +46,13 @@ if [ ! -f /etc/splendor/splendor.env ]; then
     key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
     sed -i "s/^SPLENDOR_BOT_KEY=.*/SPLENDOR_BOT_KEY=$key/" /etc/splendor/splendor.env
 fi
+# Réglages ajoutés depuis (v4) : recopiés du modèle s'ils manquent, sans toucher au reste
+for setting in SPLENDOR_ADMIN_DISCORD_IDS; do
+    if ! grep -q "^$setting=" /etc/splendor/splendor.env; then
+        grep "^$setting=" deploy/splendor.env.example >> /etc/splendor/splendor.env
+        echo "Réglage ajouté : $(grep "^$setting=" deploy/splendor.env.example)"
+    fi
+done
 
 # Jeu dans le navigateur (/play) : compilé ici s'il existe (make web), sinon
 # l'archive de la dernière version publiée sur GitHub

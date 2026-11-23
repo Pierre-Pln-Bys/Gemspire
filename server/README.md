@@ -34,6 +34,7 @@ cpp-httplib, nlohmann/json et SQLite sont inclus dans `third_party/`.
 | `SPLENDOR_WEB_DIR` | jeu dans le navigateur (`make web`), servi sur `/play/` | `/opt/splendor/web` |
 | `SPLENDOR_CONTACT_EMAIL` | adresse de contact affichée sur le site | vide |
 | `SPLENDOR_DISCORD_INVITE` | lien d'invitation du serveur Discord (site) | vide |
+| `SPLENDOR_ADMIN_DISCORD_IDS` | identifiants Discord des administrateurs (virgules) : panel `/panel-admin` et `/dev` du bot | vide = fermé |
 
 Les secrets ne vont jamais dans le dépôt : mettez-les dans un fichier
 `/etc/splendor.env` lisible seulement par le service (voir plus bas).
@@ -123,6 +124,7 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/friends` | amis (`relation` : `friend`, `incoming`, `outgoing` ; `status` des amis : `playing`, `online`, `offline`) |
 | POST | `/friends/add` · `/friends/remove` | `{"pseudo": "..."}` : demande ou acceptation, retrait |
 | GET | `/leaderboard` | 50 meilleurs Elo |
+| POST | `/me/link` | `{"provider": "google"\|"discord"}` → `{"login"}` : ouvrir ensuite `/auth/<provider>/start?login=…` ; `/auth/poll` répond `done` + `linked` (pas de nouveau jeton) |
 
 `GET /games/ID` donne aussi `turn_seconds_left` (temps restant du tour) et
 `missed` (tours manqués d'affilée par place), `chat` (50 derniers messages,
@@ -136,6 +138,35 @@ salon à 2 places et prévient les deux jeux. En v3.9 : `POST /bot/season/end`
 (fin de saison : top 50 archivé, badges du top 10, Elo ramenés à mi-chemin de
 1000) ; `/me` et `/leaderboard` donnent la saison en cours (`season`), `/me`
 et `/bot/profile` les badges.
+
+## Administration (v4)
+
+Les comptes Discord listés dans `SPLENDOR_ADMIN_DISCORD_IDS` ont accès à :
+
+- **Panel web** `https://<site>/panel-admin` : connexion par Discord (OAuth,
+  même application que le jeu, aucune adresse de redirection à ajouter : le
+  retour passe par `/auth/discord/callback`). Session de 8 h en mémoire
+  (cookie `HttpOnly`, `SameSite=Strict`, `Secure` en HTTPS), jeton anti-CSRF
+  dans chaque formulaire, pages `noindex` sans JavaScript. On y trouve :
+  - état du serveur (joueurs en ligne, parties, salons, file, comptes) ;
+  - interrupteurs : **fermer les inscriptions** (les comptes existants se
+    connectent toujours) et **suspendre les nouvelles parties** (salons,
+    recherche, `/challenge` ; les parties en cours continuent) ;
+  - **annonce** affichée dans le jeu (accueil, menu en ligne) et envoyée tout
+    de suite aux joueurs connectés ;
+  - recherche d'un compte (pseudo, numéro ou identifiant Discord) et fiche :
+    renommer, fixer l'Elo, donner / retirer un badge de saison, déconnecter
+    partout, suspendre / réactiver, supprimer (taper `DELETE`), annuler l'Elo
+    d'une partie ;
+  - journal de toutes les actions d'administration (table `admin_log`).
+- **Commandes `/dev` du bot** (`POST /bot/admin`, clé du bot + identifiant
+  Discord de l'auteur, vérifié par le serveur) : `status`, `signups`, `games`,
+  `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`.
+
+Le panel et le bot passent par la même fonction (`ServerApp::admin_action`,
+`server/admin.cpp`). Il n'y a pas de mot de passe à réinitialiser : la
+connexion se fait par Discord ou Google ; « déconnecter partout » ferme
+toutes les sessions d'un compte.
 
 ## Version du jeu
 
