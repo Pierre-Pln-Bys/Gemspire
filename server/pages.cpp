@@ -312,10 +312,10 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
     body << "<h1>" << T(lang, "Privacy", "Confidentialité") << "</h1><p class=\"soft\">"
          << T(lang, "Last updated: November 22, 2026", "Dernière mise à jour : 22 novembre 2026")
          << "</p><div class=\"card\"><h2>" << T(lang, "What we store", "Ce que nous enregistrons") << "</h2><ul><li>"
-         << T(lang, "<strong>Your Discord or Google identifier</strong> (a number, not your name or email), to "
+         << T(lang, "<strong>Your Discord and/or Google identifier</strong> (one per linked sign-in, a number, not your name or email), to "
                     "recognize your account. We only ask Discord for <code>identify</code> and Google for "
                     "<code>openid</code>.",
-              "<strong>Votre identifiant Discord ou Google</strong> (un numéro, pas votre nom ni votre e-mail), pour "
+              "<strong>Votre identifiant Discord et/ou Google</strong> (un par connexion liée, un numéro, pas votre nom ni votre e-mail), pour "
               "reconnaître votre compte. Nous demandons à Discord le droit <code>identify</code> et à Google "
               "<code>openid</code> uniquement.")
          << "</li><li>"
