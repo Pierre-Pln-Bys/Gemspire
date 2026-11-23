@@ -157,6 +157,25 @@ static const std::map<std::string, std::string>& french_table()
         {"Download the update", "Télécharger la mise à jour"},
         {"Français", "English"},  // bouton de langue : affiche l'autre langue
 
+        // --- v4 : connexions liées
+        {"Link Google", "Lier Google"},
+        {"Link Discord", "Lier Discord"},
+        {"Sign-in: {0}", "Connexion : {0}"},
+        {"New games are paused for maintenance. Try again later.",
+         "Les nouvelles parties sont suspendues pour maintenance. Réessayez plus tard."},
+        {"New accounts are closed for now. Try again later.",
+         "La création de comptes est fermée pour le moment. Réessayez plus tard."},
+        {"This Google account is already used by another Gemspire account.",
+         "Ce compte Google est déjà utilisé par un autre compte Gemspire."},
+        {"This Discord account is already used by another Gemspire account.",
+         "Ce compte Discord est déjà utilisé par un autre compte Gemspire."},
+        {"Your account is already linked to another Google account.",
+         "Votre compte est déjà lié à un autre compte Google."},
+        {"Your account is already linked to another Discord account.",
+         "Votre compte est déjà lié à un autre compte Discord."},
+        {"{0} account linked: you can now sign in with it too.",
+         "Compte {0} lié : vous pouvez aussi vous connecter avec."},
+
         // --- Règles (écran de l'accueil) et thèmes
         {"Rules", "Règles"},
         {"Theme: {0}", "Thème : {0}"},

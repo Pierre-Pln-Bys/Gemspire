@@ -245,7 +245,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave, TagLink };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
@@ -710,6 +710,9 @@ static void handle_responses(App& app)
             }
             break;
         case TagConfig:
+            if (ok) {
+                online.announcement = body.value("announcement", std::string());
+            }
             if (ok && body.value("discord_app_id", std::string()) != "") {
                 app.discord.start(body.value("discord_app_id", std::string()));
 #ifdef __EMSCRIPTEN__
@@ -768,6 +771,14 @@ static void handle_responses(App& app)
                         }
                         online.next_friends_poll = 0;
                     }
+                    // Annonce des administrateurs (panel ou /dev announce)
+                    if (note.value("type", std::string()) == "announcement") {
+                        online.announcement = note.value("text", std::string());
+                        if (app.screen == Screen::Board) {
+                            online.chat_toast = online.announcement;
+                            online.chat_toast_until = GetTime() + 10;
+                        }
+                    }
                     if (note.value("type", std::string()) == "voice_offer") {
                         online.offer_channel = note.value("voice_channel", std::string());
                         online.offer_name = note.value("channel_name", std::string("Discord"));
@@ -787,6 +798,8 @@ static void handle_responses(App& app)
                 online.games = body.value("games", 0);
                 online.wins = body.value("wins", 0);
                 online.achievements = body.value("achievements", std::vector<std::string>());
+                online.providers = body.value("providers", std::vector<std::string>());
+                online.announcement = body.value("announcement", online.announcement);
                 online.season = body.value("season", 0);
                 online.badges.clear();
                 for (const nlohmann::json& badge : body.value("badges", nlohmann::json::array())) {
@@ -821,7 +834,13 @@ static void handle_responses(App& app)
             if (online.login_id.empty()) {
                 break;
             }
-            if (ok && body.value("status", std::string()) == "done") {
+            if (ok && body.value("status", std::string()) == "done" && body.contains("linked")) {
+                // Connexion ajoutée au compte (Lier Google / Discord) : même session
+                online.login_id.clear();
+                std::string linked = body.value("linked", std::string()) == "google" ? "Google" : "Discord";
+                set_message(app, tr(app.lang, "{0} account linked: you can now sign in with it too.", {linked}), false);
+                app.net.send(TagMe, "GET", "/me");
+            } else if (ok && body.value("status", std::string()) == "done") {
                 std::string token = body.value("token", std::string());
                 online.login_id.clear();
                 save_session(token);
@@ -832,6 +851,22 @@ static void handle_responses(App& app)
                 set_message(app, body.value("error", std::string("Sign-in failed.")), true);
             } else if (!ok) {
                 online.login_id.clear();
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagLink:
+            if (ok && !body.value("login", std::string()).empty()) {
+                online.login_id = body.value("login", std::string());
+                online.next_login_poll = GetTime() + 2;
+                std::string provider = online.link_provider;
+                std::string url = app.net.server() + "/auth/" + provider + "/start?login=" + online.login_id;
+                set_message(app, "Finish signing in in your browser…", false);
+#ifdef __EMSCRIPTEN__
+                web_go_to(url + "&from=play");
+#else
+                OpenURL(url.c_str());
+#endif
+            } else {
                 set_message(app, error_of(response, body, app), true);
             }
             break;
@@ -1061,6 +1096,10 @@ static void press_online_button(App& app, const Button& button)
         break;
     case ButtonId::LoginDev:
         start_login(app, "dev");
+        break;
+    case ButtonId::LinkAccount:
+        online.link_provider = button.value == 1 ? "discord" : "google";
+        app.net.send(TagLink, "POST", "/me/link", nlohmann::json({{"provider", online.link_provider}}).dump());
         break;
     case ButtonId::BackHome:
         online.login_id.clear();

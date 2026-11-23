@@ -8,6 +8,10 @@
 #include "rules.hpp"
 #include "version.hpp"
 
+#ifdef __EMSCRIPTEN__
+#include "platform_web.hpp"
+#endif
+
 // ---------------------------------------------------------------- Placement
 
 // Ordonnée de la rangée d'un niveau (niveau 3 en haut, comme sur la table)
@@ -278,6 +282,18 @@ static std::vector<Button> online_buttons(const App& app)
     add(buttons, ButtonId::ShowLive, "Live games", {760, 214, 155, 36});
     add(buttons, ButtonId::ShowHistory, "My games", {925, 214, 155, 36});
     add(buttons, ButtonId::FindMatch, "Find an opponent", {770, 470, 310, 50}, 0, app.net.pending() == 0);
+    // v4 : lier l'autre connexion (Discord ou Google) au compte ; pas dans l'Activité Discord
+    bool has_discord = std::find(online.providers.begin(), online.providers.end(), "discord") != online.providers.end();
+    bool has_google = std::find(online.providers.begin(), online.providers.end(), "google") != online.providers.end();
+#ifdef __EMSCRIPTEN__
+    bool activity = web_in_activity();
+#else
+    bool activity = false;
+#endif
+    if (!online.providers.empty() && !activity && (!has_discord || !has_google) && online.login_id.empty()) {
+        add(buttons, ButtonId::LinkAccount, has_google ? "Link Discord" : "Link Google", {200, 150, 250, 36},
+            has_google ? 1 : 0, app.net.pending() == 0);
+    }
     add(buttons, ButtonId::ShowLeaderboard, "Leaderboard", {200, 680, 190, 46});
     add(buttons, ButtonId::ShowFriends, "Friends", {410, 680, 190, 46});
     add(buttons, ButtonId::Logout, "Sign out", {680, 680, 190, 46});
@@ -1530,6 +1546,10 @@ static void draw_home(const App& app, Vector2 mouse)
     if (!FileExists(SAVE_FILE)) {
         text_centered(app, "(no saved game found)", 640, 662, 13, false, soft(app));
     }
+    if (!app.online.announcement.empty()) {
+        float size = 17;
+        text_centered(app, fit(app, app.online.announcement, 1180, size, 11), 640, 760, size, true, accent(app));
+    }
     if (!app.message.empty()) {
         text_centered(app, app.message, 640, 700, 15, false, app.message_is_error ? error_ink(app) : soft(app));
     }
@@ -1666,6 +1686,18 @@ static void draw_online(const App& app, Vector2 mouse)
         draw_buttons_of(app, online_buttons(app), mouse);
         draw_message_line(app, 640);
         return;
+    }
+    // Connexions du compte et annonce des administrateurs
+    std::string providers;
+    for (const std::string& provider : online.providers) {
+        providers += (providers.empty() ? "" : " + ") + std::string(provider == "google" ? "Google" : provider == "discord" ? "Discord" : provider);
+    }
+    if (!providers.empty()) {
+        text(app, T(app, "Sign-in: {0}", {providers}), 200, 116, 15, false, soft(app));
+    }
+    if (!online.announcement.empty()) {
+        float size = 16;
+        text(app, fit(app, online.announcement, 540, size, 11), 200, 210, size, true, accent(app));
     }
     text(app, "Create a game", 200, 270, 22, true, ink(app));
     text(app, "Join with a code", 770, 270, 22, true, ink(app));

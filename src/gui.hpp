@@ -36,7 +36,7 @@ enum class ButtonId {
     // En ligne
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
-    Invite, OfferCreate, OfferIgnore, Download, Language,
+    Invite, OfferCreate, OfferIgnore, Download, Language, LinkAccount,
     // Chat d'une partie en ligne
     Chat, ChatSend, ChatBox, ChatReaction, ChatMute,
     // Amis
@@ -251,6 +251,9 @@ struct OnlineState {
     bool activity_lobby_asked = false; // Activité Discord : salon partagé déjà demandé
     std::string pending_join;        // code reçu de Discord (« Rejoindre ») en attente de connexion
     std::vector<std::string> achievements;      // succès du compte (codes, envoyés par /me)
+    std::vector<std::string> providers;         // connexions du compte ("discord", "google")
+    std::string announcement;                   // annonce des administrateurs ("" : aucune)
+    std::string link_provider;                  // connexion en cours d'ajout au compte
     int season = 0;                             // saison classée en cours
     std::string badges;                         // places dans le top 10 des saisons passées (« S1 #2 · S3 #7 »)
     std::vector<std::string> new_achievements;  // succès débloqués par la partie qui vient de finir
