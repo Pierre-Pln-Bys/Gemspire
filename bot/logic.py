@@ -35,6 +35,9 @@ RANKING_SIZE = 10
 SITE_URL = "https://gemspire.epsilon-forge.fr"
 DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"
 MEDALS = ["🥇", "🥈", "🥉"]
+# Rôles de rang selon l'Elo (du plus haut au plus bas) : nom et couleur du rôle
+RANK_TIERS = [(1400, "Diamond", 0xB9F2FF), (1250, "Emerald", 0x2ECC71), (1100, "Sapphire", 0x3498DB),
+              (1000, "Ruby", 0xE74C3C), (0, "Pearl", 0xECEFF1)]
 
 
 def normalize(name):
@@ -145,6 +148,23 @@ def format_ranking(players, updated_at=None, lang="en"):
         footer += tr("ranking_updated", lang, when="<t:{}:R>".format(int(updated_at)))
     lines.append(footer)
     return "\n".join(lines)
+
+
+def rank_tier(elo):
+    """Nom du rôle de rang pour cet Elo (« Ruby » à partir de 1000...)."""
+    for minimum, name, _color in RANK_TIERS:
+        if elo >= minimum:
+            return name
+    return RANK_TIERS[-1][1]
+
+
+def rank_role_changes(current_roles, elo):
+    """(rôle à ajouter ou None, rôles de rang à retirer) pour un membre qui a
+    les rôles `current_roles` (noms) et cet Elo."""
+    wanted = rank_tier(elo)
+    tier_names = [name for _minimum, name, _color in RANK_TIERS]
+    to_remove = [name for name in current_roles if name in tier_names and name != wanted]
+    return (None if wanted in current_roles else wanted), to_remove
 
 
 def site_page(page, lang="en"):

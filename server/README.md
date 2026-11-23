@@ -91,6 +91,9 @@ Réglages dans le portail Discord (application Gemspire) :
    Pendant le développement, seuls les membres de l'équipe de l'application
    la voient.
 
+Tous ceux qui ouvrent l'Activité dans le même salon vocal (même
+`instance_id`) arrivent dans le même salon de jeu (`POST /lobbies/activity`).
+
 ## API (JSON)
 
 Authentification : en-tête `Authorization: Bearer <jeton>`.
@@ -101,23 +104,35 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/auth/<discord\|google>/start?login=ID` | début de connexion (navigateur) |
 | GET | `/auth/poll?login=ID` | `pending`, `done` (+ `token`) ou `error` |
 | POST | `/auth/logout` | supprime la session |
-| GET | `/me` | compte : pseudo, Elo, parties, victoires |
+| GET | `/me` | compte : pseudo, Elo, parties, victoires, succès |
 | POST | `/me/pseudo` | `{"pseudo": "..."}` |
 | POST | `/lobbies` | `{"mode": "classique"\|"rapide", "seats": 2..4}` → `{"code"}` |
 | POST | `/lobbies/CODE/join` · `/leave` · `/start` | rejoindre, quitter, lancer (hôte) |
+| POST | `/lobbies/activity` | `{"instance": "..."}` : salon partagé d'une Activité Discord (créé à 4 places au besoin) |
+| POST | `/auth/discord/activity` | `{"code": ...}` (code du SDK de Discord) → `{"token"}` |
 | GET | `/lobbies/CODE?since=V` | état du salon (attente longue si version ≤ V) |
 | GET | `/games/ID?since=V` | état de la partie vu par ce joueur (pioches et réservées des autres cachées) |
 | POST | `/games/ID/move` | un coup (voir `src/move_json.hpp`) |
 | POST | `/games/ID/forfeit` | abandon (classé dernier, Elo perdu) |
+| POST | `/games/ID/chat` | `{"text": "..."}` (1 à 120 caractères) ou `{"reaction": 0..5}` ; 1 message par seconde, 6 par 20 s |
+| GET | `/friends` | amis (`relation` : `friend`, `incoming`, `outgoing` ; `status` des amis : `playing`, `online`, `offline`) |
+| POST | `/friends/add` · `/friends/remove` | `{"pseudo": "..."}` : demande ou acceptation, retrait |
 | GET | `/leaderboard` | 50 meilleurs Elo |
 
 `GET /games/ID` donne aussi `turn_seconds_left` (temps restant du tour) et
-`missed` (tours manqués d'affilée par place).
+`missed` (tours manqués d'affilée par place), `chat` (50 derniers messages,
+gardés en mémoire seulement) et, à la fin, `achievements` (succès débloqués
+par place, voir `src/achievements.cpp`).
+
+Routes du bot (en-tête `X-Bot-Key`) ajoutées en v3.8 : `GET /bot/ranks`
+(Elo des joueurs liés à Discord, pour les rôles de rang) et
+`POST /bot/challenge` (`discord_id`, `target_discord_id`, `mode`) qui crée un
+salon à 2 places et prévient les deux jeux.
 
 ## Version du jeu
 
 Le jeu envoie sa version dans l'en-tête `X-Splendor-Version`. Pour les routes
-du jeu (`/me`, `/lobbies`, `/games/`, `/auth/poll`, `/auth/logout`,
+du jeu (`/me`, `/lobbies`, `/games/`, `/friends`, `/auth/poll`, `/auth/logout`,
 `/config`), une version absente, mal écrite ou plus ancienne que
 `SPLENDOR_MIN_VERSION` est refusée avec **426** (`error`, `min_version`,
 `download`) : le jeu affiche alors l'écran « Mise à jour nécessaire » et se

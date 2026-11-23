@@ -2,6 +2,7 @@
 // joueurs se connectent, refusent de mauvais coups, jouent une partie complète
 // avec l'IA, et on vérifie Elo, classement et informations cachées.
 // Lancer avec : make test-server
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <iostream>
@@ -10,6 +11,7 @@
 
 #include "../server/app.hpp"
 #include "../src/ai.hpp"
+#include "../src/elo.hpp"
 #include "../src/move_json.hpp"
 #include "../src/save.hpp"
 #include "../src/version.hpp"
@@ -113,6 +115,29 @@ int main()
     post(client, "/me/pseudo", bob, {{"pseudo", "Bébert"}});
     assert(get(client, "/me", bob)["elo"] == 1000);
 
+    // --- Amis : demande, liste des deux côtés, acceptation, statut, retrait
+    post(client, "/friends/add", alice, {{"pseudo", "personne"}}, 404);
+    post(client, "/friends/add", alice, {{"pseudo", "alice"}}, 400);               // soi-même
+    post(client, "/friends/add", alice, {{"pseudo", "bébert"}});
+    assert(get(client, "/friends", alice)["friends"][0]["relation"] == "outgoing");
+    assert(get(client, "/friends", bob)["friends"][0]["relation"] == "incoming");
+    post(client, "/friends/add", bob, {{"pseudo", "Alice"}});
+    {
+        json mine = get(client, "/friends", alice)["friends"];
+        assert(mine.size() == 1 && mine[0]["relation"] == "friend" && mine[0]["pseudo"] == "Bébert");
+        assert(mine[0]["status"] == "online");                                       // il vient de jouer une requête
+    }
+    post(client, "/friends/remove", bob, {{"pseudo", "Alice"}});
+    assert(get(client, "/friends", alice)["friends"].empty());
+
+    // --- Activité Discord : la même instance donne le même salon (4 places)
+    std::string shared = post(client, "/lobbies/activity", alice, {{"instance", "i-123"}})["code"];
+    assert(post(client, "/lobbies/activity", bob, {{"instance", "i-123"}})["code"] == shared);
+    assert(get(client, "/lobbies/" + shared, alice)["members"].size() == 2);
+    assert(post(client, "/lobbies/activity", alice, {{"instance", "autre"}})["code"] != shared);
+    post(client, "/lobbies/activity", alice, {{"instance", "<x>"}}, 400);
+    post(client, "/lobbies/" + shared + "/leave", bob, json::object());
+
     // --- Salon
     std::string code = post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}})["code"];
     assert(code.size() == 5);
@@ -127,6 +152,24 @@ int main()
 
     // --- Coups invalides
     std::string path = "/games/" + std::to_string(game_id);
+    // --- Chat : texte nettoyé, réaction, refus (vide, trop long, spam, pas joueur)
+    post(client, path + "/chat", alice, {{"text", "  Bonne chance\n!  "}});
+    post(client, path + "/chat", bob, {{"reaction", 0}});
+    post(client, path + "/chat", alice, {{"text", "encore"}}, 400);              // trop vite
+    post(client, path + "/chat", bob, {{"text", "   "}}, 400);
+    post(client, path + "/chat", bob, {{"text", std::string(121, 'x')}}, 400);
+    post(client, path + "/chat", bob, {{"reaction", REACTION_COUNT}}, 400);
+    {
+        // Pas de l'UTF-8 : envoyé brut (la bibliothèque JSON refuse de l'écrire)
+        auto raw_chat = client.Post(path + "/chat", {{"Authorization", "Bearer " + bob}}, "{\"text\": \"\xff\xfe\"}",
+                                    "application/json");
+        assert(raw_chat && raw_chat->status == 400);
+    }
+    {
+        json chat = get(client, path, bob)["chat"];
+        assert(chat.size() == 2 && chat[0]["text"] == "Bonne chance !" && chat[0]["seat"] == 0);
+        assert(chat[1]["reaction"] == 0 && chat[1]["seat"] == 1);
+    }
     json state = get(client, path, alice);
     int first = state["your_seat"] == 0 ? 0 : 1;
     assert(first == 0);
@@ -162,8 +205,23 @@ int main()
     assert(final_state["over"] == true);
     std::vector<int> changes = final_state["elo_changes"];
     assert(changes.size() == 2 && changes[0] + changes[1] >= -1 && changes[0] + changes[1] <= 1);
-    assert(changes[0] != 0);
+    // Elo modifié, sauf égalité parfaite (même place pour les deux)
+    {
+        std::unique_ptr<Game> ended;
+        assert(load_game(final_state["save"], ended).empty());
+        std::vector<int> ended_places = final_places(*ended);
+        assert((ended_places[0] == ended_places[1]) == (changes[0] == 0));
+    }
     post(client, path + "/move", alice, {{"type", "take"}, {"tokens", {1, 1, 1, 0, 0}}}, 400);  // terminée
+    // Succès : « first_game » pour les deux, montré dans la partie et dans /me
+    {
+        json finished = get(client, path, alice);
+        assert(finished["achievements"].size() == 2);
+        json mine = get(client, "/me", alice)["achievements"];
+        assert(std::find(mine.begin(), mine.end(), "first_game") != mine.end());
+        assert(std::find(finished["achievements"][0].begin(), finished["achievements"][0].end(), "first_game")
+               != finished["achievements"][0].end());
+    }
 
     json leaderboard = get(client, "/leaderboard", "");
     assert(leaderboard["players"].size() == 2);

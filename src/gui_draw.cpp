@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "achievements.hpp"
 #include "display.hpp"
 #include "rules.hpp"
 #include "version.hpp"
@@ -134,14 +135,38 @@ static std::vector<Button> board_buttons(const App& app)
         return buttons;
     }
     if (online) {
-        add(buttons, ButtonId::BackOnline, "Online menu", {790, 8, 140, 30});
+        add(buttons, ButtonId::BackOnline, "Online menu", {790, 8, 120, 30});
         bool confirm = GetTime() < app.online.forfeit_confirm;
-        add(buttons, ButtonId::Forfeit, confirm ? "Confirm?" : "Forfeit", {940, 8, 140, 30}, 0, true, confirm);
+        add(buttons, ButtonId::Forfeit, confirm ? "Confirm?" : "Forfeit", {918, 8, 120, 30}, 0, true, confirm);
+        int unread = unread_chat(app.online);
+        add(buttons, ButtonId::Chat, unread > 0 ? "Chat (" + std::to_string(unread) + ")" : "Chat", {1046, 8, 104, 30}, 0,
+            true, app.online.chat_open || unread > 0);
+        add(buttons, ButtonId::Journal, "Log", {1158, 8, 102, 30}, 0, true, app.journal_open);
     } else {
         add(buttons, ButtonId::Menu, "Menu", {790, 8, 120, 30});
         add(buttons, ButtonId::Save, "Save", {920, 8, 160, 30});
+        add(buttons, ButtonId::Journal, "Log", {1090, 8, 170, 30}, 0, true, app.journal_open);
     }
-    add(buttons, ButtonId::Journal, "Log", {1090, 8, 170, 30}, 0, true, app.journal_open);
+    if (online && app.online.chat_open) {
+        // Panneau du chat : sourdine par joueur, réactions rapides, saisie
+        Rectangle r = CHAT_PANEL;
+        int column = 0;
+        for (int p = 0; p < static_cast<int>(game.players().size()); p++) {
+            if (p == app.online.my_seat) {
+                continue;
+            }
+            bool muted = app.online.muted[p];
+            add(buttons, ButtonId::ChatMute, T(app, muted ? "Unmute {0}" : "Mute {0}", {game.players()[p].name}),
+                {r.x + 24 + column * 212.0f, r.y + 58, 204, 30}, p, true, muted);
+            column++;
+        }
+        for (int i = 0; i < REACTION_COUNT; i++) {
+            add(buttons, ButtonId::ChatReaction, REACTIONS[i], {r.x + 24 + i * 106.0f, r.y + 452, 100, 34}, i);
+        }
+        add(buttons, ButtonId::ChatBox, "", {r.x + 24, r.y + 500, 496, 44});
+        add(buttons, ButtonId::ChatSend, "Send", {r.x + 532, r.y + 500, 124, 44}, 0, !app.online.chat_input.empty());
+        return buttons;
+    }
     if (app.curtain || app.journal_open || !human_turn(app) || game.step() != TurnStep::Action) {
         return buttons;
     }
@@ -226,9 +251,13 @@ static std::vector<Button> online_buttons(const App& app)
     if (online.game_id != 0 && !online.game_over) {
         add(buttons, ButtonId::ReturnToGame, "Back to the current game", {440, 560, 400, 50});
     }
-    add(buttons, ButtonId::ShowLeaderboard, "Leaderboard", {200, 680, 200, 46});
-    add(buttons, ButtonId::Logout, "Sign out", {540, 680, 200, 46});
-    add(buttons, ButtonId::BackHome, "Home", {880, 680, 200, 46});
+    add(buttons, ButtonId::ShowAchievements,
+        T(app, "Achievements ({0}/{1})", {std::to_string(online.achievements.size()), std::to_string(ACHIEVEMENT_COUNT)}),
+        {760, 170, 320, 36});
+    add(buttons, ButtonId::ShowLeaderboard, "Leaderboard", {200, 680, 190, 46});
+    add(buttons, ButtonId::ShowFriends, "Friends", {410, 680, 190, 46});
+    add(buttons, ButtonId::Logout, "Sign out", {680, 680, 190, 46});
+    add(buttons, ButtonId::BackHome, "Home", {890, 680, 190, 46});
     return buttons;
 }
 
@@ -257,6 +286,30 @@ std::vector<Button> visible_buttons(const App& app)
     case Screen::Lobby: return lobby_buttons(app);
     case Screen::Leaderboard: {
         std::vector<Button> buttons;
+        add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
+        return buttons;
+    }
+    case Screen::Achievements: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::BackOnline, "Back", {540, 720, 200, 46});
+        return buttons;
+    }
+    case Screen::Friends: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::FriendBox, app.online.friend_input, {200, 130, 600, 50}, 0, true, app.online.focus == 3);
+        add(buttons, ButtonId::FriendAdd, "Add friend", {820, 130, 260, 50}, 0,
+            !app.online.friend_input.empty() && app.net.pending() == 0);
+        int count = std::min(static_cast<int>(app.online.friends.size()), FRIENDS_SHOWN);
+        for (int i = 0; i < count; i++) {
+            const FriendLine& line = app.online.friends[i];
+            float y = 236.0f + i * 50;
+            if (line.relation == "incoming") {
+                add(buttons, ButtonId::FriendAccept, "Accept", {800, y, 125, 38}, i);
+            }
+            add(buttons, ButtonId::FriendRemove,
+                line.relation == "friend" ? "Remove" : line.relation == "incoming" ? "Decline" : "Cancel",
+                {935, y, 125, 38}, i);
+        }
         add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
         return buttons;
     }
@@ -783,7 +836,8 @@ static void draw_button(const App& app, const Button& button, Vector2 mouse)
                || button.id == ButtonId::LoginGoogle || button.id == ButtonId::PseudoOk
                || button.id == ButtonId::CreateLobby || button.id == ButtonId::JoinLobby
                || button.id == ButtonId::LobbyStart || button.id == ButtonId::ReturnToGame
-               || button.id == ButtonId::OfferCreate) {
+               || button.id == ButtonId::OfferCreate || button.id == ButtonId::FriendAdd
+               || button.id == ButtonId::FriendAccept || button.id == ButtonId::ChatSend) {
         fill = hover ? mix(GOLD_UI, {255, 255, 255, 255}, 0.3f) : GOLD_UI;
         ink = DARK_TEXT;
     } else {
@@ -969,6 +1023,88 @@ static void draw_journal(const App& app)
     }
 }
 
+static void draw_text_box(const App& app, const Button& button);  // plus bas
+
+int unread_chat(const OnlineState& online)
+{
+    int count = 0;
+    for (const ChatLine& line : online.chat) {
+        if (line.id > online.chat_seen && line.seat != online.my_seat && line.seat < 4 && !online.muted[line.seat]) {
+            count++;
+        }
+    }
+    return count;
+}
+
+std::string chat_text(const App& app, const ChatLine& line)
+{
+    if (line.reaction >= 0 && line.reaction < REACTION_COUNT) {
+        return T(app, REACTIONS[line.reaction]);
+    }
+    return line.text;
+}
+
+// Panneau du chat : messages (sauf joueurs en sourdine), puis ses boutons
+static void draw_chat(const App& app, Vector2 mouse)
+{
+    const Game& game = *app.game;
+    const OnlineState& online = app.online;
+    Rectangle r = CHAT_PANEL;
+    DrawRectangle(0, 0, static_cast<int>(BOARD_WIDTH), static_cast<int>(BOARD_HEIGHT), {0, 0, 0, 120});
+    rounded(r, 14, {18, 48, 34, 248});
+    outline(r, 14, 2, GOLD_UI, 0);
+    text(app, "Chat", r.x + 24, r.y + 16, 24, true, GOLD_UI);
+    text(app, "Enter sends, Esc closes", r.x + r.width - 24, r.y + 24, 13, false, SOFT_TEXT, Align::Right);
+
+    std::vector<const ChatLine*> shown;
+    for (const ChatLine& line : online.chat) {
+        if (line.seat == online.my_seat || !online.muted[line.seat]) {
+            shown.push_back(&line);
+        }
+    }
+    const int rows = 14;
+    int first = std::max(0, static_cast<int>(shown.size()) - rows);
+    if (shown.empty()) {
+        text(app, "No messages yet. Be nice!", r.x + 24, r.y + 110, 15, false, SOFT_TEXT);
+    }
+    for (int i = first; i < static_cast<int>(shown.size()); i++) {
+        const ChatLine& line = *shown[i];
+        float y = r.y + 104 + (i - first) * 24.0f;
+        std::string name = game.players()[line.seat].name;
+        text(app, name, r.x + 24, y, 15, true, player_color(app, line.seat));
+        float width = measure(app, name, 15, true).x;
+        float size = 15;
+        Color ink = line.reaction >= 0 ? GOLD_UI : WHITE_TEXT;
+        text(app, fit(app, chat_text(app, line), r.width - 70 - width, size, 11), r.x + 34 + width, y, size, false, ink);
+    }
+    for (const Button& button : visible_buttons(app)) {
+        if (button.id == ButtonId::ChatBox) {
+            Button box = button;
+            box.label = online.chat_input;
+            box.selected = true;
+            draw_text_box(app, box);
+            if (online.chat_input.empty()) {
+                text(app, "Type a message…", box.rect.x + 14, box.rect.y + 12, 18, false, {120, 120, 120, 255});
+            }
+        } else {
+            draw_button(app, button, mouse);
+        }
+    }
+}
+
+// Dernier message reçu, quelques secondes, quand le chat est fermé
+static void draw_chat_toast(const App& app)
+{
+    if (!app.online.in_game || app.online.chat_open || GetTime() > app.online.chat_toast_until) {
+        return;
+    }
+    Rectangle r = {150, 590, 610, 24};
+    rounded(r, 12, {0, 0, 0, 170});
+    float size = 14;
+    text_centered(app, fit(app, app.online.chat_toast, r.width - 24, size, 11), r.x + r.width / 2, r.y + 12, size, false,
+                  WHITE_TEXT);
+}
+
 // Annonce au milieu du plateau (noble, dernier tour), qui apparaît puis s'efface
 static void draw_banner(const App& app)
 {
@@ -1032,9 +1168,44 @@ static void draw_results(const App& app, Vector2 mouse)
             text(app, label, 860, y + 2, 15, true, change >= 0 ? Color{120, 230, 140, 255} : ERROR_TEXT);
         }
     }
+    // En ligne : succès débloqués par cette partie
+    if (app.online.in_game && !app.online.new_achievements.empty()) {
+        std::string names;
+        for (const std::string& code : app.online.new_achievements) {
+            const AchievementInfo* info = find_achievement(code);
+            if (info != nullptr) {
+                names += (names.empty() ? "" : ", ") + T(app, info->name);
+            }
+        }
+        float size = 15;
+        text_centered(app, fit(app, T(app, "Achievement unlocked: {0}", {names}), 520, size, 11), 640, 525, size, true,
+                      GOLD_UI);
+    }
     for (const Button& button : board_buttons(app)) {
         draw_button(app, button, mouse);
     }
+}
+
+static void draw_buttons_of(const App& app, const std::vector<Button>& buttons, Vector2 mouse);  // plus bas
+
+// Liste des succès : débloqués en or, les autres grisés
+static void draw_achievements(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    text_centered(app, "Achievements", 640, 55, 40, true, GOLD_UI);
+    Rectangle table = {240, 100, 800, 600};
+    rounded(table, 14, {0, 0, 0, 90});
+    for (int i = 0; i < ACHIEVEMENT_COUNT; i++) {
+        const AchievementInfo& info = ACHIEVEMENTS[i];
+        bool unlocked = std::find(app.online.achievements.begin(), app.online.achievements.end(), std::string(info.code))
+                        != app.online.achievements.end();
+        float y = table.y + 20 + i * 52.0f;
+        Color mark = unlocked ? GOLD_UI : Color{110, 125, 115, 255};
+        gem_symbol(GOLD_INDEX, {table.x + 40, y + 20}, 13, mark);
+        text(app, info.name, table.x + 70, y + 4, 19, true, unlocked ? WHITE_TEXT : Color{170, 180, 172, 255});
+        text(app, info.description, table.x + 70, y + 28, 14, false, unlocked ? SOFT_TEXT : Color{140, 150, 144, 255});
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
 }
 
 static void draw_board(const App& app, Vector2 mouse)
@@ -1052,14 +1223,19 @@ static void draw_board(const App& app, Vector2 mouse)
     }
     draw_action_panel(app);
     draw_status(app);
-    for (const Button& button : visible_buttons(app)) {
-        draw_button(app, button, mouse);
+    if (!app.online.chat_open) {
+        for (const Button& button : visible_buttons(app)) {
+            draw_button(app, button, mouse);
+        }
     }
     draw_animations(app);
-    if (!app.curtain && !app.journal_open) {
+    if (!app.curtain && !app.journal_open && !app.online.chat_open) {
         draw_banner(app);
+        draw_chat_toast(app);
     }
-    if (app.journal_open) {
+    if (app.online.chat_open) {
+        draw_chat(app, mouse);
+    } else if (app.journal_open) {
         draw_journal(app);
     } else if (app.curtain) {
         draw_curtain(app);
@@ -1271,7 +1447,7 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
     Rectangle table = {290, 110, 700, 570};
     rounded(table, 14, {0, 0, 0, 90});
     text(app, "#", table.x + 24, table.y + 16, 15, true, SOFT_TEXT);
-    text(app, "Joueur", table.x + 70, table.y + 16, 15, true, SOFT_TEXT);
+    text(app, "Player", table.x + 70, table.y + 16, 15, true, SOFT_TEXT);
     text(app, "Elo", table.x + 470, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
     text(app, "Games", table.x + 570, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
     text(app, "Wins", table.x + 676, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
@@ -1293,6 +1469,47 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
     draw_buttons_of(app, visible_buttons(app), mouse);
 }
 
+// Amis : ajout par pseudo, demandes reçues et envoyées, statut des amis
+static void draw_friends(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt();
+    text_centered(app, "Friends", 640, 70, 40, true, GOLD_UI);
+    Rectangle table = {200, 210, 880, 470};
+    rounded(table, 14, {0, 0, 0, 90});
+    int count = std::min(static_cast<int>(online.friends.size()), FRIENDS_SHOWN);
+    for (int i = 0; i < count; i++) {
+        const FriendLine& line = online.friends[i];
+        float y = 236.0f + i * 50;
+        Color dot = line.status == "playing" ? GOLD_UI : line.status == "online" ? Color{90, 220, 120, 255}
+                                                                                 : Color{130, 140, 135, 255};
+        std::string state = line.relation == "incoming"   ? "Wants to be your friend"
+                            : line.relation == "outgoing" ? "Request sent"
+                            : line.status == "playing"    ? "In a game"
+                            : line.status == "online"     ? "Online"
+                                                          : "Offline";
+        DrawCircleV({232, y + 19}, 7, line.relation == "friend" ? dot : Color{0, 0, 0, 0});
+        text(app, line.pseudo, 252, y + 8, 20, true, WHITE_TEXT);
+        text(app, "Elo " + std::to_string(line.elo), 520, y + 11, 16, false, SOFT_TEXT);
+        text(app, state, 620, y + 11, 16, false, line.relation == "incoming" ? GOLD_UI : SOFT_TEXT);
+    }
+    if (count == 0) {
+        text_centered(app, app.net.pending() > 0 ? "Loading…" : "No friends yet: add one with their username.", 640,
+                      400, 18, false, SOFT_TEXT);
+    }
+    for (const Button& button : visible_buttons(app)) {
+        if (button.id == ButtonId::FriendBox) {
+            draw_text_box(app, button);
+            if (button.label.empty() && !button.selected) {
+                text(app, "Username", button.rect.x + 14, button.rect.y + 14, 18, false, {120, 120, 120, 255});
+            }
+        } else {
+            draw_button(app, button, mouse);
+        }
+    }
+    draw_message_line(app, 760);
+}
+
 void draw_app(const App& app, Vector2 mouse)
 {
     switch (app.screen) {
@@ -1303,6 +1520,8 @@ void draw_app(const App& app, Vector2 mouse)
     case Screen::Online: draw_online(app, mouse); break;
     case Screen::Lobby: draw_lobby(app, mouse); break;
     case Screen::Leaderboard: draw_leaderboard(app, mouse); break;
+    case Screen::Friends: draw_friends(app, mouse); break;
+    case Screen::Achievements: draw_achievements(app, mouse); break;
     case Screen::Update: draw_update(app, mouse); break;
     case Screen::Board:
         if (app.game) {

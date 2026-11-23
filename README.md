@@ -107,6 +107,10 @@ Depuis l'accueil, « Jouer en ligne » :
 5. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
    est visible depuis le menu en ligne et sur
    [gemspire.epsilon-forge.fr/classement](https://gemspire.epsilon-forge.fr/classement).
+6. **Chat** pendant la partie (bouton « Chat ») : messages courts, réactions
+   rapides, sourdine d'un joueur. **Amis** (menu en ligne) : ajout par
+   pseudo, statut en ligne / en partie. **Succès** : 11 à débloquer, liste
+   dans le menu en ligne.
 
 **Discord** :
 
@@ -119,6 +123,9 @@ Depuis l'accueil, « Jouer en ligne » :
   crée un salon vocal temporaire ; si Gemspire est ouvert (connecté avec
   Discord), le jeu propose de créer la partie, et le salon vocal est limité au
   nombre de places.
+- **Bot** : `/challenge @membre` crée un salon à 2 places et prévient le
+  membre défié ; rôles de rang selon l'Elo (Pearl, Ruby, Sapphire, Emerald,
+  Diamond).
 
 Par défaut, le jeu se connecte au serveur officiel
 `https://gemspire.epsilon-forge.fr`. Pour un autre serveur (par exemple

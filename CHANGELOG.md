@@ -4,6 +4,31 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [3.8.0] - 2026-11-23
+
+### Added
+- **In-game chat** (online games): « Chat » button with the number of unread
+  messages, 120 characters per message, 6 quick reactions (GG, Good luck!...),
+  mute a player, anti-spam (1 message per second, 6 per 20 seconds). The new
+  message shows for a few seconds at the bottom of the board. Messages are
+  only kept in memory with the game.
+- **Friends**: add a player by username, accept or decline requests, see
+  whether your friends are online or in a game (« Friends » in the online
+  menu). A request shows up in the friend's game.
+- **Achievements**: 11 achievements (first victory, royal visit, no safety
+  net, giant slayer...), unlocked at the end of online games, listed in the
+  online menu and shown on the results screen.
+- **Discord Activity**: everyone who opens Gemspire in the same voice channel
+  lands in the same lobby (4 seats).
+- Bot: **`/challenge @member`** creates a 2-player lobby and pings the
+  challenged member (both games are told); **rank roles** by Elo (Pearl, Ruby,
+  Sapphire, Emerald, Diamond) updated every 10 minutes (`RANK_ROLES=0` to
+  turn them off).
+
+### Fixed
+- The leaderboard screen showed « Joueur » in English.
+- Unstable server test (a tied game has no Elo change).
+
 ## [3.7.0] - 2026-11-23
 
 ### Added

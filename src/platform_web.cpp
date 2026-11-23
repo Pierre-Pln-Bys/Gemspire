@@ -45,6 +45,14 @@ EM_JS(char*, browser_language, (), {
 
 EM_JS(int, activity_active, (), { return window.gemspireActivity && gemspireActivity.active ? 1 : 0; });
 
+EM_JS(char*, activity_instance, (), {
+    var text = window.gemspireActivity ? gemspireActivity.instanceId : "";
+    var size = lengthBytesUTF8(text) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(text, copy, size);
+    return copy;
+});
+
 EM_JS(void, activity_start, (const char* client_id), {
     if (window.gemspireActivity) {
         gemspireActivity.start(UTF8ToString(client_id));
@@ -93,6 +101,11 @@ void web_go_to(const std::string& url)
 bool web_in_activity()
 {
     return activity_active() != 0;
+}
+
+std::string web_activity_instance()
+{
+    return take_string(activity_instance());
 }
 
 void web_activity_start(const std::string& client_id)

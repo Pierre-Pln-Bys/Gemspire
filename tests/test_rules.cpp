@@ -5,6 +5,7 @@
 #include <iostream>
 #include <random>
 
+#include "../src/achievements.hpp"
 #include "../src/ai.hpp"
 #include "../src/data.hpp"
 #include "../src/elo.hpp"
@@ -457,6 +458,36 @@ static void test_i18n()
     }
 }
 
+// Succès : partie jouée jusqu'au bout entre ordinateurs, puis contrôles
+static void test_achievements()
+{
+    Game game({"Alice", "Bob"}, 11, Mode::Classic);
+    for (int p = 0; p < 2; p++) {
+        game.set_controller(p, Controller::AiMedium);
+    }
+    while (!game.is_over()) {
+        assert(ai_play(game).empty());
+    }
+    std::vector<int> places = final_places(game);
+    int winner = places[0] == 0 ? 0 : 1;
+    int loser = 1 - winner;
+    // Le gagnant était moins bien classé de 150 Elo : « giant_slayer »
+    std::vector<int> ratings(2, 1000);
+    ratings[loser] = 1150;
+    std::vector<std::string> won = earned_achievements(game, {winner, places, ratings, 10, 1210});
+    auto has = [](const std::vector<std::string>& list, const std::string& code) {
+        return std::find(list.begin(), list.end(), code) != list.end();
+    };
+    assert(has(won, "first_game") && has(won, "first_win") && has(won, "giant_slayer"));
+    assert(has(won, "ten_games") && has(won, "elo_1200") && !has(won, "fifty_games"));
+    std::vector<std::string> lost = earned_achievements(game, {loser, places, ratings, 1, 1100});
+    assert(has(lost, "first_game") && !has(lost, "first_win") && !has(lost, "giant_slayer"));
+    for (const std::string& code : won) {
+        assert(find_achievement(code) != nullptr);
+    }
+    assert(find_achievement("inconnu") == nullptr);
+}
+
 int main()
 {
     test_data();
@@ -471,6 +502,7 @@ int main()
     test_save();
     test_timeout_and_forfeit();
     test_i18n();
+    test_achievements();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

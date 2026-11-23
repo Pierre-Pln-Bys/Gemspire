@@ -30,6 +30,8 @@ void web_go_to(const std::string& url);
 bool web_in_activity();
 void web_activity_start(const std::string& client_id);
 std::string web_activity_take();
+// Instance de l'Activité (la même pour tous les joueurs du salon vocal)
+std::string web_activity_instance();
 
 // Langue du navigateur ("fr-FR", "en-US"...)
 std::string web_language();

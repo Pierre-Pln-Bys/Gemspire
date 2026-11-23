@@ -114,6 +114,18 @@ Store::Store(const std::string& path)
          " account_id INTEGER NOT NULL REFERENCES accounts(id),"
          " place INTEGER NOT NULL, score INTEGER NOT NULL,"
          " elo_before INTEGER NOT NULL, elo_after INTEGER NOT NULL);");
+    // Amis (v3.8) : une ligne = « account_id demande / accepte friend_id »
+    exec("CREATE TABLE IF NOT EXISTS friends ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " friend_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " created_at INTEGER NOT NULL,"
+         " PRIMARY KEY (account_id, friend_id));");
+    // Succès (v3.8)
+    exec("CREATE TABLE IF NOT EXISTS achievements ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " code TEXT NOT NULL,"
+         " unlocked_at INTEGER NOT NULL,"
+         " PRIMARY KEY (account_id, code));");
     // Colonnes ajoutées en v3.5 (sans effet si elles existent déjà)
     exec("ALTER TABLE accounts ADD COLUMN banned_until INTEGER NOT NULL DEFAULT 0;");
     exec("ALTER TABLE accounts ADD COLUMN ban_reason TEXT NOT NULL DEFAULT '';");
@@ -292,6 +304,21 @@ std::vector<Account> Store::leaderboard(int limit)
     return accounts;
 }
 
+std::vector<std::pair<std::string, int>> Store::discord_ranks()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string sql = std::string("SELECT provider_id, elo FROM accounts WHERE provider = 'discord'"
+                                  " AND pseudo IS NOT NULL AND games > 0 AND ")
+                      + NOT_BANNED;
+    Statement list(db_, sql.c_str());
+    list.bind(1, static_cast<long long>(std::time(nullptr)));
+    std::vector<std::pair<std::string, int>> ranks;
+    while (list.row()) {
+        ranks.push_back({list.text(0), list.integer(1)});
+    }
+    return ranks;
+}
+
 int Store::rank_of(int id)
 {
     Account account;
@@ -397,9 +424,90 @@ std::string Store::cancel_game(int game_id)
     return "";
 }
 
+std::string Store::add_friend(int id, int other)
+{
+    if (id == other) {
+        return "You can't add yourself.";
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement count(db_, "SELECT COUNT(*) FROM friends WHERE account_id = ?");
+    count.bind(1, static_cast<long long>(id));
+    if (count.row() && count.integer(0) >= MAX_FRIENDS) {
+        return "Too many friends (100 at most).";
+    }
+    Statement insert(db_, "INSERT OR IGNORE INTO friends (account_id, friend_id, created_at) VALUES (?, ?, ?)");
+    insert.bind(1, static_cast<long long>(id));
+    insert.bind(2, static_cast<long long>(other));
+    insert.bind(3, static_cast<long long>(std::time(nullptr)));
+    insert.done();
+    return "";
+}
+
+void Store::remove_friend(int id, int other)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement remove(db_, "DELETE FROM friends WHERE (account_id = ? AND friend_id = ?) OR (account_id = ? AND friend_id = ?)");
+    remove.bind(1, static_cast<long long>(id));
+    remove.bind(2, static_cast<long long>(other));
+    remove.bind(3, static_cast<long long>(other));
+    remove.bind(4, static_cast<long long>(id));
+    remove.done();
+}
+
+std::vector<Friend> Store::friends(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Toutes les personnes liées dans un sens ou dans l'autre, avec le sens du lien
+    Statement list(db_, "SELECT a.id, a.pseudo, a.elo,"
+                        " EXISTS(SELECT 1 FROM friends f WHERE f.account_id = ? AND f.friend_id = a.id),"
+                        " EXISTS(SELECT 1 FROM friends f WHERE f.account_id = a.id AND f.friend_id = ?)"
+                        " FROM accounts a WHERE a.pseudo IS NOT NULL AND a.id IN"
+                        " (SELECT friend_id FROM friends WHERE account_id = ?"
+                        "  UNION SELECT account_id FROM friends WHERE friend_id = ?)"
+                        " ORDER BY a.pseudo COLLATE NOCASE");
+    for (int i = 1; i <= 4; i++) {
+        list.bind(i, static_cast<long long>(id));
+    }
+    std::vector<Friend> result;
+    while (list.row()) {
+        bool mine = list.integer(3) != 0;
+        bool theirs = list.integer(4) != 0;
+        result.push_back({list.integer(0), list.text(1), list.integer(2),
+                          mine && theirs ? "friend" : mine ? "outgoing" : "incoming"});
+    }
+    return result;
+}
+
+bool Store::unlock_achievement(int id, const std::string& code)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement insert(db_, "INSERT OR IGNORE INTO achievements (account_id, code, unlocked_at) VALUES (?, ?, ?)");
+    insert.bind(1, static_cast<long long>(id));
+    insert.bind(2, code);
+    insert.bind(3, static_cast<long long>(std::time(nullptr)));
+    insert.done();
+    return sqlite3_changes(db_) > 0;
+}
+
+std::vector<std::string> Store::achievements(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement list(db_, "SELECT code FROM achievements WHERE account_id = ? ORDER BY unlocked_at, code");
+    list.bind(1, static_cast<long long>(id));
+    std::vector<std::string> codes;
+    while (list.row()) {
+        codes.push_back(list.text(0));
+    }
+    return codes;
+}
+
 void Store::delete_account(int id)
 {
     std::lock_guard<std::mutex> lock(mutex_);
+    Statement links(db_, "DELETE FROM friends WHERE account_id = ? OR friend_id = ?");
+    links.bind(1, static_cast<long long>(id));
+    links.bind(2, static_cast<long long>(id));
+    links.done();
     Statement sessions(db_, "DELETE FROM sessions WHERE account_id = ?");
     sessions.bind(1, static_cast<long long>(id));
     sessions.done();

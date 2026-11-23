@@ -89,7 +89,7 @@ static bool version_allowed(const std::string& version, const std::string& minim
 // ne sont pas concernés.
 static bool route_needs_version(const std::string& path)
 {
-    const char* prefixes[] = {"/me", "/lobbies", "/games/", "/auth/poll", "/auth/logout", "/config"};
+    const char* prefixes[] = {"/me", "/lobbies", "/games/", "/friends", "/auth/poll", "/auth/logout", "/config"};
     for (const char* prefix : prefixes) {
         if (path.compare(0, std::string(prefix).size(), prefix) == 0) {
             return true;
@@ -136,6 +136,7 @@ static json account_json(Store& store, int id)
             {"games", account.games},
             {"wins", account.wins},
             {"rank", store.rank_of(id)},
+            {"achievements", store.achievements(id).size()},
             {"banned", account.banned()},
             {"banned_until", account.banned_until},
             {"ban_reason", account.ban_reason}};
@@ -566,7 +567,8 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         reply(response, 200, {{"id", account.id}, {"pseudo", account.pseudo}, {"provider", account.provider},
-                              {"elo", account.elo}, {"games", account.games}, {"wins", account.wins}});
+                              {"elo", account.elo}, {"games", account.games}, {"wins", account.wins},
+                              {"achievements", store_.achievements(id)}});
     });
 
     // Notifications du jeu (attente longue) ; elles servent aussi de présence
@@ -607,6 +609,55 @@ void ServerApp::setup_routes(httplib::Server& server)
     });
 
     // --- Salons
+    // --- Amis : liste (avec statut des amis acceptés), demande, retrait
+    server.Get("/friends", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json list = json::array();
+        for (const Friend& entry : store_.friends(id)) {
+            list.push_back({{"pseudo", entry.pseudo}, {"elo", entry.elo}, {"relation", entry.relation},
+                            {"status", entry.relation == "friend" ? rooms_.status_of(entry.account) : "unknown"}});
+        }
+        reply(response, 200, {{"friends", list}});
+    });
+
+    server.Post(R"(/friends/(add|remove))", [this](const httplib::Request& request, httplib::Response& response) {
+        Seat seat;
+        std::string error;
+        json body;
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        if (!seat_for(id, seat, error)) {
+            reply_error(response, 403, error);
+            return;
+        }
+        std::string pseudo = parse_body(request, body) && body.contains("pseudo") && body["pseudo"].is_string()
+                                 ? body["pseudo"].get<std::string>()
+                                 : "";
+        int other = pseudo.size() > 64 ? 0 : store_.find_by_pseudo(pseudo);
+        if (other == 0) {
+            reply_error(response, 404, "Player not found.");
+            return;
+        }
+        if (request.matches[1] == "remove") {
+            store_.remove_friend(id, other);
+        } else {
+            error = store_.add_friend(id, other);
+            if (!error.empty()) {
+                reply_error(response, 400, error);
+                return;
+            }
+            rooms_.notify(other, {{"type", "friend_request"}, {"pseudo", seat.pseudo}});
+        }
+        reply(response, 200, {{"ok", true}});
+    });
+
     server.Post("/lobbies", [this](const httplib::Request& request, httplib::Response& response) {
         Seat seat;
         std::string error;
@@ -636,6 +687,38 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         std::string code;
         error = rooms_.create_lobby(seat, mode, seats, code, voice);
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        reply(response, 200, {{"code", code}});
+    });
+
+    // Activité Discord : salon partagé par tous ceux qui ont ouvert la même instance
+    server.Post("/lobbies/activity", [this](const httplib::Request& request, httplib::Response& response) {
+        Seat seat;
+        std::string error;
+        json body;
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        if (!seat_for(id, seat, error)) {
+            reply_error(response, 403, error);
+            return;
+        }
+        std::string instance = parse_body(request, body) && body.contains("instance") && body["instance"].is_string()
+                                   ? body["instance"].get<std::string>()
+                                   : "";
+        if (instance.empty() || instance.size() > 100
+            || instance.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_:.")
+                   != std::string::npos) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        std::string code;
+        error = rooms_.activity_lobby(seat, instance, code);
         if (!error.empty()) {
             reply_error(response, 400, error);
             return;
@@ -722,6 +805,28 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         reply(response, 200, {{"status", "ok"}});
+    });
+
+    server.Post(R"(/games/(\d{1,9})/chat)", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json body;
+        if (!parse_body(request, body) || !body.is_object()) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        std::string text = body.contains("text") && body["text"].is_string() ? body["text"].get<std::string>() : "";
+        int reaction = body.contains("reaction") && body["reaction"].is_number_integer() ? body["reaction"].get<int>() : -1;
+        std::string error = text.size() > 2000 ? "Invalid message (1 to 120 characters)."
+                                                : rooms_.chat(std::stoi(request.matches[1]), id, text, reaction);
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        reply(response, 200, {{"ok", true}});
     });
 
     server.Post(R"(/games/(\d{1,9})/forfeit)", [this](const httplib::Request& request, httplib::Response& response) {
@@ -905,6 +1010,54 @@ void ServerApp::setup_routes(httplib::Server& server)
                                 {"voice_channel", body["voice_channel"]},
                                 {"channel_name", body.value("channel_name", std::string("Discord"))}});
         reply(response, 200, {{"offered", true}});
+    });
+
+    // Rôles de rang : Elo des joueurs liés à Discord
+    server.Get("/bot/ranks", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Invalid bot key.");
+            return;
+        }
+        json players = json::array();
+        for (const auto& entry : store_.discord_ranks()) {
+            players.push_back({{"discord_id", entry.first}, {"elo", entry.second}});
+        }
+        reply(response, 200, {{"players", players}});
+    });
+
+    // /challenge du bot : salon à 2 places créé pour le joueur qui défie ;
+    // les deux jeux sont prévenus (s'ils sont ouverts)
+    server.Post("/bot/challenge", [this](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Invalid bot key.");
+            return;
+        }
+        if (!parse_body(request, body) || !body.contains("discord_id") || !body["discord_id"].is_string()
+            || !body.contains("target_discord_id") || !body["target_discord_id"].is_string()) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        int challenger = store_.find_account("discord", body["discord_id"].get<std::string>());
+        Seat seat;
+        std::string error;
+        if (challenger == 0 || !seat_for(challenger, seat, error)) {
+            reply_error(response, 404, "Account not linked: sign in to Gemspire with Discord first.");
+            return;
+        }
+        Mode mode = body.value("mode", std::string("classique")) == "rapide" ? Mode::Quick : Mode::Classic;
+        std::string code;
+        error = rooms_.create_lobby(seat, mode, 2, code);
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        rooms_.notify(challenger, {{"type", "challenge_lobby"}, {"code", code}});
+        int target = store_.find_account("discord", body["target_discord_id"].get<std::string>());
+        if (target != 0 && target != challenger) {
+            rooms_.notify(target, {{"type", "challenge"}, {"from", seat.pseudo}, {"code", code}});
+        }
+        reply(response, 200, {{"code", code}, {"pseudo", seat.pseudo}, {"target_linked", target != 0}});
     });
 
     server.Get("/bot/events", [this](const httplib::Request& request, httplib::Response& response) {

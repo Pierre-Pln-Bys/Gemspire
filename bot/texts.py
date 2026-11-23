@@ -87,6 +87,17 @@ TEXTS = {
               "• en classique : réserver une carte et gagner 1 or (joker).\n"
               "10 jetons au maximum. Les nobles viennent quand vous avez assez de cartes. À 15 points, on finit "
               "le tour de table. En ligne : 2 minutes par tour.\nRègles complètes : <{wiki}>"},
+    "challenge": {
+        "en": "⚔️ **{pseudo}** ({challenger}) challenges {target} to a {mode} game! Lobby code **{code}**: "
+              "in Gemspire, Play online > Join (or <{site}/play/>).",
+        "fr": "⚔️ **{pseudo}** ({challenger}) défie {target} dans une partie {mode} ! Code du salon **{code}** : "
+              "dans Gemspire, Jouer en ligne > Rejoindre (ou <{site}/play/>)."},
+    "challenge_not_linked": {
+        "en": " ({target} hasn't linked Gemspire yet: `/link` after signing in with Discord.)",
+        "fr": " ({target} n'a pas encore lié Gemspire : `/lier` après connexion avec Discord.)"},
+    "challenge_self": {"en": "Pick someone else to challenge.", "fr": "Choisissez quelqu'un d'autre à défier."},
+    "mode_classic": {"en": "classic", "fr": "classique"},
+    "mode_quick": {"en": "quick", "fr": "rapide"},
     "report_log": {"en": "🚩 **Report** from {user} against **{pseudo}**: {reason}",
                    "fr": "🚩 **Signalement** de {user} contre **{pseudo}** : {reason}"},
     "report_ok": {"en": "Thanks, the moderators received your report.",
@@ -122,6 +133,13 @@ COMMAND_FR = {
     "play": "jouer",
     "Download Gemspire or play in your browser": "Télécharger Gemspire ou jouer dans le navigateur",
     "rules": "regles",
+    "challenge": "defi",
+    "Challenge a member to a Gemspire game (2 players)": "Défier un membre dans une partie de Gemspire (2 joueurs)",
+    "Member to challenge": "Membre à défier",
+    "mode": "mode",
+    "Game mode": "Mode de jeu",
+    "Classic": "Classique",
+    "Quick": "Rapide",
     "Gemspire rules in short": "Les règles de Gemspire en bref",
     "report": "signaler",
     "Report a player to the moderators (cheating, username...)":

@@ -16,7 +16,7 @@ from api import SplendorApi  # noqa: E402
 import tempfile  # noqa: E402
 
 from api import ApiError  # noqa: E402
-from logic import (TempChannel, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
+from logic import (TempChannel, rank_role_changes, rank_tier, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
                    format_profile, format_ranking, frequent_opponents, is_create_channel, load_state, offer_message,
                    save_state, should_delete, temp_channel_name)
 
@@ -63,6 +63,13 @@ class LogicTests(unittest.TestCase):
         # Rôle réglé par identifiant : le nom ne suffit plus
         self.assertTrue(can_moderate(["X"], False, "Modérateur", [111, 1234567890123456789], 1234567890123456789))
         self.assertFalse(can_moderate(["Modérateur"], False, "Modérateur", [111], 1234567890123456789))
+
+    def test_rank_roles(self):
+        self.assertEqual([rank_tier(elo) for elo in (850, 1000, 1099, 1100, 1300, 1450)],
+                         ["Pearl", "Ruby", "Ruby", "Sapphire", "Emerald", "Diamond"])
+        self.assertEqual(rank_role_changes(["@everyone", "Joueur"], 1120), ("Sapphire", []))
+        self.assertEqual(rank_role_changes(["Ruby", "Joueur"], 1120), ("Sapphire", ["Ruby"]))
+        self.assertEqual(rank_role_changes(["Sapphire"], 1120), (None, []))
 
     def test_parse_id(self):
         self.assertEqual(parse_id(" 1574139585007718474 "), 1574139585007718474)

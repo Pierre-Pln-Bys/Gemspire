@@ -3,6 +3,7 @@
 
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../src/game.hpp"
@@ -47,6 +48,16 @@ struct GameResult {
     int elo_after;
 };
 
+// Un lien d'amitié vu par un joueur
+struct Friend {
+    int account;
+    std::string pseudo;
+    int elo;
+    std::string relation;   // "friend" (accepté des deux côtés), "incoming" (demande reçue), "outgoing" (envoyée)
+};
+
+const int MAX_FRIENDS = 100;
+
 // Stockage SQLite : comptes, sessions, historique des parties.
 // Toutes les méthodes sont protégées par un verrou (serveur multi-thread).
 class Store {
@@ -76,6 +87,20 @@ public:
     // Classement (sans les comptes suspendus)
     std::vector<Account> leaderboard(int limit);
     int rank_of(int id);                         // place au classement (0 : pas classé)
+
+    // --- Amis : une demande devient une amitié quand l'autre l'accepte (ou
+    //     demande aussi). "" ou l'erreur.
+    std::string add_friend(int id, int other);
+    void remove_friend(int id, int other);   // retire l'amitié ou la demande, dans les deux sens
+    std::vector<Friend> friends(int id);
+
+    // --- Succès : true si `code` est nouveau pour ce compte (il est alors enregistré)
+    bool unlock_achievement(int id, const std::string& code);
+    std::vector<std::string> achievements(int id);
+
+    // Comptes Discord classés (au moins une partie, non suspendus) :
+    // identifiant Discord et Elo, pour les rôles de rang du bot
+    std::vector<std::pair<std::string, int>> discord_ranks();
 
     // --- Modération (commandes du bot Discord)
     int find_by_pseudo(const std::string& pseudo);  // 0 si aucun (sans casse)

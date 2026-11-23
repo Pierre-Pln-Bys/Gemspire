@@ -258,7 +258,7 @@ std::string page_terms(const SiteInfo& site, Lang lang)
 {
     std::ostringstream body;
     body << "<h1>" << T(lang, "Terms of use", "Conditions d'utilisation") << "</h1><p class=\"soft\">"
-         << T(lang, "Last updated: November 22, 2026", "Dernière mise à jour : 22 novembre 2026")
+         << T(lang, "Last updated: November 23, 2026", "Dernière mise à jour : 23 novembre 2026")
          << "</p><div class=\"card\"><h2>" << T(lang, "1. The service", "1. Le service") << "</h2><p>"
          << T(lang, "Gemspire is a free, open-source student project: a game (Windows, Linux, browser), an online "
                     "game server, this website and a Discord bot. It is an independent project, not affiliated with "
@@ -326,17 +326,24 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
          << T(lang, "<strong>A fingerprint of your session token</strong> (the token itself stays on your device).",
               "<strong>Une empreinte de votre jeton de session</strong> (le jeton lui-même reste sur votre "
               "appareil).")
+         << "</li><li>"
+         << T(lang, "<strong>Your friend list</strong> (requests you sent or accepted) and the <strong>achievements"
+                    "</strong> you unlocked.",
+              "<strong>Votre liste d'amis</strong> (demandes envoyées ou acceptées) et les <strong>succès</strong> "
+              "que vous avez débloqués.")
          << "</li></ul><h2>" << T(lang, "What we don't store", "Ce que nous n'enregistrons pas") << "</h2><p>"
-         << T(lang, "No email address, password, picture, friend list or messages. The game shows no ads and sells "
-                    "no data.",
-              "Ni adresse e-mail, ni mot de passe, ni photo, ni liste d'amis, ni messages. Le jeu n'affiche pas de "
-              "publicité et ne revend aucune donnée.")
+         << T(lang, "No email address, password or picture, and no chat message in the database. The game shows no "
+                    "ads and sells no data.",
+              "Ni adresse e-mail, ni mot de passe, ni photo, et aucun message du chat dans la base. Le jeu n'affiche "
+              "pas de publicité et ne revend aucune donnée.")
          << "</p><h2>" << T(lang, "Temporary data", "Données temporaires") << "</h2><p>"
          << T(lang, "While you play, the server keeps in memory the time of your last connection (to show « in "
-                    "game » to the Discord bot) and the state of ongoing games. Discord Rich Presence goes directly "
+                    "game » to the Discord bot and to your friends), the state of ongoing games and their chat (the last 50 "
+                    "messages, forgotten at most an hour after the game ends). Discord Rich Presence goes directly "
                     "from your game to your Discord app.",
               "Pendant que vous jouez, le serveur garde en mémoire l'heure de votre dernière connexion (pour "
-              "afficher « en jeu » au bot Discord) et l'état des parties en cours. La Rich Presence Discord passe "
+              "afficher « en jeu » au bot Discord et à vos amis), l'état des parties en cours et leur chat (les 50 "
+              "derniers messages, oubliés au plus une heure après la fin de la partie). La Rich Presence Discord passe "
               "directement de votre jeu à votre application Discord.")
          << "</p><h2>" << T(lang, "Discord bot", "Bot Discord") << "</h2><p>"
          << T(lang, "The bot sees who joins the server's voice channels to create game channels, and keeps the list "

@@ -8,9 +8,9 @@ Raspberry Pi, `https://gemspire.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
 v3.5 (jeu dans le navigateur, site et bot bilingues), v3.6 (Gemspire),
-v3.7 (jeu en anglais et en français, Activité Discord).
-**Prochaines étapes** : v3.8
-(communauté), v3.9 (compétition), puis la **v4 : publication et test
+v3.7 (jeu en anglais et en français, Activité Discord), v3.8 (chat, amis,
+succès, `/challenge`, rôles de rang).
+**Prochaines étapes** : v3.9 (compétition), puis la **v4 : publication et test
 d'intrusion**, qui couvrira tout cela.
 
 Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
@@ -167,12 +167,13 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 
 ## v3.8 — Communauté
 
-- [ ] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
+- [x] Chat dans la partie (via le serveur) : longueur limitée, anti-spam,
   mise en sourdine d'un joueur, réactions rapides.
-- [ ] Liste d'amis, statut en ligne / en partie.
-- [ ] Commandes du bot : `/challenge @joueur` (défi), rôles de rang selon
+- [x] Liste d'amis, statut en ligne / en partie.
+- [x] Commandes du bot : `/challenge @joueur` (défi), rôles de rang selon
   l'Elo.
-- [ ] Succès (premier noble, victoire sans réserver...).
+- [x] Succès (premier noble, victoire sans réserver...).
+- [x] Activité Discord : même salon de jeu pour tout le salon vocal.
 
 ## v3.9 — Compétition
 

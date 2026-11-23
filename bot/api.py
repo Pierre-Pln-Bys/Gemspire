@@ -69,6 +69,15 @@ class SplendorApi:
         """Profil + "games_list" : 15 dernières parties (id, mode, finished_at, place, players...)"""
         return self._request("GET", "/bot/history?" + urllib.parse.urlencode(self._who(pseudo, discord_id)))
 
+    def ranks(self):
+        """[{"discord_id", "elo"}, ...] : joueurs liés à Discord et classés (rôles de rang)"""
+        return self._request("GET", "/bot/ranks").get("players", [])
+
+    def challenge(self, discord_id, target_discord_id, mode):
+        """Crée un salon à 2 places pour `discord_id` ; {"code", "pseudo", "target_linked"}"""
+        body = {"discord_id": str(discord_id), "target_discord_id": str(target_discord_id), "mode": mode}
+        return self._request("POST", "/bot/challenge", body)
+
     # --- Modération
     def ban(self, pseudo, days, reason=""):
         """Suspend le compte `days` jours (0 : définitif)."""

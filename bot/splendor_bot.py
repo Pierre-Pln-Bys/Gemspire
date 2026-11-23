@@ -32,7 +32,7 @@ from discord import app_commands
 
 from api import ApiError, SplendorApi
 from logic import (CREATE_CHANNEL_NAME, DELETE_DELAY_SECONDS, DOWNLOAD_URL, OFFER_RETRY_COUNT, OFFER_RETRY_SECONDS,
-                   RANKING_SECONDS, TempChannel, apply_event, ban_duration_text, can_moderate, channel_matches,
+                   RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
                    format_history, format_profile, format_ranking, is_create_channel, load_state, offer_message,
                    parse_id, save_state, should_delete, site_page, temp_channel_name)
 from texts import COMMAND_FR, lang_of, tr
@@ -53,6 +53,8 @@ ranking_channel_id = parse_id(os.environ.get("RANKING_CHANNEL_ID"))
 mod_log_channel_id = parse_id(os.environ.get("MOD_LOG_CHANNEL_ID"))
 mod_role_id = parse_id(os.environ.get("MOD_ROLE_ID"))
 player_role_id = parse_id(os.environ.get("PLAYER_ROLE_ID"))
+# Rôles de rang selon l'Elo (Pearl, Ruby, Sapphire, Emerald, Diamond) ; RANK_ROLES=0 pour les désactiver
+rank_roles_enabled = os.environ.get("RANK_ROLES", "1") != "0"
 
 intents = discord.Intents.none()
 intents.guilds = True
@@ -230,7 +232,41 @@ async def update_rankings():
                     remember()
         except Exception as error:  # serveur indisponible, permissions...
             log.warning("Classement non mis à jour : %s", error)
+        if rank_roles_enabled:
+            try:
+                await update_rank_roles()
+            except Exception as error:
+                log.warning("Rôles de rang non mis à jour : %s", error)
         await asyncio.sleep(RANKING_SECONDS)
+
+
+async def update_rank_roles():
+    """Donne à chaque joueur lié le rôle de son rang (et retire les autres).
+    Les rôles sont créés s'ils manquent ; le rôle du bot doit être au-dessus."""
+    players = await asyncio.to_thread(api.ranks)
+    for guild in client.guilds:
+        roles = {}
+        for _minimum, name, color in RANK_TIERS:
+            role = discord.utils.get(guild.roles, name=name)
+            if role is None:
+                role = await guild.create_role(name=name, colour=discord.Colour(color), hoist=True,
+                                               reason="Gemspire: rank roles")
+            roles[name] = role
+        for player in players:
+            member_id = parse_id(player.get("discord_id"))
+            if member_id is None:
+                continue
+            member = guild.get_member(member_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(member_id)
+                except (discord.NotFound, discord.Forbidden):
+                    continue  # pas sur ce serveur
+            add, remove = rank_role_changes([role.name for role in member.roles], player.get("elo", 1000))
+            if remove:
+                await member.remove_roles(*[roles[name] for name in remove], reason="Gemspire: rank changed")
+            if add:
+                await member.add_roles(roles[add], reason="Gemspire: rank")
 
 
 # ---------------------------------------------------------------- Commandes pour tous
@@ -314,6 +350,29 @@ async def rules(interaction: discord.Interaction):
     await answer(interaction, tr("rules", user_lang(interaction),
                                  wiki="https://github.com/Pierre-Pln-Bys/Gemspire/wiki/Regles-du-jeu"),
                  private=True)
+
+
+@tree.command(name=_("challenge"), description=_("Challenge a member to a Gemspire game (2 players)"))
+@app_commands.rename(member=_("member"), mode=_("mode"))
+@app_commands.describe(member=_("Member to challenge"), mode=_("Game mode"))
+@app_commands.choices(mode=[app_commands.Choice(name=_("Classic"), value="classique"),
+                            app_commands.Choice(name=_("Quick"), value="rapide")])
+async def challenge(interaction: discord.Interaction, member: discord.Member, mode: str = "classique"):
+    lang = user_lang(interaction)
+    if member.id == interaction.user.id or member.bot:
+        await answer(interaction, tr("challenge_self", lang), private=True)
+        return
+    result = await call_api(interaction, api.challenge, interaction.user.id, member.id, mode)
+    if result is None:
+        return
+    text = tr("challenge", guild_lang(interaction.guild), pseudo=result.get("pseudo", "?"),
+              challenger=interaction.user.mention, target=member.mention, code=result.get("code", "?"),
+              mode=tr("mode_classic" if mode == "classique" else "mode_quick", guild_lang(interaction.guild)),
+              site=SITE_URL)
+    if not result.get("target_linked"):
+        text += tr("challenge_not_linked", guild_lang(interaction.guild), target=member.display_name)
+    # Seul le membre défié est notifié (pas de @everyone)
+    await interaction.response.send_message(text, allowed_mentions=discord.AllowedMentions(users=[member]))
 
 
 @tree.command(name=_("report"), description=_("Report a player to the moderators (cheating, username...)"))

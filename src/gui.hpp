@@ -24,7 +24,7 @@ const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 const char* const DEFAULT_SERVER = "https://gemspire.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
-enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update };
+enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -37,6 +37,10 @@ enum class ButtonId {
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
     Invite, OfferCreate, OfferIgnore, Download, Language,
+    // Chat d'une partie en ligne
+    Chat, ChatSend, ChatBox, ChatReaction, ChatMute,
+    // Amis
+    ShowFriends, FriendBox, FriendAdd, FriendAccept, FriendRemove, ShowAchievements,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -105,6 +109,29 @@ struct Banner {
 };
 const double BANNER_SECONDS = 3.0;
 
+// Un message du chat d'une partie en ligne
+struct ChatLine {
+    long id;
+    int seat;
+    std::string text;   // texte libre, "" pour une réaction
+    int reaction;       // numéro de réaction rapide, -1 pour un texte
+};
+
+// Réactions rapides du chat (même ordre que le serveur), traduites à l'affichage
+const int REACTION_COUNT = 6;
+const char* const REACTIONS[REACTION_COUNT] = {"GG", "Good luck!", "Nice move!", "Oops!", "Thanks!", "Hello!"};
+const int CHAT_MAX_CHARS = 120;
+const Rectangle CHAT_PANEL = {300, 110, 680, 580};  // panneau du chat sur le plateau
+
+// Une ligne de la liste d'amis
+struct FriendLine {
+    std::string pseudo;
+    int elo;
+    std::string relation;   // "friend", "incoming" (demande reçue), "outgoing" (demande envoyée)
+    std::string status;     // amis : "playing", "online", "offline"
+};
+const int FRIENDS_SHOWN = 9;
+
 // Tout ce qui concerne le jeu en ligne
 struct OnlineState {
     bool in_game = false;            // le plateau affiche une partie en ligne
@@ -140,13 +167,26 @@ struct OnlineState {
     bool lobby_poll_running = false;
     std::vector<std::string> log;    // historique envoyé par le serveur (anglais)
     std::vector<std::string> log_fr; // le même en français
+    std::vector<ChatLine> chat;      // chat de la partie (envoyé par le serveur)
+    long chat_seen = 0;              // dernier message lu (panneau du chat ouvert)
+    bool chat_open = false;
+    std::string chat_input;
+    bool muted[4] = {false, false, false, false};  // joueurs mis en sourdine (par place)
+    std::string chat_toast;          // dernier message reçu, montré quelques secondes
+    double chat_toast_until = 0;
     std::vector<int> seat_elos;
     std::vector<int> elo_changes;
     long notification_last = -1;     // dernière notification vue (-1 : pas encore demandé)
     bool notification_poll_running = false;
     std::string offer_channel;       // proposition du bot Discord : salon vocal à lier
     std::string offer_name;
+    bool activity_lobby_asked = false; // Activité Discord : salon partagé déjà demandé
     std::string pending_join;        // code reçu de Discord (« Rejoindre ») en attente de connexion
+    std::vector<std::string> achievements;      // succès du compte (codes, envoyés par /me)
+    std::vector<std::string> new_achievements;  // succès débloqués par la partie qui vient de finir
+    std::vector<FriendLine> friends;       // liste d'amis (écran Amis)
+    std::string friend_input;
+    double next_friends_poll = 0;
     std::vector<std::string> board_names;  // classement
     std::vector<int> board_elos;
     std::vector<int> board_games;
@@ -203,6 +243,12 @@ bool point_in(Vector2 point, Rectangle rect);
 // Le joueur dont on montre la main (cartes réservées) : en ligne, toujours
 // le sien ; en local, le joueur dont c'est le tour
 int viewer_seat(const App& app);
+
+// Messages du chat non lus (ni les siens, ni ceux des joueurs en sourdine)
+int unread_chat(const OnlineState& online);
+
+// Texte d'un message du chat dans la langue choisie (réactions traduites)
+std::string chat_text(const App& app, const ChatLine& line);
 
 // Boutons visibles selon l'écran et l'état
 std::vector<Button> visible_buttons(const App& app);

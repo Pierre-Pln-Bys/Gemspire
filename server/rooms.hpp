@@ -18,6 +18,18 @@
 
 const int MAX_MISSED_TURNS = 3;         // tours manqués d'affilée avant l'abandon
 const int FINISHED_GAME_SECONDS = 3600; // une partie finie reste visible 1 heure
+const int CHAT_MAX_CHARS = 120;         // longueur d'un message du chat
+const int CHAT_KEPT = 50;               // messages gardés par partie
+const int REACTION_COUNT = 6;           // réactions rapides (« gg », « bonne chance »...)
+
+// Un message du chat d'une partie (gardé en mémoire avec la partie seulement)
+struct ChatMessage {
+    long id;
+    int seat;
+    std::string text;      // texte libre, ou "" pour une réaction
+    int reaction = -1;     // numéro de la réaction rapide, -1 pour un texte
+    long long time;
+};
 
 // Une place dans un salon ou une partie en ligne
 struct Seat {
@@ -36,6 +48,7 @@ struct Lobby {
     int game_id = 0;      // partie lancée (0 : pas encore)
     long version = 1;     // augmente à chaque changement (attente longue)
     std::string voice_channel;  // salon vocal Discord lié (bot « Crée ta partie »), "" sinon
+    std::string activity;       // instance de l'Activité Discord liée, "" sinon
 };
 
 // Partie en ligne : le serveur garde la seule vraie partie et arbitre les coups
@@ -51,6 +64,9 @@ struct OnlineGame {
     long long turn_start = 0;          // début du tour en cours (secondes)
     std::vector<int> missed;           // tours manqués d'affilée, par place
     long long finished_at = 0;         // fin de la partie (pour l'oublier ensuite)
+    std::vector<std::vector<std::string>> new_achievements;  // succès débloqués à la fin, par place
+    std::vector<ChatMessage> chat;     // derniers messages du chat
+    long next_chat = 1;
 };
 
 // Tous les salons et parties en cours (en mémoire), protégés par un verrou.
@@ -63,12 +79,18 @@ public:
     std::string create_lobby(const Seat& me, Mode mode, int seats, std::string& code,
                              const std::string& voice_channel = "");
     std::string join_lobby(const std::string& code, const Seat& me);
+    // Activité Discord : rejoint le salon de cette instance d'Activité (même
+    // salon vocal), ou le crée (4 places, partie classique) s'il n'y en a pas
+    std::string activity_lobby(const Seat& me, const std::string& instance, std::string& code);
     std::string leave_lobby(const std::string& code, int account);
     std::string start_lobby(const std::string& code, int account, int& game_id);
     // false si le salon n'existe pas
     bool lobby_json(const std::string& code, long since, nlohmann::json& out);
 
     std::string play(int game_id, int account, const Move& move);
+    // Chat de la partie : texte libre (`reaction` = -1) ou réaction rapide.
+    // Anti-spam : 1 message par seconde, 6 par tranche de 20 secondes.
+    std::string chat(int game_id, int account, const std::string& text, int reaction);
     // Abandon volontaire d'un joueur (classé dernier, Elo perdu)
     std::string forfeit(int game_id, int account);
     // Compte suspendu ou supprimé : il quitte ses salons et abandonne ses parties
@@ -83,6 +105,8 @@ public:
     // --- Présence : un joueur est « en jeu » s'il a contacté le serveur récemment
     void touch(int account);
     bool is_online(int account);
+    // "playing" (partie en cours), "online" ou "offline" (liste d'amis)
+    std::string status_of(int account);
 
     // --- Notifications vers le jeu d'un joueur (ex. proposition du bot Discord)
     void notify(int account, nlohmann::json notification);
@@ -108,6 +132,7 @@ private:
     std::mt19937 random_;
 
     std::map<int, long long> last_seen_;
+    std::map<int, std::vector<long long>> chat_times_;  // derniers messages de chaque compte (anti-spam)
     std::map<int, std::vector<nlohmann::json>> notifications_;
     long next_notification_ = 1;
     std::vector<nlohmann::json> bot_events_;

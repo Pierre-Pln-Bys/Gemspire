@@ -244,7 +244,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
@@ -538,6 +538,13 @@ static void enter_online_game(App& app, int game_id)
     online.move_pending = false;
     online.log.clear();
     online.lobby_code.clear();
+    online.chat.clear();
+    online.chat_seen = 0;
+    online.chat_open = false;
+    online.chat_toast_until = 0;
+    for (bool& muted : online.muted) {
+        muted = false;
+    }
     online.in_game = true;
     app.game.reset();
     app.screen = Screen::Board;
@@ -569,6 +576,11 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     online.game_over = body.value("over", false);
     online.turn_deadline = GetTime() + body.value("turn_seconds_left", 0);
     online.elo_changes = body.value("elo_changes", std::vector<int>());
+    online.new_achievements.clear();
+    if (body.contains("achievements") && body["achievements"].is_array() && online.my_seat >= 0
+        && online.my_seat < static_cast<int>(body["achievements"].size())) {
+        online.new_achievements = body["achievements"][online.my_seat].get<std::vector<std::string>>();
+    }
     online.seat_elos.clear();
     for (const nlohmann::json& seat : body["seats"]) {
         online.seat_elos.push_back(seat.value("elo", 1000));
@@ -582,6 +594,30 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     }
     online.log = log;
     online.log_fr = log_fr;
+    // Chat : les nouveaux messages des autres s'affichent un moment en bas
+    long last_id = online.chat.empty() ? 0 : online.chat.back().id;
+    online.chat.clear();
+    if (body.contains("chat") && body["chat"].is_array()) {
+        for (const nlohmann::json& message : body["chat"]) {
+            ChatLine line = {message.value("id", 0L), message.value("seat", 0), message.value("text", std::string()),
+                             message.value("reaction", -1)};
+            if (line.seat < 0 || line.seat >= static_cast<int>(app.game->players().size())) {
+                continue;
+            }
+            online.chat.push_back(line);
+            if (line.id > last_id && !first && line.seat != online.my_seat && !online.muted[line.seat]
+                && !online.chat_open) {
+                online.chat_toast = app.game->players()[line.seat].name + " : " + chat_text(app, line);
+                online.chat_toast_until = GetTime() + 5;
+            }
+        }
+    }
+    if (online.chat_open && !online.chat.empty()) {
+        online.chat_seen = online.chat.back().id;
+    }
+    if (first) {
+        online.chat_seen = online.chat.empty() ? 0 : online.chat.back().id;
+    }
     if (first) {
         start_board(app);
         app.player_colors.clear();
@@ -677,6 +713,34 @@ static void handle_responses(App& app)
             }
             if (online.notification_last >= 0) {
                 for (const nlohmann::json& note : body["notifications"]) {
+                    // Défi lancé depuis Discord (/challenge) : le salon est prêt
+                    if (note.value("type", std::string()) == "challenge_lobby" && !online.in_game) {
+                        online.code_input = note.value("code", std::string());
+                        app.net.send(TagJoin, "POST", "/lobbies/" + online.code_input + "/join");
+                    }
+                    if (note.value("type", std::string()) == "challenge") {
+                        std::string text = tr(app.lang, "{0} challenges you! Lobby code: {1}",
+                                              {note.value("from", std::string()), note.value("code", std::string())});
+                        if (online.in_game) {
+                            online.chat_toast = text;
+                            online.chat_toast_until = GetTime() + 8;
+                        } else {
+                            online.code_input = note.value("code", std::string());
+                            app.screen = Screen::Online;
+                            set_message(app, text, false);
+                        }
+                    }
+                    if (note.value("type", std::string()) == "friend_request") {
+                        std::string text = tr(app.lang, "{0} wants to be your friend.",
+                                              {note.value("pseudo", std::string())});
+                        if (app.screen == Screen::Board) {
+                            online.chat_toast = text;
+                            online.chat_toast_until = GetTime() + 5;
+                        } else {
+                            set_message(app, text, false);
+                        }
+                        online.next_friends_poll = 0;
+                    }
                     if (note.value("type", std::string()) == "voice_offer") {
                         online.offer_channel = note.value("voice_channel", std::string());
                         online.offer_name = note.value("channel_name", std::string("Discord"));
@@ -695,6 +759,7 @@ static void handle_responses(App& app)
                 online.elo = body.value("elo", 1000);
                 online.games = body.value("games", 0);
                 online.wins = body.value("wins", 0);
+                online.achievements = body.value("achievements", std::vector<std::string>());
                 if (online.pseudo.empty()) {
                     app.screen = Screen::Pseudo;
                     online.focus = 1;
@@ -744,15 +809,43 @@ static void handle_responses(App& app)
             }
             break;
         case TagCreate:
+        case TagActivityLobby:
         case TagJoin:
             if (ok) {
-                online.lobby_code = response.tag == TagCreate ? body.value("code", std::string()) : online.code_input;
+                online.lobby_code = response.tag == TagJoin ? online.code_input : body.value("code", std::string());
                 online.lobby_version = 0;
                 online.lobby_members.clear();
                 app.screen = Screen::Lobby;
                 app.message.clear();
                 poll_lobby(app);
             } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagFriends:
+            if (ok && body.contains("friends") && body["friends"].is_array()) {
+                online.friends.clear();
+                // Demandes reçues d'abord, puis amis, puis demandes envoyées
+                for (const char* relation : {"incoming", "friend", "outgoing"}) {
+                    for (const nlohmann::json& entry : body["friends"]) {
+                        if (entry.value("relation", std::string()) == relation) {
+                            online.friends.push_back({entry.value("pseudo", std::string()), entry.value("elo", 1000),
+                                                      relation, entry.value("status", std::string())});
+                        }
+                    }
+                }
+            }
+            break;
+        case TagFriendChange:
+            if (ok) {
+                online.next_friends_poll = 0;
+                app.message.clear();
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagChat:
+            if (!ok) {
                 set_message(app, error_of(response, body, app), true);
             }
             break;
@@ -927,6 +1020,34 @@ static void press_online_button(App& app, const Button& button)
     case ButtonId::JoinLobby:
         app.net.send(TagJoin, "POST", "/lobbies/" + online.code_input + "/join");
         break;
+    case ButtonId::ShowAchievements:
+        app.screen = Screen::Achievements;
+        app.message.clear();
+        break;
+    case ButtonId::ShowFriends:
+        app.screen = Screen::Friends;
+        app.message.clear();
+        online.next_friends_poll = 0;  // liste demandée tout de suite
+        break;
+    case ButtonId::FriendBox:
+        online.focus = 3;
+#ifdef __EMSCRIPTEN__
+        web_prompt(tr(app.lang, "Username"), online.friend_input);
+        online.friend_input = online.friend_input.substr(0, 64);
+        online.focus = 0;
+#endif
+        break;
+    case ButtonId::FriendAdd:
+        app.net.send(TagFriendChange, "POST", "/friends/add", nlohmann::json({{"pseudo", online.friend_input}}).dump());
+        online.friend_input.clear();
+        break;
+    case ButtonId::FriendAccept:
+    case ButtonId::FriendRemove:
+        if (button.value >= 0 && button.value < static_cast<int>(online.friends.size())) {
+            app.net.send(TagFriendChange, "POST", button.id == ButtonId::FriendAccept ? "/friends/add" : "/friends/remove",
+                         nlohmann::json({{"pseudo", online.friends[button.value].pseudo}}).dump());
+        }
+        break;
     case ButtonId::ShowLeaderboard:
         online.board_names.clear();
         app.screen = Screen::Leaderboard;
@@ -1001,6 +1122,52 @@ static void save_current_game(App& app)
     }
 }
 
+// Envoie un message (texte ou réaction rapide) au chat de la partie
+static void send_chat(App& app, const std::string& text, int reaction)
+{
+    nlohmann::json body = reaction >= 0 ? nlohmann::json({{"reaction", reaction}}) : nlohmann::json({{"text", text}});
+    app.net.send(TagChat, "POST", "/games/" + std::to_string(app.online.game_id) + "/chat", body.dump());
+}
+
+static void press_chat_button(App& app, const Button& button)
+{
+    OnlineState& online = app.online;
+    switch (button.id) {
+    case ButtonId::Chat:
+        online.chat_open = !online.chat_open;
+        app.journal_open = false;
+        if (!online.chat.empty()) {
+            online.chat_seen = online.chat.back().id;
+        }
+        break;
+    case ButtonId::ChatBox:
+#ifdef __EMSCRIPTEN__
+        // Navigateur : boîte de saisie (clavier du téléphone), envoi direct
+        if (web_prompt(tr(app.lang, "Message:"), online.chat_input) && !online.chat_input.empty()) {
+            send_chat(app, online.chat_input.substr(0, 4 * CHAT_MAX_CHARS), -1);
+            online.chat_input.clear();
+        }
+#endif
+        break;
+    case ButtonId::ChatSend:
+        if (!online.chat_input.empty()) {
+            send_chat(app, online.chat_input, -1);
+            online.chat_input.clear();
+        }
+        break;
+    case ButtonId::ChatReaction:
+        send_chat(app, "", button.value);
+        break;
+    case ButtonId::ChatMute:
+        if (button.value >= 0 && button.value < 4) {
+            online.muted[button.value] = !online.muted[button.value];
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 static void press_board_button(App& app, ButtonId id)
 {
     Game& game = *app.game;
@@ -1028,6 +1195,7 @@ static void press_board_button(App& app, ButtonId id)
         break;
     case ButtonId::Journal:
         app.journal_open = !app.journal_open;
+        app.online.chat_open = false;
         break;
     case ButtonId::Menu:
         // On ne perd pas la partie en cours : elle est sauvegardée
@@ -1232,6 +1400,34 @@ static void update_board(App& app, Vector2 mouse)
 
     bool clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    // Chat ouvert : le clavier écrit le message (Entrée envoie, Échap ferme)
+    if (app.online.chat_open) {
+        if (game.is_over()) {
+            app.online.chat_open = false;
+        }
+        edit_text(app.online.chat_input, CHAT_MAX_CHARS, false);
+        if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) && !app.online.chat_input.empty()) {
+            send_chat(app, app.online.chat_input, -1);
+            app.online.chat_input.clear();
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            app.online.chat_open = false;
+            return;
+        }
+        if (clicked) {
+            for (const Button& button : visible_buttons(app)) {
+                if (point_in(mouse, button.rect) && button.enabled) {
+                    if (button.id >= ButtonId::Chat && button.id <= ButtonId::ChatMute) {
+                        press_chat_button(app, button);
+                    } else {
+                        press_board_button(app, button.id);
+                    }
+                    return;
+                }
+            }
+        }
+        return;
+    }
     if (ctrl && IsKeyPressed(KEY_S) && !game.is_over() && !app.online.in_game) {
         save_current_game(app);
     }
@@ -1244,7 +1440,9 @@ static void update_board(App& app, Vector2 mouse)
     if (clicked) {
         for (const Button& button : visible_buttons(app)) {
             if (point_in(mouse, button.rect)) {
-                if (button.enabled) {
+                if (button.enabled && button.id == ButtonId::Chat) {
+                    press_chat_button(app, button);
+                } else if (button.enabled) {
                     press_board_button(app, button.id);
                 }
                 return;
@@ -1356,6 +1554,14 @@ static void update(App& app, Vector2 mouse)
     } else if (activity.compare(0, 6, "error:") == 0) {
         set_message(app, activity.substr(6), true);
     }
+    // Activité Discord : dès qu'on est connecté avec un pseudo, on rejoint le
+    // salon de la partie de ce salon vocal (le même pour tous les participants)
+    if (web_in_activity() && !online.activity_lobby_asked && online.account != 0 && !online.pseudo.empty()
+        && !online.in_game && app.screen != Screen::Board) {
+        online.activity_lobby_asked = true;
+        app.net.send(TagActivityLobby, "POST", "/lobbies/activity",
+                     nlohmann::json({{"instance", web_activity_instance()}}).dump());
+    }
 #endif
     // Connexion en cours : on demande au serveur si le navigateur a fini
     if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
@@ -1393,6 +1599,18 @@ static void update(App& app, Vector2 mouse)
         edit_text(online.pseudo_input, 16, false);
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
             press_online_button(app, {ButtonId::PseudoOk, "", true, {}, 0, false});
+        }
+    }
+    if (app.screen == Screen::Friends) {
+        if (GetTime() >= online.next_friends_poll && app.net.pending() == 0) {
+            online.next_friends_poll = GetTime() + 8;  // statuts rafraîchis toutes les 8 secondes
+            app.net.send(TagFriends, "GET", "/friends");
+        }
+        if (online.focus == 3) {
+            edit_text(online.friend_input, 16, false);
+            if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) && !online.friend_input.empty()) {
+                press_online_button(app, {ButtonId::FriendAdd, "", true, {}, 0, false});
+            }
         }
     }
     if (online.focus == 2 && app.screen == Screen::Online) {

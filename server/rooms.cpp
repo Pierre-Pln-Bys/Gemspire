@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 
+#include "../src/achievements.hpp"
 #include "../src/ai.hpp"
 #include "../src/display.hpp"
 #include "../src/elo.hpp"
@@ -119,6 +120,46 @@ std::string Rooms::create_lobby(const Seat& me, Mode mode, int seats, std::strin
     if (on_lobby_created) {
         on_lobby_created(created);
     }
+    return "";
+}
+
+std::string Rooms::activity_lobby(const Seat& me, const std::string& instance, std::string& code)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& entry : lobbies_) {
+            Lobby& lobby = entry.second;
+            if (lobby.activity != instance || lobby.game_id != 0) {
+                continue;
+            }
+            for (const Seat& seat : lobby.members) {
+                if (seat.account == me.account) {
+                    code = lobby.code;  // déjà dedans
+                    return "";
+                }
+            }
+            if (static_cast<int>(lobby.members.size()) < lobby.seats) {
+                remove_from_lobbies(me.account);
+                lobby.members.push_back(me);
+                lobby_changed(lobby, false);
+                code = lobby.code;
+                changed_.notify_all();
+                return "";
+            }
+        }
+        // Pas de salon libre pour cette Activité : on en crée un (sans annonce Discord)
+        remove_from_lobbies(me.account);
+        code = new_code();
+        Lobby& lobby = lobbies_[code];
+        lobby.code = code;
+        lobby.host = me.account;
+        lobby.mode = Mode::Classic;
+        lobby.seats = 4;
+        lobby.activity = instance;
+        lobby.members.push_back(me);
+        lobby_changed(lobby, false);
+    }
+    changed_.notify_all();
     return "";
 }
 
@@ -249,6 +290,20 @@ void Rooms::finish_game(OnlineGame& online)
     }
     store_.record_game(online.game->mode(), results);
     online.recorded = true;
+    // Succès : seuls les nouveaux sont gardés pour l'écran de fin
+    online.new_achievements.assign(online.seats.size(), {});
+    for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
+        Account after;
+        if (!store_.get_account(online.seats[i].account, after)) {
+            continue;
+        }
+        AchievementContext context = {i, places, ratings, after.games, after.elo};
+        for (const std::string& code : earned_achievements(*online.game, context)) {
+            if (store_.unlock_achievement(online.seats[i].account, code)) {
+                online.new_achievements[i].push_back(code);
+            }
+        }
+    }
 }
 
 std::string Rooms::play(int game_id, int account, const Move& move)
@@ -435,7 +490,92 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
     for (const Seat& seat : online.seats) {
         out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo}});
     }
+    out["achievements"] = online.new_achievements;
+    out["chat"] = nlohmann::json::array();
+    for (const ChatMessage& message : online.chat) {
+        out["chat"].push_back({{"id", message.id}, {"seat", message.seat}, {"text", message.text},
+                               {"reaction", message.reaction}});
+    }
     return true;
+}
+
+// Nettoie un message : caractères de contrôle remplacés par une espace, espaces au bord
+// enlevés ; "" si le texte n'est pas de l'UTF-8 valide ou est trop long
+static std::string clean_chat_text(const std::string& text)
+{
+    std::string out;
+    int chars = 0;
+    for (size_t i = 0; i < text.size();) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        size_t length = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        if (length == 0 || i + length > text.size()) {
+            return "";
+        }
+        for (size_t k = 1; k < length; k++) {
+            if ((static_cast<unsigned char>(text[i + k]) & 0xC0) != 0x80) {
+                return "";
+            }
+        }
+        if (length > 1 || c >= 32) {
+            out.append(text, i, length);
+            chars++;
+        } else if (!out.empty() && out.back() != ' ') {
+            out += ' ';  // retour à la ligne, tabulation... : une espace
+            chars++;
+        }
+        i += length;
+    }
+    size_t start = out.find_first_not_of(' ');
+    size_t end = out.find_last_not_of(' ');
+    if (start == std::string::npos || chars > CHAT_MAX_CHARS) {
+        return "";
+    }
+    return out.substr(start, end - start + 1);
+}
+
+std::string Rooms::chat(int game_id, int account, const std::string& text, int reaction)
+{
+    std::string cleaned = reaction >= 0 ? "" : clean_chat_text(text);
+    if (reaction >= REACTION_COUNT || (reaction < 0 && cleaned.empty())) {
+        return "Invalid message (1 to 120 characters).";
+    }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto found = games_.find(game_id);
+        if (found == games_.end()) {
+            return "Game not found.";
+        }
+        OnlineGame& online = found->second;
+        int seat = -1;
+        for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
+            if (online.seats[i].account == account) {
+                seat = i;
+            }
+        }
+        if (seat < 0) {
+            return "You're not playing in this game.";
+        }
+        long long now = now_seconds();
+        std::vector<long long>& times = chat_times_[account];
+        std::vector<long long> recent;
+        for (long long t : times) {
+            if (now - t < 20) {
+                recent.push_back(t);
+            }
+        }
+        if (recent.size() >= 6 || (!recent.empty() && now - recent.back() < 1)) {
+            return "Slow down: too many messages.";
+        }
+        recent.push_back(now);
+        times = recent;
+        online.chat.push_back({online.next_chat++, seat, cleaned, reaction, now});
+        if (static_cast<int>(online.chat.size()) > CHAT_KEPT) {
+            online.chat.erase(online.chat.begin());
+        }
+        online.version++;
+    }
+    changed_.notify_all();
+    return "";
 }
 
 // ---------------------------------------------------------------- Présence et notifications
@@ -452,6 +592,24 @@ bool Rooms::is_online(int account)
     auto found = last_seen_.find(account);
     // Le jeu interroge ses notifications au moins toutes les 30 secondes
     return found != last_seen_.end() && std::time(nullptr) - found->second < 70;
+}
+
+std::string Rooms::status_of(int account)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& entry : games_) {
+            if (entry.second.game->is_over()) {
+                continue;
+            }
+            for (const Seat& seat : entry.second.seats) {
+                if (seat.account == account) {
+                    return "playing";
+                }
+            }
+        }
+    }
+    return is_online(account) ? "online" : "offline";
 }
 
 void Rooms::notify(int account, nlohmann::json notification)

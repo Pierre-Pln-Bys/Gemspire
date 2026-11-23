@@ -80,6 +80,25 @@ class IntegrationTests(unittest.TestCase):
         event = api.events(0)["events"][-1]
         self.assertEqual((event["code"], event["seats"], event["voice_channel"]), (code, 4, "555"))
 
+    def test_challenge_and_ranks(self):
+        tokens = {}
+        for discord_id, name in ((901, "Defieur"), (902, "Defie")):
+            login = str(discord_id) * 8
+            urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name={}&as=discord".format(login, discord_id)).close()
+            tokens[discord_id] = self.call("/auth/poll?login=" + login)["token"]
+            self.call("/me/pseudo", tokens[discord_id], {"pseudo": name})
+        last = self.call("/me/notifications", tokens[902])["last"]
+        api = SplendorApi(self.url, "cle-integration")
+        result = api.challenge(901, 902, "rapide")
+        self.assertEqual((result["pseudo"], result["target_linked"]), ("Defieur", True))
+        lobby = self.call("/lobbies/" + result["code"], tokens[901])
+        self.assertEqual((lobby["seats"], lobby["mode"], len(lobby["members"])), (2, "rapide", 1))
+        note = self.call("/me/notifications?since={}".format(last), tokens[902])["notifications"][0]
+        self.assertEqual((note["type"], note["from"], note["code"]), ("challenge", "Defieur", result["code"]))
+        with self.assertRaises(ApiError):
+            api.challenge(999, 902, "classique")  # pas de compte lié
+        self.assertEqual(api.ranks(), [])        # personne n'a encore joué
+
     def test_moderation(self):
         login = "y" * 24
         urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=777&as=discord".format(login)).close()

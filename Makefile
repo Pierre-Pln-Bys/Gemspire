@@ -10,7 +10,7 @@ TARGET = splendor
 GUI_TARGET = splendor-gui
 
 # Logique du jeu, commune aux deux versions et aux tests
-LOGIC_OBJS = src/data.o src/rules.o src/game.o src/move.o src/ai.o src/save.o src/elo.o src/i18n.o
+LOGIC_OBJS = src/data.o src/rules.o src/game.o src/move.o src/ai.o src/save.o src/elo.o src/i18n.o src/achievements.o
 # Liste des fichiers nécessaires à chaque exécutable
 OBJS = src/main.o src/display.o $(LOGIC_OBJS)
 GUI_OBJS = src/gui_main.o src/gui_draw.o src/gui_font.o src/net.o src/discord_rpc.o src/move_json.o src/display.o \
@@ -106,7 +106,7 @@ WEB_DIR = build/web
 WEB_RAYLIB = build/raylib-web/libraylib.a
 WEB_SOURCES = src/gui_main.cpp src/gui_draw.cpp src/net_web.cpp src/discord_rpc_web.cpp src/platform_web.cpp \
               src/move_json.cpp src/display.cpp src/data.cpp src/rules.cpp src/game.cpp src/move.cpp src/ai.cpp \
-              src/save.cpp src/elo.cpp src/i18n.cpp
+              src/save.cpp src/elo.cpp src/i18n.cpp src/achievements.cpp
 WEB_FLAGS = -std=c++17 -O2 -Wall -Wextra -Werror -fexceptions -isystem $(RAYLIB_DIR) -isystem third_party/json
 WEB_LINK = -sUSE_GLFW=3 -sFETCH -sALLOW_MEMORY_GROWTH -sFORCE_FILESYSTEM -lidbfs.js -fexceptions \
            --shell-file web/shell.html

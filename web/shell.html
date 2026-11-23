@@ -79,6 +79,7 @@
 
     return {
       active: inActivity,
+      instanceId: params.get("instance_id") || "",
       // Poignée de main avec Discord, puis AUTHORIZE dès que Discord est prêt
       start: function (id) {
         if (!inActivity || clientId) {
