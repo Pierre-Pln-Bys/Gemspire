@@ -25,11 +25,20 @@ install -d -o root -g splendor -m 750 /etc/splendor
 
 echo "== Installation des fichiers"
 install -m 755 splendor-server /opt/splendor/splendor-server
-install -m 644 bot/splendor_bot.py bot/logic.py bot/api.py bot/requirements.txt /opt/splendor/bot/
+# Tous les fichiers Python du bot (sauf les tests) et ses dépendances
+for file in bot/*.py bot/requirements.txt; do
+    case "$file" in
+        bot/test_*) ;;
+        *) install -m 644 "$file" /opt/splendor/bot/ ;;
+    esac
+done
 if [ ! -d /opt/splendor/bot/venv ]; then
     python3 -m venv /opt/splendor/bot/venv
 fi
 /opt/splendor/bot/venv/bin/pip install -q -r /opt/splendor/bot/requirements.txt
+# Vérification : le bot se charge (un fichier oublié se voit ici, pas au démarrage du service)
+(cd /opt/splendor/bot && SPLENDOR_BOT_KEY=verification venv/bin/python -c "import splendor_bot") \
+    || { echo "Le bot ne se charge pas : installation arrêtée." >&2; exit 1; }
 
 if [ ! -f /etc/splendor/splendor.env ]; then
     echo "== Premier lancement : fichier de réglages à compléter"
