@@ -157,6 +157,52 @@ static const std::map<std::string, std::string>& french_table()
         {"Download the update", "Télécharger la mise à jour"},
         {"Français", "English"},  // bouton de langue : affiche l'autre langue
 
+        // --- Règles (écran de l'accueil) et thèmes
+        {"Rules", "Règles"},
+        {"Theme: {0}", "Thème : {0}"},
+        {"Green felt", "Tapis vert"},
+        {"Night", "Nuit"},
+        {"Wood", "Bois"},
+        {"High contrast", "Contraste élevé"},
+        {"Light", "Clair"},
+        {"Goal", "But du jeu"},
+        {"Buy cards to earn points and attract nobles. When a player reaches 15 points, the round is finished so "
+         "everyone has played as many turns. Most points wins; on a tie, the fewest cards bought.",
+         "Achetez des cartes pour gagner des points et attirer les nobles. Quand un joueur atteint 15 points, on "
+         "termine le tour de table pour que tous aient joué autant de tours. Le plus de points gagne ; en cas "
+         "d'égalité, celui qui a acheté le moins de cartes."},
+        {"On your turn, do ONE action", "À votre tour, faites UNE action"},
+        {"- Take 3 tokens of different colours.", "- Prendre 3 jetons de couleurs différentes."},
+        {"- Take 2 tokens of the same colour, only if the pile has at least 4.",
+         "- Prendre 2 jetons de la même couleur, seulement si la pile en contient au moins 4."},
+        {"- Buy a card from the board (or one of your reserved cards).",
+         "- Acheter une carte du plateau (ou une de vos cartes réservées)."},
+        {"- Classic game: reserve a card (or the top of a deck) and take 1 gold token.",
+         "- Partie classique : réserver une carte (ou le dessus d'une pioche) et prendre 1 jeton or."},
+        {"Buying a card", "Acheter une carte"},
+        {"Each card you own is a permanent bonus of its colour: it lowers the cost of your next cards by 1. "
+         "Pay the rest with tokens, which go back to the bank. Gold replaces any colour.",
+         "Chaque carte possédée est un bonus permanent de sa couleur : elle réduit de 1 le coût de vos prochaines "
+         "cartes. Le reste se paie en jetons, qui retournent à la réserve. L'or remplace n'importe quelle couleur."},
+        {"At the end of your turn, a noble visits you if you own enough bonuses (cards, not tokens): +3 points. "
+         "One noble per turn.",
+         "À la fin de votre tour, un noble vous rend visite si vous avez assez de bonus (des cartes, pas des "
+         "jetons) : +3 points. Un seul noble par tour."},
+        {"Limits", "Limites"},
+        {"10 tokens at most in hand (discard the extra), 3 reserved cards at most. A player who can do nothing "
+         "passes.",
+         "10 jetons au plus en main (on défausse le surplus), 3 cartes réservées au plus. Un joueur qui ne peut "
+         "rien faire passe son tour."},
+        {"Game modes", "Modes de jeu"},
+        {"Quick: no gold and no reservations. Classic: the full rules, with gold and reservations.",
+         "Rapide : sans or ni réservation. Classique : les règles complètes, avec l'or et les réservations."},
+        {"Controls", "Commandes"},
+        {"Click tokens (keys 1 to 5) then Take; click a card or a deck then Buy or Reserve (R). Enter confirms, "
+         "Esc cancels, J opens the log, Ctrl+S saves.",
+         "Cliquez des jetons (touches 1 à 5) puis Prendre ; cliquez une carte ou une pioche puis Acheter ou "
+         "Réserver (R). Entrée valide, Échap annule, J ouvre le journal, Ctrl+S sauvegarde."},
+        {"F11: full screen (in the browser too).", "F11 : plein écran (aussi dans le navigateur)."},
+
         // --- Fenêtre : plateau
         {"empty", "vide"},
         {"cards", "cartes"},

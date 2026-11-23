@@ -32,6 +32,7 @@
 #ifdef __EMSCRIPTEN__
 // Version navigateur : boucle confiée au navigateur, saisie et fichiers adaptés
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 
 #include "platform_web.hpp"
 #endif
@@ -251,6 +252,7 @@ const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/rel
 const char* const SESSION_FILE = "session.txt";   // jeton de connexion
 const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
 const char* const LANGUAGE_FILE = "langue.txt";   // langue choisie ("en" ou "fr")
+const char* const THEME_FILE = "theme.txt";       // thème choisi (numéro)
 
 // Un coup du joueur devant l'écran : appliqué tout de suite en local, envoyé
 // au serveur en ligne (le serveur vérifie et renvoie la nouvelle partie)
@@ -364,6 +366,19 @@ static void set_language(App& app, Lang lang)
 #endif
 }
 
+// Change le thème du plateau et le retient (fichier theme.txt)
+static void set_theme(App& app, int theme)
+{
+    app.theme = theme;
+    {
+        std::ofstream file(THEME_FILE);
+        file << theme << "\n";
+    }
+#ifdef __EMSCRIPTEN__
+    web_save_files();
+#endif
+}
+
 static void press_menu_button(App& app, const Button& button)
 {
     Setup& setup = app.setup;
@@ -380,6 +395,13 @@ static void press_menu_button(App& app, const Button& button)
         break;
     case ButtonId::Language:
         set_language(app, app.lang == Lang::French ? Lang::English : Lang::French);
+        break;
+    case ButtonId::ShowRules:
+        app.message.clear();
+        app.screen = Screen::Rules;
+        break;
+    case ButtonId::NextTheme:
+        set_theme(app, (app.theme + 1) % THEME_COUNT);
         break;
     case ButtonId::Mode:
         setup.mode = button.value == 1 ? Mode::Classic : Mode::Quick;
@@ -1716,6 +1738,13 @@ static void update(App& app, Vector2 mouse)
         app.screen_start = static_cast<long long>(std::time(nullptr));
     }
     update_presence(app);
+#ifndef __EMSCRIPTEN__
+    // F11 : plein écran (fenêtre sans bord à la taille de l'écran) ; dans le
+    // navigateur, F11 est géré par le navigateur lui-même
+    if (IsKeyPressed(KEY_F11)) {
+        ToggleBorderlessWindowed();
+    }
+#endif
     // Annonces : la première s'affiche BANNER_SECONDS, puis la suivante
     if (!app.banners.empty()) {
         if (app.screen != Screen::Board) {
@@ -1822,6 +1851,10 @@ static void update(App& app, Vector2 mouse)
             press_online_button(app, {ButtonId::JoinLobby, "", true, {}, 0, false});
         }
     }
+    if (app.screen == Screen::Rules && IsKeyPressed(KEY_ESCAPE)) {
+        app.screen = Screen::Home;
+        return;
+    }
     if (app.screen == Screen::Setup) {
         update_name_input(app.setup);
         if (IsKeyPressed(KEY_ESCAPE) && app.setup.focused_name < 0) {
@@ -1875,16 +1908,36 @@ static void prepare_font(Font& font)
     SetTextureFilter(font.texture, TEXTURE_FILTER_TRILINEAR);
 }
 
+#ifdef __EMSCRIPTEN__
+// Navigateur : le dessin prend la taille réelle du canevas à l'écran (pixels
+// de l'écran, écrans Retina compris) au lieu d'agrandir une image 1280 x 800
+static void fit_canvas()
+{
+    double css_width = 0;
+    double css_height = 0;
+    emscripten_get_element_css_size("#canvas", &css_width, &css_height);
+    double ratio = std::fmin(emscripten_get_device_pixel_ratio(), 2.5);  // limite pour les téléphones
+    int width = static_cast<int>(css_width * ratio + 0.5);
+    int height = static_cast<int>(css_height * ratio + 0.5);
+    if (width >= 320 && height >= 200 && (width != GetScreenWidth() || height != GetScreenHeight())) {
+        SetWindowSize(width, height);
+    }
+}
+#endif
+
 // Une image : entrées, mise à jour, dessin
 static void draw_frame(void* data)
 {
     App& app = *static_cast<App*>(data);
+#ifdef __EMSCRIPTEN__
+    fit_canvas();
+#endif
     Camera2D camera = board_camera();
     Vector2 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
     update(app, mouse);
 
     BeginDrawing();
-    ClearBackground({5, 20, 13, 255});
+    ClearBackground(THEMES[app.theme].background);
     BeginMode2D(camera);
     draw_app(app, mouse);
     EndMode2D();
@@ -1897,7 +1950,12 @@ int main()
     // Navigateur : dessin de taille fixe, agrandi par la page (shell.html)
     SetConfigFlags(FLAG_MSAA_4X_HINT);
 #else
+#ifdef _WIN32
+    // Windows : écran agrandi à 125 % ou 150 % : on dessine en vrais pixels (net)
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
+#else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+#endif
 #endif
     std::string title = std::string("Gemspire ") + SPLENDOR_VERSION;
     InitWindow(1280, 800, title.c_str());
@@ -1917,6 +1975,10 @@ int main()
 #endif
     for (int p = 0; p < 4; p++) {
         app.setup.names[p] = tr(app.lang, "Player {0}", {std::to_string(p + 1)});
+    }
+    std::string saved_theme = read_first_line(THEME_FILE);
+    if (saved_theme.size() == 1 && saved_theme[0] >= '0' && saved_theme[0] < '0' + THEME_COUNT) {
+        app.theme = saved_theme[0] - '0';
     }
     configure_network(app);
     app.screen_start = static_cast<long long>(std::time(nullptr));

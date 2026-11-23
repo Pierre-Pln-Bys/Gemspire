@@ -24,7 +24,7 @@ const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 const char* const DEFAULT_SERVER = "https://gemspire.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
-enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements, Live, History, Matchmaking };
+enum class Screen { Home, Rules, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements, Live, History, Matchmaking };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -32,7 +32,7 @@ enum class Target { None, Visible, Deck, Reserved };
 // Tous les éléments cliquables. `value` précise lequel (joueur, couleur...).
 enum class ButtonId {
     // Accueil
-    NewGame, Resume, Quit, PlayOnline,
+    NewGame, Resume, Quit, PlayOnline, ShowRules, NextTheme,
     // En ligne
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
@@ -75,6 +75,36 @@ const PlayerColor PLAYER_COLORS[PLAYER_COLOR_COUNT] = {
     {"Turquoise", {51, 217, 204, 255}},
     {"Pink", {255, 115, 184, 255}},
     {"Brown", {158, 102, 56, 255}},
+};
+
+// Thème du plateau : couleurs du fond, des textes et des panneaux.
+// Les fenêtres (journal, chat, résultats) restent sombres avec un texte blanc.
+struct Theme {
+    const char* name;
+    Color background;     // bords de la fenêtre (hors du dessin 1280 x 800)
+    Color felt_edge;      // fond : bord...
+    Color felt_center;    // ...et centre (dégradé)
+    bool wood;            // fond en planches de bois
+    bool light;           // fond clair : panneaux blancs au lieu de noirs
+    Color text;           // texte principal
+    Color soft;           // texte secondaire
+    Color accent;         // titres
+    Color error;
+    Color dialog;         // fond des fenêtres
+    float card_border;    // épaisseur du contour des cartes (contraste élevé : plus épais)
+};
+const int THEME_COUNT = 5;
+const Theme THEMES[THEME_COUNT] = {
+    {"Green felt", {5, 20, 13, 255}, {10, 43, 28, 255}, {26, 92, 61, 255}, false, false,
+     {255, 255, 255, 255}, {205, 220, 210, 255}, {255, 209, 64, 255}, {255, 140, 128, 255}, {18, 48, 34, 255}, 1},
+    {"Night", {4, 7, 18, 255}, {9, 15, 36, 255}, {30, 50, 102, 255}, false, false,
+     {255, 255, 255, 255}, {200, 210, 235, 255}, {255, 209, 64, 255}, {255, 140, 128, 255}, {20, 30, 62, 255}, 1},
+    {"Wood", {22, 12, 6, 255}, {56, 32, 16, 255}, {122, 78, 42, 255}, true, false,
+     {255, 255, 255, 255}, {238, 222, 200, 255}, {255, 209, 64, 255}, {255, 150, 135, 255}, {52, 32, 18, 255}, 1},
+    {"High contrast", {0, 0, 0, 255}, {0, 0, 0, 255}, {0, 0, 0, 255}, false, false,
+     {255, 255, 255, 255}, {240, 240, 240, 255}, {255, 221, 0, 255}, {255, 110, 100, 255}, {12, 12, 12, 255}, 3},
+    {"Light", {170, 178, 170, 255}, {196, 204, 196, 255}, {240, 242, 236, 255}, false, true,
+     {28, 34, 30, 255}, {72, 84, 76, 255}, {150, 100, 0, 255}, {185, 32, 32, 255}, {38, 52, 44, 255}, 1.5f},
 };
 
 // Réglages de l'écran « Nouvelle partie »
@@ -243,6 +273,7 @@ struct OnlineState {
 struct App {
     Screen screen = Screen::Home;
     Lang lang = Lang::English;              // langue des textes (bouton sur l'accueil, fichier langue.txt)
+    int theme = 0;                          // thème du plateau (indice dans THEMES, fichier theme.txt)
     Setup setup;
     std::unique_ptr<Game> game;
     std::vector<int> player_colors;         // couleur de chaque joueur (indice dans PLAYER_COLORS)
