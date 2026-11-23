@@ -143,6 +143,23 @@ Store::Store(const std::string& path)
     exec("ALTER TABLE games ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;");
     // v3.9 : rediffusion (graine, joueurs et actions en JSON)
     exec("ALTER TABLE games ADD COLUMN replay TEXT NOT NULL DEFAULT '';");
+    // v4 : connexions d'un compte (Discord et Google). accounts.provider reste
+    // la connexion d'origine ; les anciens comptes sont recopiés ici.
+    exec("CREATE TABLE IF NOT EXISTS identities ("
+         " provider TEXT NOT NULL,"
+         " provider_id TEXT NOT NULL,"
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " linked_at INTEGER NOT NULL,"
+         " PRIMARY KEY (provider, provider_id));");
+    exec("INSERT OR IGNORE INTO identities (provider, provider_id, account_id, linked_at)"
+         " SELECT provider, provider_id, id, created_at FROM accounts WHERE provider <> 'supprime';");
+    // v4 : réglages d'administration (inscriptions, parties, annonce) et journal
+    exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);");
+    exec("CREATE TABLE IF NOT EXISTS admin_log ("
+         " id INTEGER PRIMARY KEY,"
+         " at INTEGER NOT NULL,"
+         " actor TEXT NOT NULL,"
+         " action TEXT NOT NULL);");
 }
 
 bool Account::banned() const
@@ -174,30 +191,87 @@ int Store::find_or_create_account(const std::string& provider, const std::string
 {
     std::lock_guard<std::mutex> lock(mutex_);
     {
-        Statement find(db_, "SELECT id FROM accounts WHERE provider = ? AND provider_id = ?");
+        Statement find(db_, "SELECT account_id FROM identities WHERE provider = ? AND provider_id = ?");
         find.bind(1, provider);
         find.bind(2, provider_id);
         if (find.row()) {
             return find.integer(0);
         }
     }
+    long long now = static_cast<long long>(std::time(nullptr));
     Statement insert(db_, "INSERT INTO accounts (provider, provider_id, created_at) VALUES (?, ?, ?)");
     insert.bind(1, provider);
     insert.bind(2, provider_id);
-    insert.bind(3, static_cast<long long>(std::time(nullptr)));
+    insert.bind(3, now);
     if (!insert.done()) {
         return 0;
     }
-    return static_cast<int>(sqlite3_last_insert_rowid(db_));
+    int id = static_cast<int>(sqlite3_last_insert_rowid(db_));
+    Statement link(db_, "INSERT INTO identities (provider, provider_id, account_id, linked_at) VALUES (?, ?, ?, ?)");
+    link.bind(1, provider);
+    link.bind(2, provider_id);
+    link.bind(3, static_cast<long long>(id));
+    link.bind(4, now);
+    link.done();
+    return id;
 }
 
 int Store::find_account(const std::string& provider, const std::string& provider_id)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement find(db_, "SELECT id FROM accounts WHERE provider = ? AND provider_id = ?");
+    Statement find(db_, "SELECT account_id FROM identities WHERE provider = ? AND provider_id = ?");
     find.bind(1, provider);
     find.bind(2, provider_id);
     return find.row() ? find.integer(0) : 0;
+}
+
+std::string Store::link_identity(int id, const std::string& provider, const std::string& provider_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string name = provider == "discord" ? "Discord" : provider == "google" ? "Google" : provider;
+    {
+        Statement find(db_, "SELECT account_id FROM identities WHERE provider = ? AND provider_id = ?");
+        find.bind(1, provider);
+        find.bind(2, provider_id);
+        if (find.row()) {
+            return find.integer(0) == id ? "" : "This " + name + " account is already used by another Gemspire account.";
+        }
+    }
+    {
+        Statement mine(db_, "SELECT 1 FROM identities WHERE account_id = ? AND provider = ?");
+        mine.bind(1, static_cast<long long>(id));
+        mine.bind(2, provider);
+        if (mine.row()) {
+            return "Your account is already linked to another " + name + " account.";
+        }
+    }
+    Statement link(db_, "INSERT INTO identities (provider, provider_id, account_id, linked_at) VALUES (?, ?, ?, ?)");
+    link.bind(1, provider);
+    link.bind(2, provider_id);
+    link.bind(3, static_cast<long long>(id));
+    link.bind(4, static_cast<long long>(std::time(nullptr)));
+    return link.done() ? "" : "Server error.";
+}
+
+std::vector<std::string> Store::providers(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement list(db_, "SELECT provider FROM identities WHERE account_id = ? ORDER BY provider");
+    list.bind(1, static_cast<long long>(id));
+    std::vector<std::string> result;
+    while (list.row()) {
+        result.push_back(list.text(0));
+    }
+    return result;
+}
+
+std::string Store::identity(int id, const std::string& provider)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT provider_id FROM identities WHERE account_id = ? AND provider = ?");
+    find.bind(1, static_cast<long long>(id));
+    find.bind(2, provider);
+    return find.row() ? find.text(0) : "";
 }
 
 bool Store::get_account(int id, Account& account)
@@ -388,8 +462,8 @@ std::vector<SeasonBadge> Store::badges(int id)
 std::vector<std::pair<std::string, int>> Store::discord_ranks()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::string sql = std::string("SELECT provider_id, elo FROM accounts WHERE provider = 'discord'"
-                                  " AND pseudo IS NOT NULL AND games > 0 AND ")
+    std::string sql = std::string("SELECT i.provider_id, a.elo FROM identities i JOIN accounts a ON a.id = i.account_id"
+                                  " WHERE i.provider = 'discord' AND a.pseudo IS NOT NULL AND a.games > 0 AND ")
                       + NOT_BANNED;
     Statement list(db_, sql.c_str());
     list.bind(1, static_cast<long long>(std::time(nullptr)));
@@ -593,9 +667,142 @@ void Store::delete_account(int id)
     Statement sessions(db_, "DELETE FROM sessions WHERE account_id = ?");
     sessions.bind(1, static_cast<long long>(id));
     sessions.done();
-    // L'identité Discord / Google est effacée : une nouvelle connexion crée un nouveau compte
+    // Les identités Discord / Google sont effacées : une nouvelle connexion crée un nouveau compte
+    Statement identities(db_, "DELETE FROM identities WHERE account_id = ?");
+    identities.bind(1, static_cast<long long>(id));
+    identities.done();
     Statement update(db_, "UPDATE accounts SET pseudo = NULL, provider = 'supprime',"
                           " provider_id = 'supprime-' || id WHERE id = ?");
     update.bind(1, static_cast<long long>(id));
     update.done();
+}
+
+// ---------------------------------------------------------------- Administration
+
+std::string Store::setting(const std::string& key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement get(db_, "SELECT value FROM settings WHERE key = ?");
+    get.bind(1, key);
+    return get.row() ? get.text(0) : "";
+}
+
+void Store::set_setting(const std::string& key, const std::string& value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement set(db_, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+    set.bind(1, key);
+    set.bind(2, value);
+    set.done();
+}
+
+void Store::log_admin(const std::string& actor, const std::string& action)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement insert(db_, "INSERT INTO admin_log (at, actor, action) VALUES (?, ?, ?)");
+    insert.bind(1, static_cast<long long>(std::time(nullptr)));
+    insert.bind(2, actor);
+    insert.bind(3, action);
+    insert.done();
+}
+
+std::vector<AdminLogEntry> Store::admin_log(int limit)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement list(db_, "SELECT at, actor, action FROM admin_log ORDER BY id DESC LIMIT ?");
+    list.bind(1, static_cast<long long>(limit));
+    std::vector<AdminLogEntry> result;
+    while (list.row()) {
+        result.push_back({list.big(0), list.text(1), list.text(2)});
+    }
+    return result;
+}
+
+void Store::set_elo(int id, int elo)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement update(db_, "UPDATE accounts SET elo = ? WHERE id = ?");
+    update.bind(1, static_cast<long long>(elo));
+    update.bind(2, static_cast<long long>(id));
+    update.done();
+}
+
+void Store::set_badge(int id, int season, int rank)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement set(db_, "INSERT OR REPLACE INTO season_results (season, account_id, rank, elo)"
+                       " SELECT ?, id, ?, elo FROM accounts WHERE id = ?");
+    set.bind(1, static_cast<long long>(season));
+    set.bind(2, static_cast<long long>(rank));
+    set.bind(3, static_cast<long long>(id));
+    set.done();
+}
+
+void Store::remove_badge(int id, int season)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement remove(db_, "DELETE FROM season_results WHERE season = ? AND account_id = ?");
+    remove.bind(1, static_cast<long long>(season));
+    remove.bind(2, static_cast<long long>(id));
+    remove.done();
+}
+
+void Store::close_sessions(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement remove(db_, "DELETE FROM sessions WHERE account_id = ?");
+    remove.bind(1, static_cast<long long>(id));
+    remove.done();
+}
+
+std::vector<Account> Store::search_accounts(const std::string& text, int limit)
+{
+    std::vector<int> ids;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement find(db_, "SELECT DISTINCT a.id FROM accounts a LEFT JOIN identities i ON i.account_id = a.id"
+                            " WHERE a.provider <> 'supprime' AND (a.pseudo LIKE ? ESCAPE '\\' OR CAST(a.id AS TEXT) = ?"
+                            " OR i.provider_id = ?) ORDER BY a.elo DESC LIMIT ?");
+        std::string pattern;
+        for (char c : text) {
+            if (c == '%' || c == '_' || c == '\\') {
+                pattern += '\\';
+            }
+            pattern += c;
+        }
+        find.bind(1, "%" + pattern + "%");
+        find.bind(2, text);
+        find.bind(3, text);
+        find.bind(4, static_cast<long long>(limit));
+        while (find.row()) {
+            ids.push_back(find.integer(0));
+        }
+    }
+    std::vector<Account> result;
+    for (int id : ids) {
+        Account account;
+        if (get_account(id, account)) {
+            result.push_back(account);
+        }
+    }
+    return result;
+}
+
+StoreStats Store::stats()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    StoreStats stats;
+    long long now = static_cast<long long>(std::time(nullptr));
+    Statement accounts(db_, "SELECT COUNT(*) FROM accounts WHERE provider <> 'supprime'");
+    stats.accounts = accounts.row() ? accounts.integer(0) : 0;
+    Statement games(db_, "SELECT COUNT(*), SUM(finished_at > ?) FROM games WHERE cancelled = 0");
+    games.bind(1, now - 86400);
+    if (games.row()) {
+        stats.games = games.integer(0);
+        stats.games_today = games.integer(1);
+    }
+    Statement banned(db_, "SELECT COUNT(*) FROM accounts WHERE banned_until = -1 OR banned_until > ?");
+    banned.bind(1, now);
+    stats.banned = banned.row() ? banned.integer(0) : 0;
+    return stats;
 }

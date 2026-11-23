@@ -69,6 +69,7 @@ int main()
     config.bot_key = "cle-de-test-du-bot";
     config.min_version = SPLENDOR_VERSION;
     config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
+    config.admin_discord_ids = {"777"};
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -454,6 +455,137 @@ int main()
         get(client, "/me", carol, 401);
         assert(bot_get("/bot/profile?pseudo=Carole")["found"] == false);
         assert(bot_get("/bot/profile?discord_id=123456")["found"] == false);
+    }
+
+    // --- v4 : connexions liées (Discord + Google), administration (bot /dev et panel)
+    {
+        httplib::Headers bot = {{"X-Bot-Key", "cle-de-test-du-bot"}};
+        auto admin = [&](json body, int expected = 200) {
+            if (!body.contains("admin_discord_id")) {
+                body["admin_discord_id"] = "777";
+            }
+            auto result = client.Post("/bot/admin", bot, body.dump(), "application/json");
+            assert(result);
+            if (result->status != expected) {
+                std::cerr << "/bot/admin : " << result->status << " " << result->body << "\n";
+            }
+            assert(result->status == expected);
+            return json::parse(result->body, nullptr, false);
+        };
+
+        // Lier Google au compte d'Alice : se connecter avec Google ouvre ensuite le même compte
+        json me = get(client, "/me", alice);
+        std::string link_id = post(client, "/me/link", alice, {{"provider", "google"}})["login"];
+        assert(client.Get("/auth/dev/start?login=" + link_id + "&name=g-alice&as=google")->status == 200);
+        json linked = get(client, "/auth/poll?login=" + link_id, "");
+        assert(linked["status"] == "done" && linked["linked"] == "google" && !linked.contains("token"));
+        json providers = get(client, "/me", alice)["providers"];
+        assert(std::find(providers.begin(), providers.end(), "google") != providers.end());
+        std::string alice_google = login(client, "g-alice", "gggggggggggggggggggggggg", "google");
+        assert(get(client, "/me", alice_google)["id"] == me["id"]);
+        // Ce compte Google est déjà pris : Bob ne peut pas le lier ; fournisseur inconnu refusé
+        std::string taken = post(client, "/me/link", bob, {{"provider", "google"}})["login"];
+        client.Get("/auth/dev/start?login=" + taken + "&name=g-alice&as=google");
+        json refused = get(client, "/auth/poll?login=" + taken, "");
+        assert(refused["status"] == "error" && refused["error"].get<std::string>().find("already used") != std::string::npos);
+        post(client, "/me/link", alice, {{"provider", "twitter"}}, 400);
+
+        // Commandes /dev : réservées aux administrateurs
+        admin({{"admin_discord_id", "999"}, {"action", "status"}}, 403);
+        assert(client.Post("/bot/admin", json({{"admin_discord_id", "777"}}).dump(), "application/json")->status == 403);
+        json status = admin({{"action", "status"}});
+        assert(status["version"] == SPLENDOR_VERSION && status["accounts"].get<int>() >= 2);
+        assert(status["signups_closed"] == false && status["games_paused"] == false);
+
+        // Inscriptions fermées : nouveau compte refusé, ancien compte accepté
+        admin({{"action", "signups"}, {"value", "closed"}});
+        client.Get("/auth/dev/start?login=nnnnnnnnnnnnnnnnnnnnnnnn&name=nouveau");
+        json closed = get(client, "/auth/poll?login=nnnnnnnnnnnnnnnnnnnnnnnn", "");
+        assert(closed["status"] == "error" && closed["error"].get<std::string>().find("closed") != std::string::npos);
+        alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaaa9");
+        admin({{"action", "signups"}, {"value", "open"}});
+        admin({{"action", "signups"}, {"value", "maybe"}}, 400);
+
+        // Nouvelles parties suspendues (salons, recherche) ; les parties en cours continuent
+        admin({{"action", "games"}, {"value", "paused"}});
+        post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}}, 503);
+        post(client, "/matchmaking/join", alice, {{"mode", "rapide"}}, 503);
+        admin({{"action", "games"}, {"value", "on"}});
+
+        // Annonce : dans /config, /me et envoyée aux joueurs connectés
+        admin({{"action", "announce"}, {"text", "Maintenance à 20h <b>"}});
+        assert(get(client, "/config", "")["announcement"] == "Maintenance à 20h <b>");
+        assert(get(client, "/me", alice)["announcement"] == "Maintenance à 20h <b>");
+        bool announced = false;
+        json notifications = get(client, "/me/notifications?since=0", alice);
+        for (const json& notification : notifications["notifications"]) {
+            announced = announced || notification["type"] == "announcement";
+        }
+        assert(announced);
+
+        // Gestion d'un compte
+        admin({{"action", "elo"}, {"username", "Alice"}, {"value", "1234"}});
+        assert(get(client, "/me", alice)["elo"] == 1234);
+        admin({{"action", "elo"}, {"username", "Alice"}, {"value", "abc"}}, 400);
+        admin({{"action", "elo"}, {"username", "personne"}, {"value", "1000"}}, 400);
+        admin({{"action", "badge"}, {"username", "Alice"}, {"season", "3"}, {"rank", "2"}});
+        auto has_badge = [&]() {
+            json badges = get(client, "/me", alice)["badges"];
+            return std::find(badges.begin(), badges.end(), json({{"season", 3}, {"rank", 2}})) != badges.end();
+        };
+        assert(has_badge());
+        admin({{"action", "badge"}, {"username", "Alice"}, {"season", "3"}, {"rank", "11"}}, 400);
+        admin({{"action", "unbadge"}, {"username", "Alice"}, {"season", "3"}});
+        assert(!has_badge());
+        admin({{"action", "rename"}, {"username", "Alice"}, {"value", "Alicia"}});
+        assert(get(client, "/me", alice)["pseudo"] == "Alicia");
+        admin({{"action", "rename"}, {"username", "Alicia"}, {"value", "Bébert"}}, 400);  // déjà pris
+        admin({{"action", "logout"}, {"username", "Alicia"}});
+        get(client, "/me", alice, 401);
+        get(client, "/me", alice_google, 401);
+        alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaa10");
+        admin({{"action", "delete"}, {"username", "Alicia"}}, 400);   // confirmation manquante
+
+        // Panel web : connexion de test (SPLENDOR_DEV_LOGIN), cookie, jeton anti-CSRF
+        httplib::Client web("127.0.0.1", PORT);
+        auto entry = web.Get("/panel-admin");
+        assert(entry && entry->status == 200 && entry->body.find("Admin log") == std::string::npos);
+        assert(entry->get_header_value("X-Robots-Tag") == "noindex, nofollow");
+        assert(web.Get("/panel-admin/dev-login?id=999")->status == 403);
+        auto signed_in = web.Get("/panel-admin/dev-login?id=777");
+        assert(signed_in && signed_in->status == 303);
+        std::string cookie = signed_in->get_header_value("Set-Cookie");
+        assert(cookie.find("HttpOnly") != std::string::npos && cookie.find("SameSite=Strict") != std::string::npos);
+        cookie = cookie.substr(0, cookie.find(';'));
+        httplib::Headers with_cookie = {{"Cookie", cookie}};
+        auto dashboard = web.Get("/panel-admin", with_cookie);
+        assert(dashboard && dashboard->status == 200 && dashboard->body.find("Admin log") != std::string::npos);
+        assert(dashboard->body.find("<b>") == std::string::npos);   // texte échappé
+        assert(dashboard->body.find("Maintenance à 20h &lt;b&gt;") != std::string::npos);
+        auto search = web.Get("/panel-admin?q=alic", with_cookie);
+        assert(search && search->body.find("Alicia") != std::string::npos);
+        std::string csrf_key = "name=\"csrf\" value=\"";
+        size_t at = dashboard->body.find(csrf_key) + csrf_key.size();
+        std::string csrf = dashboard->body.substr(at, dashboard->body.find('"', at) - at);
+        std::string alicia = std::to_string(me["id"].get<int>());
+        assert(web.Get("/panel-admin/account/" + alicia, with_cookie)->body.find("Alicia") != std::string::npos);
+        httplib::Params action = {{"action", "elo"}, {"account_id", alicia}, {"value", "1500"},
+                                  {"back", "/panel-admin/account/" + alicia}};
+        assert(web.Post("/panel-admin/action", with_cookie, action)->status == 403);         // sans jeton
+        assert(web.Post("/panel-admin/action", action)->status == 403);                      // sans cookie
+        action.emplace("csrf", csrf);
+        auto applied = web.Post("/panel-admin/action", with_cookie, action);
+        assert(applied && applied->status == 303 && applied->get_header_value("Location") == "/panel-admin/account/" + alicia);
+        assert(get(client, "/me", alice)["elo"] == 1500);
+        assert(web.Get("/panel-admin/account/" + alicia, with_cookie)->body.find("Done: Elo of Alicia") != std::string::npos);
+        httplib::Params evil = {{"csrf", csrf}, {"action", "status"}, {"back", "https://evil.example/"}};
+        assert(web.Post("/panel-admin/action", with_cookie, evil)->get_header_value("Location") == "/panel-admin");
+        // Les actions sont dans le journal
+        assert(web.Get("/panel-admin", with_cookie)->body.find("Elo of Alicia: 1234 -&gt; 1500") != std::string::npos);
+        web.Post("/panel-admin/logout", with_cookie, httplib::Params{{"csrf", csrf}});
+        assert(web.Get("/panel-admin", with_cookie)->body.find("Admin log") == std::string::npos);
+        admin({{"action", "announce"}, {"text", ""}});
+        assert(get(client, "/config", "")["announcement"] == "");
     }
 
     // Déconnexion

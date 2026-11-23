@@ -791,6 +791,39 @@ void Rooms::notify(int account, nlohmann::json notification)
     changed_.notify_all();
 }
 
+void Rooms::notify_online(const nlohmann::json& notification)
+{
+    std::vector<int> online;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        long long now = std::time(nullptr);
+        for (const auto& entry : last_seen_) {
+            if (now - entry.second < 70) {
+                online.push_back(entry.first);
+            }
+        }
+    }
+    for (int account : online) {
+        notify(account, notification);
+    }
+}
+
+RoomsStats Rooms::stats()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    RoomsStats stats;
+    long long now = std::time(nullptr);
+    for (const auto& entry : last_seen_) {
+        stats.online += now - entry.second < 70 ? 1 : 0;
+    }
+    for (const auto& entry : games_) {
+        stats.games += entry.second.game->is_over() ? 0 : 1;
+    }
+    stats.lobbies = static_cast<int>(lobbies_.size());
+    stats.queue = static_cast<int>(queue_.size());
+    return stats;
+}
+
 void Rooms::notifications_json(int account, long since, nlohmann::json& out)
 {
     std::unique_lock<std::mutex> lock(mutex_);

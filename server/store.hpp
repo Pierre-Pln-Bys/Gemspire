@@ -70,6 +70,21 @@ struct SeasonBadge {
     int rank;     // 1 = premier
 };
 
+// Une action d'administration (panel admin ou commande /dev du bot)
+struct AdminLogEntry {
+    long long at;
+    std::string actor;    // « discord:ID » de l'administrateur
+    std::string action;   // ex. « elo Pierre 1200 »
+};
+
+// Chiffres du tableau de bord d'administration
+struct StoreStats {
+    int accounts = 0;
+    int games = 0;          // parties terminées (non annulées)
+    int games_today = 0;    // ces dernières 24 heures
+    int banned = 0;
+};
+
 // Stockage SQLite : comptes, sessions, historique des parties.
 // Toutes les méthodes sont protégées par un verrou (serveur multi-thread).
 class Store {
@@ -83,6 +98,11 @@ public:
 
     // Compte associé à cette identité ; il est créé s'il n'existe pas
     int find_or_create_account(const std::string& provider, const std::string& provider_id);
+    // --- Identités (v4) : un compte peut avoir une connexion Discord ET une Google
+    // Ajoute la connexion `provider` au compte. "" ou l'erreur.
+    std::string link_identity(int id, const std::string& provider, const std::string& provider_id);
+    std::vector<std::string> providers(int id);                      // ex. {"discord", "google"}
+    std::string identity(int id, const std::string& provider);       // identifiant chez ce fournisseur ("" : aucun)
     // Compte associé à cette identité, sans le créer (0 si aucun)
     int find_account(const std::string& provider, const std::string& provider_id);
     bool get_account(int id, Account& account);
@@ -132,6 +152,20 @@ public:
     std::vector<HistoryEntry> history(int id, int limit);
     // Annule une partie : rend l'Elo, les parties et victoires. "" ou l'erreur.
     std::string cancel_game(int game_id);
+    // --- Administration (panel admin, commandes /dev)
+    std::string setting(const std::string& key);                     // "" si absent
+    void set_setting(const std::string& key, const std::string& value);
+    void log_admin(const std::string& actor, const std::string& action);
+    std::vector<AdminLogEntry> admin_log(int limit);
+    void set_elo(int id, int elo);
+    // Badge de saison donné à la main (rang 1 à SEASON_BADGES) ou retiré
+    void set_badge(int id, int season, int rank);
+    void remove_badge(int id, int season);
+    void close_sessions(int id);                                     // déconnecte le compte partout
+    // Comptes dont le pseudo contient `text`, ou de numéro / identifiant Discord `text`
+    std::vector<Account> search_accounts(const std::string& text, int limit);
+    StoreStats stats();
+
     // Supprime le compte (RGPD) : pseudo et identité effacés, sessions fermées ;
     // ses anciennes parties restent, au nom d'un joueur supprimé
     void delete_account(int id);

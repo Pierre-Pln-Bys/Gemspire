@@ -85,6 +85,14 @@ struct OnlineGame {
 // Tous les salons et parties en cours (en mémoire), protégés par un verrou.
 // Les lectures « since » attendent un changement (attente longue) pour que
 // les clients voient les coups des autres sans interroger sans arrêt.
+// Ce qui se passe en ce moment (tableau de bord d'administration)
+struct RoomsStats {
+    int online = 0;     // joueurs dont le jeu est ouvert
+    int games = 0;      // parties en cours
+    int lobbies = 0;    // salons qui attendent des joueurs
+    int queue = 0;      // joueurs qui cherchent un adversaire
+};
+
 class Rooms {
 public:
     explicit Rooms(Store& store);
@@ -134,6 +142,9 @@ public:
 
     // --- Notifications vers le jeu d'un joueur (ex. proposition du bot Discord)
     void notify(int account, nlohmann::json notification);
+    // La même notification à tous les joueurs dont le jeu est ouvert (annonce)
+    void notify_online(const nlohmann::json& notification);
+    RoomsStats stats();
     void notifications_json(int account, long since, nlohmann::json& out);
 
     // --- Événements pour le bot Discord : salons liés à un salon vocal

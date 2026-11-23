@@ -39,6 +39,13 @@ ServerConfig config_from_environment()
     config.web_dir = env("SPLENDOR_WEB_DIR", config.web_dir);
     config.contact_email = env("SPLENDOR_CONTACT_EMAIL");
     config.discord_invite = env("SPLENDOR_DISCORD_INVITE");
+    std::istringstream admins(env("SPLENDOR_ADMIN_DISCORD_IDS"));
+    std::string admin;
+    while (std::getline(admins, admin, ',')) {
+        if (!admin.empty() && admin.find_first_not_of("0123456789") == std::string::npos) {
+            config.admin_discord_ids.push_back(admin);
+        }
+    }
     config.turn_seconds = std::atoi(env("SPLENDOR_TURN_SECONDS", "120").c_str());
     if (config.turn_seconds < 5) {
         config.turn_seconds = 120;
@@ -379,7 +386,18 @@ void ServerApp::finish_login(const std::string& login, const std::string& provid
 {
     std::string token;
     std::string refused = error;
-    if (refused.empty()) {
+    int link_account = 0;
+    {
+        std::lock_guard<std::mutex> lock(logins_mutex_);
+        link_account = logins_[login].link_account;
+    }
+    if (refused.empty() && link_account != 0) {
+        // Ajout d'une connexion à un compte existant : pas de nouvelle session
+        refused = store_.link_identity(link_account, provider, provider_id);
+        token = refused.empty() ? "linked" : "";
+    } else if (refused.empty() && signups_closed() && store_.find_account(provider, provider_id) == 0) {
+        refused = "New accounts are closed for now. Try again later.";
+    } else if (refused.empty()) {
         int account = store_.find_or_create_account(provider, provider_id);
         Account data;
         if (account != 0 && store_.get_account(account, data) && data.banned()) {
@@ -432,6 +450,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         return httplib::Server::HandlerResponse::Handled;
     });
 
+    setup_admin_routes(server);
+
     server.Get("/health", [](const httplib::Request&, httplib::Response& response) {
         reply(response, 200, {{"status", "ok"}});
     });
@@ -461,6 +481,23 @@ void ServerApp::setup_routes(httplib::Server& server)
         response.set_redirect(authorize_url(config_, provider, login));
     });
 
+    // Panel d'administration : connexion par Discord (seuls les administrateurs passent)
+    server.Get("/panel-admin/login", [this](const httplib::Request& request, httplib::Response& response) {
+        if (config_.discord_client_id.empty() || config_.admin_discord_ids.empty()) {
+            reply_page(request, response, "Sign-in failed", "This sign-in method isn't available.");
+            return;
+        }
+        std::string login = random_hex(16);
+        {
+            std::lock_guard<std::mutex> lock(logins_mutex_);
+            PendingLogin& pending = logins_[login];
+            pending.provider = "discord";
+            pending.created = std::time(nullptr);
+            pending.admin = true;
+        }
+        response.set_redirect(authorize_url(config_, "discord", login));
+    });
+
     server.Get(R"(/auth/(discord|google)/callback)", [this](const httplib::Request& request, httplib::Response& response) {
         std::string provider = request.matches[1];
         std::string login = request.get_param_value("state");
@@ -477,10 +514,29 @@ void ServerApp::setup_routes(httplib::Server& server)
             std::lock_guard<std::mutex> lock(logins_mutex_);
             back_to_play = logins_[login].back_to_play;
         }
+        bool admin = false;
+        {
+            std::lock_guard<std::mutex> lock(logins_mutex_);
+            admin = logins_[login].admin;
+        }
         std::string user_id;
         std::string error = request.has_param("code")
                                 ? oauth_identity(config_, provider, request.get_param_value("code"), user_id)
                                 : "Sign-in cancelled.";
+        if (admin) {
+            {
+                std::lock_guard<std::mutex> lock(logins_mutex_);
+                logins_.erase(login);
+            }
+            if (!error.empty() || !is_admin(user_id)) {
+                std::cout << "Administration : connexion refusée (Discord " << user_id << ")" << std::endl;
+                reply_page(request, response, "Access denied", error.empty() ? "This account is not an administrator." : error);
+                return;
+            }
+            response.set_header("Set-Cookie", open_admin_session(user_id));
+            response.set_redirect("/panel-admin", 303);
+            return;
+        }
         finish_login(login, provider, user_id, error);
         // Jeu dans le navigateur : retour au jeu, qui termine la connexion (/auth/poll)
         if (back_to_play) {
@@ -502,8 +558,9 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_page(request, response, "Sign-in failed", "Test sign-in is disabled.");
             return;
         }
-        // as=discord : simule un compte Discord (tests du bot), toujours en mode test
-        std::string provider = request.get_param_value("as") == "discord" ? "discord" : "dev";
+        // as=discord / as=google : simule ce fournisseur (tests), toujours en mode test
+        std::string as = request.get_param_value("as");
+        std::string provider = as == "discord" || as == "google" ? as : "dev";
         {
             std::lock_guard<std::mutex> lock(logins_mutex_);
             logins_[login].provider = provider;
@@ -550,7 +607,9 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         json body = {{"status", found->second.status}};
-        if (found->second.status == "done") {
+        if (found->second.status == "done" && found->second.link_account != 0) {
+            body["linked"] = found->second.provider;  // connexion ajoutée au compte, pas de nouveau jeton
+        } else if (found->second.status == "done") {
             body["token"] = found->second.token;
         } else if (found->second.status == "error") {
             body["error"] = found->second.error;
@@ -580,7 +639,37 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"id", account.id}, {"pseudo", account.pseudo}, {"provider", account.provider},
                               {"elo", account.elo}, {"games", account.games}, {"wins", account.wins},
                               {"achievements", store_.achievements(id)}, {"badges", badges_json(store_, id)},
-                              {"season", store_.current_season()}});
+                              {"season", store_.current_season()}, {"providers", store_.providers(id)},
+                              {"announcement", store_.setting("announcement")}});
+    });
+
+    // v4 : ajouter une connexion (Google ou Discord) au compte. Le jeu ouvre
+    // ensuite /auth/<fournisseur>/start?login=<login> dans le navigateur et
+    // attend /auth/poll comme pour une connexion (réponse « linked »).
+    server.Post("/me/link", [this](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        std::string provider = parse_body(request, body) ? body.value("provider", std::string()) : "";
+        bool configured = provider == "discord" ? !config_.discord_client_id.empty()
+                          : provider == "google" ? !config_.google_client_id.empty() || config_.dev_login
+                                                 : false;
+        if (!configured) {
+            reply_error(response, 400, "This sign-in method isn't available.");
+            return;
+        }
+        std::string login = random_hex(16);
+        {
+            std::lock_guard<std::mutex> lock(logins_mutex_);
+            PendingLogin& pending = logins_[login];
+            pending.provider = provider;
+            pending.created = std::time(nullptr);
+            pending.link_account = id;
+        }
+        reply(response, 200, {{"login", login}});
     });
 
     // Notifications du jeu (attente longue) ; elles servent aussi de présence
@@ -598,7 +687,9 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     // Réglages publics utiles au jeu (identifiant public de l'application Discord)
     server.Get("/config", [this](const httplib::Request&, httplib::Response& response) {
-        reply(response, 200, {{"discord_app_id", config_.discord_client_id}, {"min_version", config_.min_version}});
+        reply(response, 200, {{"discord_app_id", config_.discord_client_id},
+                              {"min_version", config_.min_version},
+                              {"announcement", store_.setting("announcement")}});
     });
 
     server.Post("/me/pseudo", [this](const httplib::Request& request, httplib::Response& response) {
@@ -653,6 +744,9 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         if (request.matches[1] == "leave") {
             rooms_.leave_queue(id);
+        } else if (games_paused()) {
+            reply_error(response, 503, "New games are paused for maintenance. Try again later.");
+            return;
         } else {
             Mode mode = parse_body(request, body) && body.is_object()
                                 && body.value("mode", std::string("classique")) == "rapide"
@@ -765,6 +859,10 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 403, error);
             return;
         }
+        if (games_paused()) {
+            reply_error(response, 503, "New games are paused for maintenance. Try again later.");
+            return;
+        }
         if (!parse_body(request, body)) {
             reply_error(response, 400, "Malformed request.");
             return;
@@ -800,6 +898,10 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         if (!seat_for(id, seat, error)) {
             reply_error(response, 403, error);
+            return;
+        }
+        if (games_paused()) {
+            reply_error(response, 503, "New games are paused for maintenance. Try again later.");
             return;
         }
         std::string instance = parse_body(request, body) && body.contains("instance") && body["instance"].is_string()
@@ -840,6 +942,8 @@ void ServerApp::setup_routes(httplib::Server& server)
             error = rooms_.join_lobby(code, seat);
         } else if (action == "leave") {
             error = rooms_.leave_lobby(code, id);
+        } else if (games_paused()) {
+            error = "New games are paused for maintenance. Try again later.";
         } else {
             error = rooms_.start_lobby(code, id, game_id);
         }
@@ -1154,6 +1258,10 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string error;
         if (challenger == 0 || !seat_for(challenger, seat, error)) {
             reply_error(response, 404, "Account not linked: sign in to Gemspire with Discord first.");
+            return;
+        }
+        if (games_paused()) {
+            reply_error(response, 503, "New games are paused for maintenance. Try again later.");
             return;
         }
         Mode mode = body.value("mode", std::string("classique")) == "rapide" ? Mode::Quick : Mode::Classic;

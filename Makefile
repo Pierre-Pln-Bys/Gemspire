@@ -34,7 +34,7 @@ endif
 
 # Serveur en ligne (Linux) : cpp-httplib, nlohmann/json, SQLite (inclus), OpenSSL (système)
 SERVER_TARGET = splendor-server
-SERVER_OBJS = server/main.o server/app.o server/pages.o server/rooms.o server/store.o src/move_json.o src/display.o \
+SERVER_OBJS = server/main.o server/app.o server/admin.o server/pages.o server/rooms.o server/store.o src/move_json.o src/display.o \
               $(LOGIC_OBJS) build/sqlite3.o
 SERVER_CFLAGS = -isystem third_party/httplib -isystem third_party/json -isystem third_party/sqlite \
                 -DCPPHTTPLIB_OPENSSL_SUPPORT
@@ -77,7 +77,7 @@ tests/test_rules: tests/test_rules.o $(LOGIC_OBJS)
 test: tests/test_rules
 	./tests/test_rules
 
-tests/test_server: tests/test_server.o server/app.o server/pages.o server/rooms.o server/store.o src/move_json.o src/display.o \
+tests/test_server: tests/test_server.o server/app.o server/admin.o server/pages.o server/rooms.o server/store.o src/move_json.o src/display.o \
                    $(LOGIC_OBJS) build/sqlite3.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SERVER_LIBS)
 
