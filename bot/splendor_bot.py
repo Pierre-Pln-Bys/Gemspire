@@ -33,7 +33,7 @@ from discord import app_commands
 from api import ApiError, SplendorApi
 from logic import (CREATE_CHANNEL_NAME, DELETE_DELAY_SECONDS, DOWNLOAD_URL, OFFER_RETRY_COUNT, OFFER_RETRY_SECONDS,
                    RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, format_podium, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
-                   format_history, format_profile, format_ranking, is_create_channel, load_state, offer_message,
+                   format_history, format_profile, format_ranking, format_status, is_create_channel, load_state, offer_message,
                    parse_id, save_state, should_delete, site_page, temp_channel_name)
 from texts import COMMAND_FR, lang_of, tr
 
@@ -506,6 +506,88 @@ async def mod_delete(interaction: discord.Interaction, username: str):
 
 
 tree.add_command(moderation)
+
+
+# ---------------------------------------------------------------- Commandes /dev
+
+# Visibles des administrateurs du serveur Discord ; le serveur Gemspire ne les
+# accepte que des comptes listés dans SPLENDOR_ADMIN_DISCORD_IDS.
+developer = app_commands.Group(name=_("dev"), description=_("Gemspire administration (owner only)"),
+                               default_permissions=discord.Permissions(administrator=True), guild_only=True)
+
+
+async def dev_action(interaction, action, **fields):
+    """Envoie l'action au serveur, répond en privé et note le résultat dans #moderation."""
+    result = await call_api(interaction, api.admin, interaction.user.id, action, **fields)
+    if result is None:
+        return
+    message = result.get("message", "")
+    await answer(interaction, tr("dev_done", user_lang(interaction), message=message), private=True)
+    await mod_log(interaction.guild, tr("dev_log", guild_lang(interaction.guild), user=interaction.user.mention,
+                                        message=message))
+
+
+@developer.command(name=_("status"), description=_("Server state: players, games, switches"))
+async def dev_status(interaction: discord.Interaction):
+    result = await call_api(interaction, api.admin, interaction.user.id, "status")
+    if result is not None:
+        await answer(interaction, format_status(result, user_lang(interaction)), private=True)
+
+
+@developer.command(name=_("signups"), description=_("Open or close the creation of new accounts"))
+@app_commands.rename(state=_("state"))
+@app_commands.choices(state=[app_commands.Choice(name=_("Open"), value="open"),
+                             app_commands.Choice(name=_("Closed"), value="closed")])
+async def dev_signups(interaction: discord.Interaction, state: app_commands.Choice[str]):
+    await dev_action(interaction, "signups", value=state.value)
+
+
+@developer.command(name=_("games"), description=_("Allow or pause new games (maintenance)"))
+@app_commands.rename(state=_("state"))
+@app_commands.choices(state=[app_commands.Choice(name=_("Allowed"), value="on"),
+                             app_commands.Choice(name=_("Paused"), value="paused")])
+async def dev_games(interaction: discord.Interaction, state: app_commands.Choice[str]):
+    await dev_action(interaction, "games", value=state.value)
+
+
+@developer.command(name=_("announce"), description=_("Message shown in the game to every player (empty = remove)"))
+@app_commands.rename(text=_("text"))
+async def dev_announce(interaction: discord.Interaction, text: app_commands.Range[str, 0, 300] = ""):
+    await dev_action(interaction, "announce", text=text)
+
+
+@developer.command(name=_("rename"), description=_("Change the username of a player"))
+@app_commands.rename(username=_("username"), new_username=_("new_username"))
+async def dev_rename(interaction: discord.Interaction, username: str, new_username: app_commands.Range[str, 3, 16]):
+    await dev_action(interaction, "rename", username=username, value=new_username)
+
+
+@developer.command(name=_("elo"), description=_("Set the Elo of a player"))
+@app_commands.rename(username=_("username"), value=_("value"))
+async def dev_elo(interaction: discord.Interaction, username: str, value: app_commands.Range[int, 0, 4000]):
+    await dev_action(interaction, "elo", username=username, value=value)
+
+
+@developer.command(name=_("badge"), description=_("Give a season badge (top 10) to a player"))
+@app_commands.rename(username=_("username"), season=_("season"), rank=_("rank"))
+async def dev_badge(interaction: discord.Interaction, username: str, season: app_commands.Range[int, 1, 9999],
+                    rank: app_commands.Range[int, 1, 10]):
+    await dev_action(interaction, "badge", username=username, season=season, rank=rank)
+
+
+@developer.command(name=_("remove-badge"), description=_("Remove a season badge from a player"))
+@app_commands.rename(username=_("username"), season=_("season"))
+async def dev_unbadge(interaction: discord.Interaction, username: str, season: app_commands.Range[int, 1, 9999]):
+    await dev_action(interaction, "unbadge", username=username, season=season)
+
+
+@developer.command(name=_("logout"), description=_("Sign a player out everywhere"))
+@app_commands.rename(username=_("username"))
+async def dev_logout(interaction: discord.Interaction, username: str):
+    await dev_action(interaction, "logout", username=username)
+
+
+tree.add_command(developer)
 
 
 # ---------------------------------------------------------------- Démarrage

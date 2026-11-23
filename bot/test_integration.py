@@ -18,6 +18,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from logic import format_status
 from api import ApiError, SplendorApi  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +38,7 @@ class IntegrationTests(unittest.TestCase):
         self.port = free_port()
         self.url = "http://127.0.0.1:{}".format(self.port)
         env = dict(os.environ, SPLENDOR_PORT=str(self.port), SPLENDOR_DEV_LOGIN="1", SPLENDOR_BOT_KEY="cle-integration",
-                   SPLENDOR_DATABASE=os.path.join(self.folder.name, "test.db"))
+                   SPLENDOR_ADMIN_DISCORD_IDS="405,406", SPLENDOR_DATABASE=os.path.join(self.folder.name, "test.db"))
         self.process = subprocess.Popen([SERVER], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(50):
             try:
@@ -122,6 +123,34 @@ class IntegrationTests(unittest.TestCase):
             api.cancel_game(12345)
         api.delete_account(pseudo="Tricheur")
         self.assertFalse(api.profile(pseudo="Tricheur")["found"])
+
+    def test_dev_commands(self):
+        login = "d" * 24
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=900&as=discord".format(login)).close()
+        token = self.call("/auth/poll?login=" + login)["token"]
+        self.call("/me/pseudo", token, {"pseudo": "Joueuse"})
+        api = SplendorApi(self.url, "cle-integration")
+        with self.assertRaises(ApiError) as caught:
+            api.admin(999, "status")
+        self.assertIn("administrator", str(caught.exception))
+        status = api.admin(405, "status")
+        self.assertEqual(status["accounts"], 1)
+        self.assertIn("1 accounts", format_status(status))
+        self.assertIn("Sign-ups: **open**", format_status(status))
+        self.assertIn("New accounts closed", api.admin(406, "signups", value="closed")["message"])
+        self.assertTrue(api.admin(405, "status")["signups_closed"])
+        api.admin(405, "elo", username="joueuse", value=1300)
+        self.assertEqual(api.profile(pseudo="Joueuse")["elo"], 1300)
+        api.admin(405, "badge", username="Joueuse", season=2, rank=1)
+        self.assertEqual(api.profile(pseudo="Joueuse")["badges"], [{"season": 2, "rank": 1}])
+        api.admin(405, "rename", username="Joueuse", value="Championne")
+        api.admin(405, "logout", username="Championne")
+        with self.assertRaises(urllib.error.HTTPError):
+            self.call("/me", token)
+        api.admin(405, "announce", text="Bientôt la v4")
+        self.assertEqual(self.call("/config")["announcement"], "Bientôt la v4")
+        with self.assertRaises(ApiError):
+            api.admin(405, "elo", username="Personne", value=1000)
 
 
 if __name__ == "__main__":

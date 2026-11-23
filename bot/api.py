@@ -95,3 +95,10 @@ class SplendorApi:
 
     def delete_account(self, pseudo=None, discord_id=None):
         return self._request("POST", "/bot/delete-account", self._who(pseudo, discord_id))
+
+    # --- Commandes /dev (administrateurs seulement : le serveur vérifie le compte Discord)
+    def admin(self, admin_discord_id, action, **fields):
+        """Action d'administration ; {"message": ...} ou l'état du serveur (action "status")."""
+        body = {"admin_discord_id": str(admin_discord_id), "action": action}
+        body.update({key: str(value) for key, value in fields.items()})
+        return self._request("POST", "/bot/admin", body)

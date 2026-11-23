@@ -147,6 +147,19 @@ class LogicTests(unittest.TestCase):
         self.assertIn("Lancez", offer_message({"linked": True, "online": False}, "fr"))
         self.assertIn("fenêtre", offer_message({"linked": True, "online": True}, "fr"))
 
+    def test_format_status(self):
+        from logic import format_status
+        status = {"version": "4.0.0", "min_version": "4.0.0", "uptime": 3720, "online": 3, "games_live": 1,
+                  "lobbies": 2, "queue": 0, "accounts": 40, "games_total": 120, "games_today": 5, "banned": 1,
+                  "season": 2, "signups_closed": True, "games_paused": False, "announcement": "Maintenance"}
+        text = format_status(status)
+        self.assertIn("1 h 2 min", text)
+        self.assertIn("Sign-ups: **closed**", text)
+        self.assertIn("new games: **allowed**", text)
+        self.assertIn("Announcement: Maintenance", text)
+        self.assertIn("Inscriptions : **fermées**", format_status(status, "fr"))
+        self.assertNotIn("Annonce", format_status(dict(status, announcement=""), "fr"))
+
     def test_texts_complete(self):
         # Chaque texte existe dans les deux langues, avec les mêmes valeurs à remplir
         import re

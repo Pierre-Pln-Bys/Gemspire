@@ -294,3 +294,22 @@ def offer_message(presence, lang="en"):
     if not presence.get("online"):
         return tr("offer_not_online", lang)
     return tr("offer_sent", lang)
+
+
+def format_status(status, lang="en"):
+    """État du serveur pour /dev status (plusieurs lignes)."""
+    uptime = int(status.get("uptime", 0))
+    lines = [
+        tr("status_title", lang, version=status.get("version", "?"), minimum=status.get("min_version", "?"),
+           hours=uptime // 3600, minutes=uptime % 3600 // 60),
+        tr("status_live", lang, online=status.get("online", 0), games=status.get("games_live", 0),
+           lobbies=status.get("lobbies", 0), queue=status.get("queue", 0)),
+        tr("status_totals", lang, accounts=status.get("accounts", 0), games=status.get("games_total", 0),
+           today=status.get("games_today", 0), banned=status.get("banned", 0), season=status.get("season", 0)),
+        tr("status_switches", lang,
+           signups=tr("closed" if status.get("signups_closed") else "open", lang),
+           games=tr("paused" if status.get("games_paused") else "allowed", lang)),
+    ]
+    if status.get("announcement"):
+        lines.append(tr("status_announcement", lang, text=status["announcement"]))
+    return "\n".join(lines)
