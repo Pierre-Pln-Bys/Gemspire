@@ -98,7 +98,7 @@ void Rooms::lobby_changed(const Lobby& lobby, bool closed)
 std::string Rooms::create_lobby(const Seat& me, Mode mode, int seats, std::string& code, const std::string& voice_channel)
 {
     if (seats < 2 || seats > 4) {
-        return "Une partie se joue à 2, 3 ou 4.";
+        return "A game is played with 2, 3 or 4 players.";
     }
     Lobby created;
     {
@@ -128,7 +128,7 @@ std::string Rooms::join_lobby(const std::string& code, const Seat& me)
         std::lock_guard<std::mutex> lock(mutex_);
         auto found = lobbies_.find(code);
         if (found == lobbies_.end()) {
-            return "Aucun salon avec ce code.";
+            return "No lobby with this code.";
         }
         for (const Seat& seat : found->second.members) {
             if (seat.account == me.account) {
@@ -136,16 +136,16 @@ std::string Rooms::join_lobby(const std::string& code, const Seat& me)
             }
         }
         if (found->second.game_id != 0) {
-            return "La partie a déjà commencé.";
+            return "The game has already started.";
         }
         if (static_cast<int>(found->second.members.size()) >= found->second.seats) {
-            return "Le salon est complet.";
+            return "The lobby is full.";
         }
         remove_from_lobbies(me.account);
         // Le salon a pu disparaître si on en était le seul membre
         found = lobbies_.find(code);
         if (found == lobbies_.end()) {
-            return "Aucun salon avec ce code.";
+            return "No lobby with this code.";
         }
         found->second.members.push_back(me);
         found->second.version++;
@@ -160,7 +160,7 @@ std::string Rooms::leave_lobby(const std::string& code, int account)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (lobbies_.count(code) == 0) {
-            return "Aucun salon avec ce code.";
+            return "No lobby with this code.";
         }
         remove_from_lobbies(account);
     }
@@ -174,18 +174,18 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
         std::lock_guard<std::mutex> lock(mutex_);
         auto found = lobbies_.find(code);
         if (found == lobbies_.end()) {
-            return "Aucun salon avec ce code.";
+            return "No lobby with this code.";
         }
         Lobby& lobby = found->second;
         if (lobby.host != account) {
-            return "Seul l'hôte peut lancer la partie.";
+            return "Only the host can start the game.";
         }
         if (lobby.game_id != 0) {
             game_id = lobby.game_id;
             return "";
         }
         if (lobby.members.size() < 2) {
-            return "Il faut au moins 2 joueurs.";
+            return "At least 2 players are needed.";
         }
         std::vector<std::string> names;
         for (const Seat& seat : lobby.members) {
@@ -257,16 +257,16 @@ std::string Rooms::play(int game_id, int account, const Move& move)
         std::lock_guard<std::mutex> lock(mutex_);
         auto found = games_.find(game_id);
         if (found == games_.end()) {
-            return "Partie introuvable.";
+            return "Game not found.";
         }
         OnlineGame& online = found->second;
         Game& game = *online.game;
         if (game.is_over()) {
-            return "La partie est terminée.";
+            return "The game is over.";
         }
         int current = game.current_index();
         if (online.seats[current].account != account) {
-            return "Ce n'est pas votre tour.";
+            return "It's not your turn.";
         }
         size_t before = game.events().size();
         std::string error = apply_move(game, move);
@@ -285,7 +285,8 @@ void Rooms::after_change(OnlineGame& online, size_t events_before)
 {
     Game& game = *online.game;
     for (size_t i = events_before; i < game.events().size(); i++) {
-        online.log.push_back(describe_event(game, game.events()[i]));
+        online.log.push_back(describe_event(game, game.events()[i], Lang::English));
+        online.log_fr.push_back(describe_event(game, game.events()[i], Lang::French));
     }
     if (game.is_over() && !online.recorded) {
         finish_game(online);
@@ -301,12 +302,12 @@ std::string Rooms::forfeit(int game_id, int account)
         std::lock_guard<std::mutex> lock(mutex_);
         auto found = games_.find(game_id);
         if (found == games_.end()) {
-            return "Partie introuvable.";
+            return "Game not found.";
         }
         OnlineGame& online = found->second;
         Game& game = *online.game;
         if (game.is_over()) {
-            return "La partie est terminée.";
+            return "The game is over.";
         }
         int seat = -1;
         for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
@@ -315,7 +316,7 @@ std::string Rooms::forfeit(int game_id, int account)
             }
         }
         if (seat < 0) {
-            return "Vous ne jouez pas dans cette partie.";
+            return "You're not playing in this game.";
         }
         size_t before = game.events().size();
         std::string error = game.forfeit(seat);
@@ -423,6 +424,7 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
     out["your_seat"] = my_seat >= 0 ? my_seat : -1;
     out["save"] = save_game_for(*online.game, my_seat);
     out["log"] = online.log;
+    out["log_fr"] = online.log_fr;
     out["over"] = online.game->is_over();
     // Secondes restantes pour jouer (le tour passe ensuite)
     long long left = online.turn_start + turn_seconds_ - now_seconds();

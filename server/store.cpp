@@ -46,14 +46,14 @@ std::string check_pseudo(const std::string& pseudo)
         bool ascii_ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
                         || c == '-' || c == ' ';
         if (c < 0x80 && !ascii_ok) {
-            return "Le pseudo ne peut contenir que des lettres, des chiffres, des espaces, - et _.";
+            return "The username can only contain letters, digits, spaces, - and _.";
         }
     }
     if (characters < 3 || characters > 16) {
-        return "Le pseudo doit faire entre 3 et 16 caractères.";
+        return "The username must be 3 to 16 characters long.";
     }
     if (pseudo.front() == ' ' || pseudo.back() == ' ') {
-        return "Le pseudo ne peut pas commencer ni finir par un espace.";
+        return "The username can't start or end with a space.";
     }
     return "";
 }
@@ -206,7 +206,7 @@ std::string Store::set_pseudo(int id, const std::string& pseudo)
     update.bind(1, pseudo);
     update.bind(2, static_cast<long long>(id));
     if (!update.done()) {
-        return "Ce pseudo est déjà pris.";
+        return "This username is already taken.";
     }
     return "";
 }
@@ -359,7 +359,7 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
         entries.push_back(entry);
     }
     for (HistoryEntry& entry : entries) {
-        Statement players(db_, "SELECT IFNULL(a.pseudo, '(supprimé)') FROM game_players p"
+        Statement players(db_, "SELECT IFNULL(a.pseudo, '(deleted)') FROM game_players p"
                                " JOIN accounts a ON a.id = p.account_id WHERE p.game_id = ? ORDER BY p.place");
         players.bind(1, static_cast<long long>(entry.game_id));
         while (players.row()) {
@@ -375,10 +375,10 @@ std::string Store::cancel_game(int game_id)
     Statement find(db_, "SELECT cancelled FROM games WHERE id = ?");
     find.bind(1, static_cast<long long>(game_id));
     if (!find.row()) {
-        return "Partie introuvable.";
+        return "Game not found.";
     }
     if (find.integer(0) != 0) {
-        return "Cette partie est déjà annulée.";
+        return "This game is already cancelled.";
     }
     exec("BEGIN;");
     Statement undo(db_, "UPDATE accounts SET"

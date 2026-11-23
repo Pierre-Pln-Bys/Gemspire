@@ -9,6 +9,7 @@
 #include "../src/data.hpp"
 #include "../src/elo.hpp"
 #include "../src/game.hpp"
+#include "../src/i18n.hpp"
 #include "../src/rules.hpp"
 #include "../src/save.hpp"
 
@@ -435,6 +436,27 @@ static void test_timeout_and_forfeit()
     assert(final_places(duel)[0] == 1 && final_places(duel)[1] == 0);
 }
 
+// Traductions : remplacement des {n}, langue, messages d'erreur traduits
+static void test_i18n()
+{
+    assert(tr(Lang::English, "{0}'s turn", {"Alice"}) == "Alice's turn");
+    assert(tr(Lang::French, "{0}'s turn", {"Alice"}) == "Au tour de Alice");
+    assert(tr(Lang::French, "Game saved in {0} (resume with --load {0}).", {"a.splendor"})
+           == "Partie sauvegardée dans a.splendor (reprendre avec --charger a.splendor).");
+    assert(tr(Lang::French, "Alice") == "Alice");  // pas de traduction : texte inchangé
+    assert(lang_from_code("fr_FR.UTF-8") == Lang::French && lang_from_code("en-US") == Lang::English);
+    assert(lang_from_code("") == Lang::English && lang_code(Lang::French) == "fr");
+
+    // Chaque refus des règles a sa traduction française
+    Game game({"Alice", "Bob"}, 7, Mode::Quick);
+    std::vector<std::string> errors = {game.take_tokens({3, 0, 0, 0, 0}), game.take_tokens({1, 1, 0, 0, 0}),
+                                       game.take_tokens({2, 1, 0, 0, 0}), game.take_tokens({0, 0, 0, 0, 0}),
+                                       game.reserve_card(1, 1), game.buy_card(4, 1), game.discard(Gem::Red)};
+    for (const std::string& error : errors) {
+        assert(!error.empty() && tr(Lang::French, error) != error);
+    }
+}
+
 int main()
 {
     test_data();
@@ -448,6 +470,7 @@ int main()
     test_ai_tournament();
     test_save();
     test_timeout_and_forfeit();
+    test_i18n();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }

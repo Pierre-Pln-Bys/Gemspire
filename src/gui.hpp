@@ -9,6 +9,7 @@
 
 #include "discord_rpc.hpp"
 #include "game.hpp"
+#include "i18n.hpp"
 #include "net.hpp"
 #include "types.hpp"
 
@@ -35,7 +36,7 @@ enum class ButtonId {
     // En ligne
     LoginDiscord, LoginGoogle, LoginDev, PseudoBox, PseudoOk, CodeBox, JoinLobby, CreateLobby, CreateMode,
     CreateSeats, ShowLeaderboard, Logout, BackHome, BackOnline, ReturnToGame, LobbyStart, LobbyLeave, CopyCode,
-    Invite, OfferCreate, OfferIgnore, Download,
+    Invite, OfferCreate, OfferIgnore, Download, Language,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -60,18 +61,18 @@ struct PlayerColor {
 };
 const int PLAYER_COLOR_COUNT = 5;
 const PlayerColor PLAYER_COLORS[PLAYER_COLOR_COUNT] = {
-    {"Violet", {168, 97, 235, 255}},
+    {"Purple", {168, 97, 235, 255}},
     {"Orange", {255, 140, 26, 255}},
     {"Turquoise", {51, 217, 204, 255}},
-    {"Rose", {255, 115, 184, 255}},
-    {"Marron", {158, 102, 56, 255}},
+    {"Pink", {255, 115, 184, 255}},
+    {"Brown", {158, 102, 56, 255}},
 };
 
 // Réglages de l'écran « Nouvelle partie »
 struct Setup {
     Mode mode = Mode::Classic;
     int count = 2;
-    std::string names[4] = {"Joueur 1", "Joueur 2", "Joueur 3", "Joueur 4"};
+    std::string names[4] = {"Player 1", "Player 2", "Player 3", "Player 4"};  // traduits au lancement
     int colors[4] = {0, 1, 2, 3};
     Controller kinds[4] = {Controller::Human, Controller::AiMedium, Controller::AiMedium, Controller::AiMedium};
     int focused_name = -1;   // champ de nom en cours de saisie (-1 : aucun)
@@ -137,7 +138,8 @@ struct OnlineState {
     double next_game_poll = 0;       // nouvelle tentative après une coupure
     bool game_poll_running = false;
     bool lobby_poll_running = false;
-    std::vector<std::string> log;    // historique envoyé par le serveur
+    std::vector<std::string> log;    // historique envoyé par le serveur (anglais)
+    std::vector<std::string> log_fr; // le même en français
     std::vector<int> seat_elos;
     std::vector<int> elo_changes;
     long notification_last = -1;     // dernière notification vue (-1 : pas encore demandé)
@@ -154,6 +156,7 @@ struct OnlineState {
 // Tout l'état de l'interface
 struct App {
     Screen screen = Screen::Home;
+    Lang lang = Lang::English;              // langue des textes (bouton sur l'accueil, fichier langue.txt)
     Setup setup;
     std::unique_ptr<Game> game;
     std::vector<int> player_colors;         // couleur de chaque joueur (indice dans PLAYER_COLORS)
@@ -207,7 +210,7 @@ std::vector<Button> visible_buttons(const App& app);
 // Dessine l'écran courant, dans le repère virtuel
 void draw_app(const App& app, Vector2 mouse);
 
-// « Il manque 2 Rouge, 1 Bleu » pour une carte, ou "" si elle est achetable
-std::string missing_text(const Game& game, const Card& card);
+// « Missing 2 Red, 1 Blue » pour une carte, ou "" si elle est achetable
+std::string missing_text(const Game& game, const Card& card, Lang lang);
 
 #endif

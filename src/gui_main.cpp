@@ -38,9 +38,10 @@
 
 // ---------------------------------------------------------------- Outils
 
+// Ligne d'état ; un texte anglais simple (règles, serveur) est traduit ici
 static void set_message(App& app, const std::string& message, bool is_error)
 {
-    app.message = message;
+    app.message = tr(app.lang, message);
     app.message_is_error = is_error;
 }
 
@@ -82,7 +83,7 @@ static void start_board(App& app)
     app.flips.clear();
     app.banners.clear();
     app.ai_next_time = GetTime() + 0.8;
-    set_message(app, "À " + app.game->current_player().name + " de jouer.", false);
+    set_message(app, tr(app.lang, "{0}'s turn.", {app.game->current_player().name}), false);
 }
 
 // ---------------------------------------------------------------- Après un coup
@@ -128,8 +129,8 @@ static void announce_changes(App& app, const Highlights& before)
     for (int p = 0; p < static_cast<int>(players.size()) && p < static_cast<int>(before.nobles.size()); p++) {
         for (int n = before.nobles[p]; n < static_cast<int>(players[p].nobles.size()); n++) {
             const Noble& noble = players[p].nobles[n];
-            app.banners.push_back({noble.name + " rend visite à " + players[p].name,
-                                   "+" + std::to_string(noble.points) + " points de prestige", p});
+            app.banners.push_back({tr(app.lang, "{0} visits {1}", {noble.name, players[p].name}),
+                                   tr(app.lang, "+{0} prestige points", {std::to_string(noble.points)}), p});
         }
     }
     if (game.is_last_round() && !before.last_round && !game.is_over()) {
@@ -139,8 +140,9 @@ static void announce_changes(App& app, const Highlights& before)
                 leader = p;
             }
         }
-        app.banners.push_back({"Dernier tour !", players[leader].name + " a atteint " + std::to_string(WINNING_SCORE)
-                                                     + " points : on termine le tour de table.",
+        app.banners.push_back({"Last round!",
+                               tr(app.lang, "{0} reached {1} points: the round is finished.",
+                                  {players[leader].name, std::to_string(WINNING_SCORE)}),
                                leader});
     }
 }
@@ -197,17 +199,17 @@ static void show_new_events(App& app)
     const Game& game = *app.game;
     std::string text;
     for (; app.shown_events < static_cast<int>(game.events().size()); app.shown_events++) {
-        text += describe_event(game, game.events()[app.shown_events]) + " ";
+        text += describe_event(game, game.events()[app.shown_events], app.lang) + " ";
     }
     if (game.is_over()) {
-        text += "Partie terminée.";
+        text += tr(app.lang, "Game over.");
     } else if (game.step() == TurnStep::Discard) {
-        text += "Plus de 10 jetons : cliquez sur vos jetons (ou touches 1 à 6) pour en défausser "
-                + std::to_string(game.tokens_to_discard()) + ".";
+        text += tr(app.lang, "More than 10 tokens: click your tokens (or keys 1 to 6) to discard {0}.",
+                   {std::to_string(game.tokens_to_discard())});
     } else if (game.step() == TurnStep::ChooseNoble) {
-        text += "Plusieurs nobles veulent venir : cliquez sur celui de votre choix.";
+        text += tr(app.lang, "Several nobles want to visit: click the one you choose.");
     } else {
-        text += "À " + game.current_player().name + " de jouer.";
+        text += tr(app.lang, "{0}'s turn.", {game.current_player().name});
     }
     set_message(app, text, false);
 }
@@ -242,12 +244,13 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
 const char* const SESSION_FILE = "session.txt";   // jeton de connexion
 const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
+const char* const LANGUAGE_FILE = "langue.txt";   // langue choisie ("en" ou "fr")
 
 // Un coup du joueur devant l'écran : appliqué tout de suite en local, envoyé
 // au serveur en ligne (le serveur vérifie et renvoie la nouvelle partie)
@@ -272,7 +275,7 @@ static void start_new_game(App& app)
     Setup& setup = app.setup;
     std::vector<std::string> names;
     for (int p = 0; p < setup.count; p++) {
-        names.push_back(setup.names[p].empty() ? "Joueur " + std::to_string(p + 1) : setup.names[p]);
+        names.push_back(setup.names[p].empty() ? tr(app.lang, "Player {0}", {std::to_string(p + 1)}) : setup.names[p]);
     }
     app.game.reset(new Game(names, std::random_device{}(), setup.mode));
     app.player_colors.clear();
@@ -298,7 +301,7 @@ static void resume_saved_game(App& app)
         app.player_colors.push_back(p);
     }
     start_board(app);
-    set_message(app, "Partie reprise. À " + app.game->current_player().name + " de jouer.", false);
+    set_message(app, tr(app.lang, "Game resumed. {0}'s turn.", {app.game->current_player().name}), false);
 }
 
 // Nombre de caractères (UTF-8) d'un texte
@@ -342,6 +345,25 @@ static void update_name_input(Setup& setup)
     }
 }
 
+// Change la langue et la retient (fichier langue.txt). Les noms de joueurs
+// encore par défaut (« Player 1 » / « Joueur 1 ») suivent la langue.
+static void set_language(App& app, Lang lang)
+{
+    for (int p = 0; p < 4; p++) {
+        if (app.setup.names[p] == tr(app.lang, "Player {0}", {std::to_string(p + 1)})) {
+            app.setup.names[p] = tr(lang, "Player {0}", {std::to_string(p + 1)});
+        }
+    }
+    app.lang = lang;
+    {
+        std::ofstream file(LANGUAGE_FILE);
+        file << lang_code(lang) << "\n";
+    }
+#ifdef __EMSCRIPTEN__
+    web_save_files();
+#endif
+}
+
 static void press_menu_button(App& app, const Button& button)
 {
     Setup& setup = app.setup;
@@ -355,6 +377,9 @@ static void press_menu_button(App& app, const Button& button)
         break;
     case ButtonId::Quit:
         app.quit = true;
+        break;
+    case ButtonId::Language:
+        set_language(app, app.lang == Lang::French ? Lang::English : Lang::French);
         break;
     case ButtonId::Mode:
         setup.mode = button.value == 1 ? Mode::Classic : Mode::Quick;
@@ -383,7 +408,7 @@ static void press_menu_button(App& app, const Button& button)
         setup.focused_name = button.value;
 #ifdef __EMSCRIPTEN__
         // Navigateur : boîte de saisie (ouvre le clavier du téléphone)
-        web_prompt("Nom du joueur " + std::to_string(button.value + 1) + " :", setup.names[button.value]);
+        web_prompt(tr(app.lang, "Player {0} name:", {std::to_string(button.value + 1)}), setup.names[button.value]);
         setup.names[button.value] = setup.names[button.value].substr(0, 32);
         setup.focused_name = -1;
 #endif
@@ -458,7 +483,7 @@ static void go_online(App& app)
         app.screen = Screen::Login;
         return;
     }
-    set_message(app, "Connexion au serveur…", false);
+    set_message(app, "Connecting to the server…", false);
     app.net.send(TagMe, "GET", "/me");
 }
 
@@ -516,7 +541,7 @@ static void enter_online_game(App& app, int game_id)
     online.in_game = true;
     app.game.reset();
     app.screen = Screen::Board;
-    set_message(app, "Chargement de la partie…", false);
+    set_message(app, "Loading the game…", false);
     poll_game(app);
 }
 
@@ -549,11 +574,14 @@ static void apply_game_state(App& app, const nlohmann::json& body)
         online.seat_elos.push_back(seat.value("elo", 1000));
     }
     std::vector<std::string> log = body.value("log", std::vector<std::string>());
+    std::vector<std::string> log_fr = body.value("log_fr", std::vector<std::string>());
+    const std::vector<std::string>& shown = app.lang == Lang::French && log_fr.size() == log.size() ? log_fr : log;
     std::string news;
-    for (size_t i = online.log.size(); i < log.size(); i++) {
-        news += log[i] + " ";
+    for (size_t i = online.log.size(); i < shown.size(); i++) {
+        news += shown[i] + " ";
     }
     online.log = log;
+    online.log_fr = log_fr;
     if (first) {
         start_board(app);
         app.player_colors.clear();
@@ -566,12 +594,12 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     }
     std::string next;
     if (online.game_over) {
-        next = "Partie terminée.";
+        next = tr(app.lang, "Game over.");
         app.net.send(TagMe, "GET", "/me");  // nouvel Elo
     } else if (app.game->current_index() == online.my_seat) {
-        next = app.game->step() == TurnStep::Discard ? "Défaussez vos jetons en trop." : "À vous de jouer !";
+        next = tr(app.lang, app.game->step() == TurnStep::Discard ? "Discard your extra tokens." : "Your turn!");
     } else {
-        next = "Au tour de " + app.game->current_player().name + ".";
+        next = tr(app.lang, "{0}'s turn.", {app.game->current_player().name});
     }
     set_message(app, news + next, false);
 }
@@ -579,12 +607,12 @@ static void apply_game_state(App& app, const nlohmann::json& body)
 static std::string error_of(const NetResponse& response, const nlohmann::json& body, const App& app)
 {
     if (response.status == 0) {
-        return "Serveur injoignable (" + app.net.server() + ").";
+        return tr(app.lang, "Server unreachable ({0}).", {app.net.server()});
     }
     if (body.is_object() && body.contains("error") && body["error"].is_string()) {
-        return body["error"].get<std::string>();
+        return tr(app.lang, body["error"].get<std::string>());  // message anglais du serveur
     }
-    return "Erreur du serveur (" + std::to_string(response.status) + ").";
+    return tr(app.lang, "Server error ({0}).", {std::to_string(response.status)});
 }
 
 static void save_current_game(App& app);  // plus bas
@@ -621,6 +649,24 @@ static void handle_responses(App& app)
         case TagConfig:
             if (ok && body.value("discord_app_id", std::string()) != "") {
                 app.discord.start(body.value("discord_app_id", std::string()));
+#ifdef __EMSCRIPTEN__
+                // Activité Discord : connexion automatique avec le compte Discord
+                if (web_in_activity() && read_first_line(SESSION_FILE).empty()) {
+                    web_activity_start(body.value("discord_app_id", std::string()));
+                    app.screen = Screen::Login;
+                    set_message(app, "Signing in with Discord…", false);
+                }
+#endif
+            }
+            break;
+        case TagActivity:
+            if (ok && !body.value("token", std::string()).empty()) {
+                std::string token = body.value("token", std::string());
+                save_session(token);
+                app.net.set_token(token);
+                app.net.send(TagMe, "GET", "/me");
+            } else {
+                set_message(app, error_of(response, body, app), true);
             }
             break;
         case TagNotes:
@@ -667,7 +713,7 @@ static void handle_responses(App& app)
                 save_session("");
                 app.net.set_token("");
                 app.screen = Screen::Login;
-                set_message(app, "Session expirée : reconnectez-vous.", true);
+                set_message(app, "Session expired: please sign in again.", true);
             } else {
                 set_message(app, error_of(response, body, app), true);
             }
@@ -684,7 +730,7 @@ static void handle_responses(App& app)
                 app.net.send(TagMe, "GET", "/me");
             } else if (ok && body.value("status", std::string()) == "error") {
                 online.login_id.clear();
-                set_message(app, body.value("error", std::string("Connexion impossible.")), true);
+                set_message(app, body.value("error", std::string("Sign-in failed.")), true);
             } else if (!ok) {
                 online.login_id.clear();
                 set_message(app, error_of(response, body, app), true);
@@ -721,7 +767,7 @@ static void handle_responses(App& app)
                 if (app.screen == Screen::Lobby && response.status == 404) {
                     online.lobby_code.clear();
                     app.screen = Screen::Online;
-                    set_message(app, "Le salon n'existe plus.", true);
+                    set_message(app, "The lobby no longer exists.", true);
                 } else if (app.screen == Screen::Lobby && !ok) {
                     online.next_game_poll = GetTime() + 2;  // nouvelle tentative
                 }
@@ -757,10 +803,10 @@ static void handle_responses(App& app)
                 online.in_game = false;
                 online.game_id = 0;
                 app.screen = Screen::Online;
-                set_message(app, "Cette partie n'existe plus.", true);
+                set_message(app, "This game no longer exists.", true);
             } else {
                 online.next_game_poll = GetTime() + 2;
-                set_message(app, error_of(response, body, app) + " Nouvelle tentative…", true);
+                set_message(app, error_of(response, body, app) + " " + tr(app.lang, "Retrying…"), true);
             }
             break;
         case TagMove:
@@ -844,7 +890,7 @@ static void press_online_button(App& app, const Button& button)
     case ButtonId::PseudoBox:
         online.focus = 1;
 #ifdef __EMSCRIPTEN__
-        web_prompt("Pseudo (3 à 16 caractères) :", online.pseudo_input);
+        web_prompt(tr(app.lang, "Username (3 to 16 characters):"), online.pseudo_input);
         online.focus = 0;
 #endif
         break;
@@ -854,7 +900,7 @@ static void press_online_button(App& app, const Button& button)
     case ButtonId::CodeBox:
         online.focus = 2;
 #ifdef __EMSCRIPTEN__
-        if (web_prompt("Code du salon (5 caractères) :", online.code_input)) {
+        if (web_prompt(tr(app.lang, "Lobby code (5 characters):"), online.code_input)) {
             std::string code;
             for (char c : online.code_input) {
                 if (std::isalnum(static_cast<unsigned char>(c)) && code.size() < 5) {
@@ -893,7 +939,7 @@ static void press_online_button(App& app, const Button& button)
         online = OnlineState();
         configure_network(app);
         app.screen = Screen::Home;
-        set_message(app, "Vous êtes déconnecté.", false);
+        set_message(app, "You are signed out.", false);
         break;
     case ButtonId::BackOnline:
         online.in_game = false;
@@ -906,13 +952,13 @@ static void press_online_button(App& app, const Button& button)
         break;
     case ButtonId::CopyCode:
         SetClipboardText(online.lobby_code.c_str());
-        set_message(app, "Code copié.", false);
+        set_message(app, "Code copied.", false);
         break;
     case ButtonId::Invite: {
-        std::string invitation = "Rejoins ma partie de Gemspire ! Code : " + online.lobby_code
-                                 + " (Jouer en ligne > Rejoindre). Télécharger le jeu : " + DOWNLOAD_URL;
+        std::string invitation = tr(app.lang, "Join my Gemspire game! Code: {0} (Play online > Join). Download the game: {1}",
+                                    {online.lobby_code, DOWNLOAD_URL});
         SetClipboardText(invitation.c_str());
-        set_message(app, "Invitation copiée : collez-la dans Discord.", false);
+        set_message(app, "Invite copied: paste it in Discord.", false);
         break;
     }
     case ButtonId::OfferCreate: {
@@ -949,7 +995,7 @@ static void save_current_game(App& app)
     web_save_files();
 #endif
     if (error.empty()) {
-        set_message(app, std::string("Partie sauvegardée (") + SAVE_FILE + ").", false);
+        set_message(app, tr(app.lang, "Game saved ({0}).", {SAVE_FILE}), false);
     } else {
         set_message(app, error, true);
     }
@@ -1005,7 +1051,7 @@ static void press_board_button(App& app, ButtonId id)
             app.net.send(TagMove, "POST", "/games/" + std::to_string(app.online.game_id) + "/forfeit");
         } else {
             app.online.forfeit_confirm = GetTime() + 4;
-            set_message(app, "Abandonner compte comme une défaite (Elo perdu). Cliquez à nouveau pour confirmer.", true);
+            set_message(app, "Forfeiting counts as a loss (Elo lost). Click again to confirm.", true);
         }
         break;
     default:
@@ -1020,11 +1066,11 @@ static void toggle_token(App& app, int gem)
 {
     const Game& game = *app.game;
     if (gem == GOLD_INDEX) {
-        set_message(app, "L'or ne se prend pas : on le reçoit en réservant une carte.", true);
+        set_message(app, "Gold can't be taken: you get it by reserving a card.", true);
         return;
     }
     if (game.bank()[gem] == 0) {
-        set_message(app, "Il n'y a plus de jetons " + color_name(color_at(gem)) + ".", true);
+        set_message(app, tr(app.lang, "No {0} tokens left.", {color_name(color_at(gem), app.lang)}), true);
         return;
     }
     app.target = Target::None;
@@ -1043,7 +1089,7 @@ static void toggle_token(App& app, int gem)
         if (other_double) {
             clear_selection(app);
         } else if (other_colors >= 3) {
-            set_message(app, "3 jetons de couleurs différentes au maximum.", true);
+            set_message(app, "At most 3 tokens of different colours.", true);
             return;
         }
         selection[gem] = 1;
@@ -1078,7 +1124,7 @@ static void click_action_step(App& app, Vector2 mouse)
         }
         if (point_in(mouse, deck_rect(level))) {
             if (game.mode() != Mode::Classic) {
-                set_message(app, "La pioche ne sert qu'à réserver (partie classique).", true);
+                set_message(app, "Decks are only for reserving (classic game).", true);
             } else if (game.deck_size(level) > 0) {
                 clear_selection(app);
                 app.target = Target::Deck;
@@ -1242,8 +1288,8 @@ static void update_presence(App& app)
     PresenceInfo info;
     info.start = app.screen_start;
     if (app.screen == Screen::Lobby) {
-        info.details = "Dans un salon (" + online.lobby_mode + ")";
-        info.state = "En attente de joueurs";
+        info.details = tr(app.lang, "In a lobby ({0})", {tr(app.lang, online.lobby_mode == "classique" ? "classic" : "quick")});
+        info.state = tr(app.lang, "Waiting for players");
         info.party_id = online.lobby_code;
         info.party_size = static_cast<int>(online.lobby_members.size());
         info.party_max = online.lobby_seats;
@@ -1252,17 +1298,17 @@ static void update_presence(App& app)
         }
     } else if (app.screen == Screen::Board && app.game) {
         const Game& game = *app.game;
-        std::string mode = game.mode() == Mode::Classic ? "classique" : "rapide";
-        info.details = (online.in_game ? "Partie en ligne (" : "Partie " + std::string("locale (")) + mode + ")";
+        std::string mode = tr(app.lang, game.mode() == Mode::Classic ? "classic" : "quick");
+        info.details = tr(app.lang, online.in_game ? "Online game ({0})" : "Local game ({0})", {mode});
         int seat = viewer_seat(app);
-        info.state = game.is_over() ? "Partie terminée"
-                                    : "Tour " + std::to_string(game.round()) + " · "
-                                          + std::to_string(game.players()[seat].score()) + " pts";
+        info.state = game.is_over() ? tr(app.lang, "Game over")
+                                    : tr(app.lang, "Round {0} · {1} pts",
+                                         {std::to_string(game.round()), std::to_string(game.players()[seat].score())});
     } else if (app.screen == Screen::Online || app.screen == Screen::Leaderboard) {
-        info.details = app.screen == Screen::Leaderboard ? "Consulte le classement" : "Cherche une partie en ligne";
+        info.details = tr(app.lang, app.screen == Screen::Leaderboard ? "Viewing the leaderboard" : "Looking for an online game");
         info.state = online.pseudo.empty() ? "" : online.pseudo + " · Elo " + std::to_string(online.elo);
     } else {
-        info.details = "Dans les menus";
+        info.details = tr(app.lang, "In the menus");
     }
     app.discord.update(info);
 }
@@ -1301,6 +1347,16 @@ static void update(App& app, Vector2 mouse)
         online.notification_poll_running = true;
         app.net.send(TagNotes, "GET", "/me/notifications?since=" + std::to_string(online.notification_last), "", true);
     }
+#ifdef __EMSCRIPTEN__
+    // Activité Discord : Discord a donné un code, le serveur l'échange contre une session
+    std::string activity = web_activity_take();
+    if (activity.compare(0, 5, "code:") == 0) {
+        app.net.send(TagActivity, "POST", "/auth/discord/activity",
+                     nlohmann::json({{"code", activity.substr(5)}}).dump());
+    } else if (activity.compare(0, 6, "error:") == 0) {
+        set_message(app, activity.substr(6), true);
+    }
+#endif
     // Connexion en cours : on demande au serveur si le navigateur a fini
     if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
         online.next_login_poll = GetTime() + 1.5;
@@ -1431,6 +1487,16 @@ int main()
     SetTargetFPS(60);
 
     App app;
+    // Langue : celle choisie avant (langue.txt), sinon celle du système / du navigateur
+    std::string saved_lang = read_first_line(LANGUAGE_FILE);
+#ifdef __EMSCRIPTEN__
+    app.lang = saved_lang.empty() ? lang_from_code(web_language()) : lang_from_code(saved_lang);
+#else
+    app.lang = saved_lang.empty() ? system_lang() : lang_from_code(saved_lang);
+#endif
+    for (int p = 0; p < 4; p++) {
+        app.setup.names[p] = tr(app.lang, "Player {0}", {std::to_string(p + 1)});
+    }
     configure_network(app);
     app.screen_start = static_cast<long long>(std::time(nullptr));
     app.net.send(TagConfig, "GET", "/config", "", true);

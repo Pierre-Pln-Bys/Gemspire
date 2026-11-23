@@ -153,12 +153,16 @@ static void reply_site(httplib::Response& response, const std::string& html, int
     response.set_content(html, "text/html; charset=utf-8");
 }
 
-static void reply_page(httplib::Response& response, const std::string& title, const std::string& text)
+// Petite page de fin de connexion, dans la langue du navigateur
+static void reply_page(const httplib::Request& request, httplib::Response& response, const std::string& title,
+                       const std::string& text)
 {
-    response.set_content("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>Gemspire</title>"
+    Lang lang = page_lang(request.get_param_value("lang"), request.get_header_value("Accept-Language"),
+                          Lang::English);
+    response.set_content("<!doctype html><html lang=\"" + lang_code(lang) + "\"><head><meta charset=\"utf-8\"><title>Gemspire</title>"
                          "<style>body{font-family:sans-serif;background:#0b2d1e;color:#eee;text-align:center;"
                          "padding-top:15vh}h1{color:#ffd140}</style></head><body><h1>"
-                         + title + "</h1><p>" + text + "</p></body></html>",
+                         + tr(lang, title) + "</h1><p>" + html_escape(tr(lang, text)) + "</p></body></html>",
                          "text/html; charset=utf-8");
 }
 
@@ -222,27 +226,30 @@ static std::string authorize_url(const ServerConfig& config, const std::string& 
 
 // Échange le code OAuth contre l'identifiant du joueur chez le fournisseur.
 // Retourne "" (et remplit user_id) ou l'erreur.
+// `activity` : code donné par l'Activité Discord (SDK intégré), échangé sans redirect_uri
 static std::string oauth_identity(const ServerConfig& config, const std::string& provider, const std::string& code,
-                                  std::string& user_id)
+                                  std::string& user_id, bool activity = false)
 {
     bool discord = provider == "discord";
     httplib::Params params = {
         {"grant_type", "authorization_code"},
         {"code", code},
-        {"redirect_uri", redirect_uri(config, provider)},
         {"client_id", discord ? config.discord_client_id : config.google_client_id},
         {"client_secret", discord ? config.discord_client_secret : config.google_client_secret},
     };
+    if (!activity) {
+        params.emplace("redirect_uri", redirect_uri(config, provider));
+    }
     httplib::SSLClient token_client(discord ? "discord.com" : "oauth2.googleapis.com");
     token_client.set_connection_timeout(10);
     token_client.set_read_timeout(10);
     auto token_response = token_client.Post(discord ? "/api/oauth2/token" : "/token", params);
     if (!token_response || token_response->status != 200) {
-        return "Le fournisseur a refusé la connexion.";
+        return "The provider refused the sign-in.";
     }
     json token = json::parse(token_response->body, nullptr, false);
     if (token.is_discarded() || !token.contains("access_token") || !token["access_token"].is_string()) {
-        return "Réponse inattendue du fournisseur.";
+        return "Unexpected reply from the provider.";
     }
     httplib::Headers headers = {{"Authorization", "Bearer " + token["access_token"].get<std::string>()}};
     httplib::SSLClient user_client(discord ? "discord.com" : "openidconnect.googleapis.com");
@@ -250,12 +257,12 @@ static std::string oauth_identity(const ServerConfig& config, const std::string&
     user_client.set_read_timeout(10);
     auto user_response = user_client.Get(discord ? "/api/users/@me" : "/v1/userinfo", headers);
     if (!user_response || user_response->status != 200) {
-        return "Impossible de lire le compte chez le fournisseur.";
+        return "Couldn't read the account from the provider.";
     }
     json user = json::parse(user_response->body, nullptr, false);
     const char* key = discord ? "id" : "sub";
     if (user.is_discarded() || !user.contains(key) || !user[key].is_string()) {
-        return "Réponse inattendue du fournisseur.";
+        return "Unexpected reply from the provider.";
     }
     user_id = user[key].get<std::string>();
     return "";
@@ -284,9 +291,9 @@ void ServerApp::announce_lobby(const Lobby& lobby)
         return;
     }
     std::string path = config_.discord_webhook.substr(std::string("https://discord.com").size());
-    std::string text = "**" + lobby.members[0].pseudo + "** ouvre une partie "
-                       + (lobby.mode == Mode::Classic ? "classique" : "rapide") + " (1/" + std::to_string(lobby.seats)
-                       + ") — code **" + lobby.code + "** à taper dans Gemspire (Jouer en ligne > Rejoindre).";
+    std::string text = "**" + lobby.members[0].pseudo + "** opens a "
+                       + (lobby.mode == Mode::Classic ? "classic" : "quick") + " game (1/" + std::to_string(lobby.seats)
+                       + ") — code **" + lobby.code + "**, to type in Gemspire (Play online > Join).";
     std::string body = json({{"content", text}, {"allowed_mentions", {{"parse", json::array()}}}}).dump();
     std::thread([path, body]() {
         httplib::SSLClient client("discord.com");
@@ -344,11 +351,11 @@ bool ServerApp::seat_for(int account, Seat& seat, std::string& error)
 {
     Account data;
     if (!store_.get_account(account, data)) {
-        error = "Compte introuvable.";
+        error = "Account not found.";
         return false;
     }
     if (data.pseudo.empty()) {
-        error = "Choisissez d'abord un pseudo.";
+        error = "Choose a username first.";
         return false;
     }
     seat = {data.id, data.pseudo, data.elo};
@@ -364,8 +371,8 @@ void ServerApp::finish_login(const std::string& login, const std::string& provid
         int account = store_.find_or_create_account(provider, provider_id);
         Account data;
         if (account != 0 && store_.get_account(account, data) && data.banned()) {
-            refused = "Compte suspendu" + (data.ban_reason.empty() ? std::string() : " (" + data.ban_reason + ")")
-                      + (data.banned_until == BAN_FOREVER ? " définitivement." : " jusqu'au " + date_text(data.banned_until) + ".");
+            refused = "Account suspended" + (data.ban_reason.empty() ? std::string() : " (" + data.ban_reason + ")")
+                      + (data.banned_until == BAN_FOREVER ? " permanently." : " until " + date_text(data.banned_until) + ".");
         } else {
             token = account == 0 ? "" : store_.create_session(account);
         }
@@ -377,7 +384,7 @@ void ServerApp::finish_login(const std::string& login, const std::string& provid
         pending.token = token;
     } else {
         pending.status = "error";
-        pending.error = refused.empty() ? "Erreur du serveur." : refused;
+        pending.error = refused.empty() ? "Server error." : refused;
     }
 }
 
@@ -406,8 +413,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         if (version_allowed(version, config_.min_version)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
-        reply(response, 426, {{"error", "Cette version de Gemspire est trop ancienne : téléchargez la version "
-                                        + config_.min_version + " ou plus récente."},
+        reply(response, 426, {{"error", "This version of Gemspire is too old: download version "
+                                        + config_.min_version + " or newer."},
                               {"min_version", config_.min_version},
                               {"download", "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"}});
         return httplib::Server::HandlerResponse::Handled;
@@ -424,7 +431,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string login = request.get_param_value("login");
         bool configured = provider == "discord" ? !config_.discord_client_id.empty() : !config_.google_client_id.empty();
         if (!valid_login_id(login) || !configured) {
-            reply_page(response, "Connexion impossible", "Ce mode de connexion n'est pas disponible.");
+            reply_page(request, response, "Sign-in failed", "This sign-in method isn't available.");
             return;
         }
         {
@@ -449,7 +456,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             std::lock_guard<std::mutex> lock(logins_mutex_);
             auto found = logins_.find(login);
             if (found == logins_.end() || found->second.provider != provider || found->second.status != "pending") {
-                reply_page(response, "Connexion expirée", "Recommencez depuis le jeu.");
+                reply_page(request, response, "Sign-in expired", "Start again from the game.");
                 return;
             }
         }
@@ -461,7 +468,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string user_id;
         std::string error = request.has_param("code")
                                 ? oauth_identity(config_, provider, request.get_param_value("code"), user_id)
-                                : "Connexion annulée.";
+                                : "Sign-in cancelled.";
         finish_login(login, provider, user_id, error);
         // Jeu dans le navigateur : retour au jeu, qui termine la connexion (/auth/poll)
         if (back_to_play) {
@@ -469,9 +476,9 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         if (error.empty()) {
-            reply_page(response, "Connexion réussie", "Vous pouvez fermer cette page et revenir dans Gemspire.");
+            reply_page(request, response, "Signed in", "You can close this page and go back to Gemspire.");
         } else {
-            reply_page(response, "Connexion impossible", error);
+            reply_page(request, response, "Sign-in failed", error);
         }
     });
 
@@ -480,7 +487,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string login = request.get_param_value("login");
         std::string name = request.get_param_value("name");
         if (!config_.dev_login || !valid_login_id(login) || name.empty() || name.size() > 32) {
-            reply_page(response, "Connexion impossible", "La connexion de test est désactivée.");
+            reply_page(request, response, "Sign-in failed", "Test sign-in is disabled.");
             return;
         }
         // as=discord : simule un compte Discord (tests du bot), toujours en mode test
@@ -491,7 +498,35 @@ void ServerApp::setup_routes(httplib::Server& server)
             logins_[login].created = std::time(nullptr);
         }
         finish_login(login, provider, name, "");
-        reply_page(response, "Connexion de test réussie", "Vous pouvez revenir dans Gemspire.");
+        reply_page(request, response, "Test sign-in successful", "You can go back to Gemspire.");
+    });
+
+    // Activité Discord : le jeu (dans un salon vocal) reçoit un code du SDK de
+    // Discord et l'échange ici contre une session, sans passer par le navigateur
+    server.Post("/auth/discord/activity", [this](const httplib::Request& request, httplib::Response& response) {
+        json body = json::parse(request.body, nullptr, false);
+        if (config_.discord_client_id.empty() || body.is_discarded() || !body.is_object() || !body.contains("code")
+            || !body["code"].is_string() || body["code"].get<std::string>().empty()
+            || body["code"].get<std::string>().size() > 200) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        std::string code = body["code"].get<std::string>();
+        std::string user_id;
+        std::string error = oauth_identity(config_, "discord", code, user_id, true);
+        std::string login = "activity:" + code;  // clé interne, oubliée juste après
+        finish_login(login, "discord", user_id, error);
+        PendingLogin result;
+        {
+            std::lock_guard<std::mutex> lock(logins_mutex_);
+            result = logins_[login];
+            logins_.erase(login);
+        }
+        if (result.status != "done") {
+            reply_error(response, 401, result.error.empty() ? "Sign-in failed." : result.error);
+            return;
+        }
+        reply(response, 200, {{"token", result.token}});
     });
 
     server.Get("/auth/poll", [this](const httplib::Request& request, httplib::Response& response) {
@@ -527,7 +562,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         Account account;
         int id = authenticate(request);
         if (id == 0 || !store_.get_account(id, account)) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         reply(response, 200, {{"id", account.id}, {"pseudo", account.pseudo}, {"provider", account.provider},
@@ -538,7 +573,7 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Get("/me/notifications", [this](const httplib::Request& request, httplib::Response& response) {
         int id = authenticate(request);
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         json body;
@@ -556,11 +591,11 @@ void ServerApp::setup_routes(httplib::Server& server)
         int id = authenticate(request);
         json body;
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         if (!parse_body(request, body) || !body.contains("pseudo") || !body["pseudo"].is_string()) {
-            reply_error(response, 400, "Pseudo manquant.");
+            reply_error(response, 400, "Username missing.");
             return;
         }
         std::string error = store_.set_pseudo(id, body["pseudo"].get<std::string>());
@@ -578,7 +613,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         json body;
         int id = authenticate(request);
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         if (!seat_for(id, seat, error)) {
@@ -586,7 +621,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             return;
         }
         if (!parse_body(request, body)) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         Mode mode = body.value("mode", std::string("classique")) == "rapide" ? Mode::Quick : Mode::Classic;
@@ -596,7 +631,7 @@ void ServerApp::setup_routes(httplib::Server& server)
                                 ? body["voice_channel"].get<std::string>()
                                 : "";
         if (voice.size() > 25 || voice.find_first_not_of("0123456789") != std::string::npos) {
-            reply_error(response, 400, "Salon vocal invalide.");
+            reply_error(response, 400, "Invalid voice channel.");
             return;
         }
         std::string code;
@@ -614,7 +649,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         std::string error;
         int id = authenticate(request);
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         if (!seat_for(id, seat, error)) {
@@ -640,12 +675,12 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     server.Get(R"(/lobbies/([A-Z0-9]{5}))", [this](const httplib::Request& request, httplib::Response& response) {
         if (authenticate(request) == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         json body;
         if (!rooms_.lobby_json(request.matches[1], since_parameter(request), body)) {
-            reply_error(response, 404, "Aucun salon avec ce code.");
+            reply_error(response, 404, "No lobby with this code.");
             return;
         }
         reply(response, 200, body);
@@ -655,12 +690,12 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Get(R"(/games/(\d{1,9}))", [this](const httplib::Request& request, httplib::Response& response) {
         int id = authenticate(request);
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         json body;
         if (!rooms_.game_json(std::atoi(request.matches[1].str().c_str()), id, since_parameter(request), body)) {
-            reply_error(response, 404, "Partie introuvable.");
+            reply_error(response, 404, "Game not found.");
             return;
         }
         reply(response, 200, body);
@@ -671,11 +706,11 @@ void ServerApp::setup_routes(httplib::Server& server)
         json body;
         Move move;
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         if (!parse_body(request, body)) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         std::string error = move_from_json(body, move);
@@ -692,7 +727,7 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Post(R"(/games/(\d{1,9})/forfeit)", [this](const httplib::Request& request, httplib::Response& response) {
         int id = authenticate(request);
         if (id == 0) {
-            reply_error(response, 401, "Non connecté.");
+            reply_error(response, 401, "Not signed in.");
             return;
         }
         std::string error = rooms_.forfeit(std::atoi(request.matches[1].str().c_str()), id);
@@ -706,7 +741,7 @@ void ServerApp::setup_routes(httplib::Server& server)
     // --- API du bot Discord (en-tête X-Bot-Key)
     server.Get("/bot/presence", [this](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         int account = store_.find_account("discord", request.get_param_value("discord_id"));
@@ -731,7 +766,7 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     server.Get("/bot/profile", [this, target](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         int id = target(request.get_param_value("pseudo"), request.get_param_value("discord_id"));
@@ -740,7 +775,7 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     server.Get("/bot/history", [this, target](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         int id = target(request.get_param_value("pseudo"), request.get_param_value("discord_id"));
@@ -766,18 +801,18 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Post("/bot/ban", [this, target, json_text](const httplib::Request& request, httplib::Response& response) {
         json body;
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         if (!parse_body(request, body) || !body.contains("days") || !body["days"].is_number_integer()) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         int days = body["days"].get<int>();
         std::string reason = json_text(body, "reason").substr(0, 200);
         if (id == 0 || days < 0 || days > 3650) {
-            reply_error(response, 400, id == 0 ? "Joueur introuvable." : "Durée invalide (0 = définitif).");
+            reply_error(response, 400, id == 0 ? "Player not found." : "Invalid duration (0 = permanent).");
             return;
         }
         long long until = days == 0 ? BAN_FOREVER : static_cast<long long>(std::time(nullptr)) + days * 86400LL;
@@ -792,11 +827,11 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Post("/bot/unban", [this, target, json_text](const httplib::Request& request, httplib::Response& response) {
         json body;
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         if (!parse_body(request, body)) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
@@ -812,11 +847,11 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Post("/bot/cancel-game", [this](const httplib::Request& request, httplib::Response& response) {
         json body;
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         if (!parse_body(request, body) || !body.contains("game_id") || !body["game_id"].is_number_integer()) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         std::string error = store_.cancel_game(body["game_id"].get<int>());
@@ -832,11 +867,11 @@ void ServerApp::setup_routes(httplib::Server& server)
                                                                  httplib::Response& response) {
         json body;
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         if (!parse_body(request, body)) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
@@ -853,12 +888,12 @@ void ServerApp::setup_routes(httplib::Server& server)
     server.Post("/bot/offer", [this](const httplib::Request& request, httplib::Response& response) {
         json body;
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         if (!parse_body(request, body) || !body.contains("discord_id") || !body["discord_id"].is_string()
             || !body.contains("voice_channel") || !body["voice_channel"].is_string()) {
-            reply_error(response, 400, "Requête mal formée.");
+            reply_error(response, 400, "Malformed request.");
             return;
         }
         int account = store_.find_account("discord", body["discord_id"].get<std::string>());
@@ -874,7 +909,7 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     server.Get("/bot/events", [this](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
-            reply_error(response, 403, "Clé du bot invalide.");
+            reply_error(response, 403, "Invalid bot key.");
             return;
         }
         json body;

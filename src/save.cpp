@@ -158,14 +158,14 @@ struct Reader {
 
     void fail(const std::string& message)
     {
-        throw std::runtime_error("Sauvegarde invalide : " + message);
+        throw std::runtime_error("Invalid save: " + message);
     }
 
     void expect(const std::string& word)
     {
         std::string read;
         if (!(in >> read) || read != word) {
-            fail("« " + word + " » attendu");
+            fail("\"" + word + "\" expected");
         }
     }
 
@@ -173,7 +173,7 @@ struct Reader {
     {
         int value = 0;
         if (!(in >> value) || value < min || value > max) {
-            fail("nombre attendu entre " + std::to_string(min) + " et " + std::to_string(max));
+            fail("number expected between " + std::to_string(min) + " and " + std::to_string(max));
         }
         return value;
     }
@@ -182,7 +182,7 @@ struct Reader {
     {
         std::string read;
         if (!(in >> read)) {
-            fail("fin de fichier inattendue");
+            fail("unexpected end of file");
         }
         return read;
     }
@@ -196,7 +196,7 @@ struct Reader {
             line.erase(0, 1);
         }
         if (line.empty()) {
-            fail("nom vide");
+            fail("empty name");
         }
         return line;
     }
@@ -256,7 +256,7 @@ struct Reader {
                 return i;
             }
         }
-        fail("valeur inconnue « " + read + " »");
+        fail("unknown value \"" + read + "\"");
         return 0;
     }
 };
@@ -270,7 +270,7 @@ std::string load_game(const std::string& text, std::unique_ptr<Game>& game)
         reader.expect("mode");
         std::string mode_name = reader.word();
         if (mode_name != "classique" && mode_name != "rapide") {
-            reader.fail("mode inconnu");
+            reader.fail("unknown mode");
         }
         Mode mode = mode_name == "classique" ? Mode::Classic : Mode::Quick;
 
@@ -292,7 +292,7 @@ std::string load_game(const std::string& text, std::unique_ptr<Game>& game)
         reader.expect("players");
         int count = reader.number(2, 4);
         if (current >= count) {
-            reader.fail("joueur courant inexistant");
+            reader.fail("current player doesn't exist");
         }
         std::vector<Player> players;
         std::vector<std::string> names;
@@ -347,7 +347,7 @@ std::string load_game(const std::string& text, std::unique_ptr<Game>& game)
             next = reader.word();
         }
         if (next != "end") {
-            reader.fail("« end » attendu");
+            reader.fail("\"end\" expected");
         }
 
         loaded->players_ = players;
@@ -371,17 +371,17 @@ std::string save_game_to_file(const Game& game, const std::string& path)
 {
     std::ofstream file(path);
     if (!file) {
-        return "Impossible d'écrire le fichier " + path + ".";
+        return "Can't write the file " + path + ".";
     }
     file << save_game(game);
-    return file ? "" : "Erreur pendant l'écriture de " + path + ".";
+    return file ? "" : "Error while writing " + path + ".";
 }
 
 std::string load_game_from_file(const std::string& path, std::unique_ptr<Game>& game)
 {
     std::ifstream file(path);
     if (!file) {
-        return "Impossible d'ouvrir le fichier " + path + ".";
+        return "Can't open the file " + path + ".";
     }
     std::ostringstream text;
     text << file.rdbuf();

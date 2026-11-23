@@ -40,6 +40,63 @@
     print: function (text) { console.log(text); },
     printErr: function (text) { console.warn(text); }
   };
+
+  // Activité Discord : le jeu est ouvert dans un salon vocal (Discord ajoute
+  // frame_id et instance_id à l'adresse). On parle à Discord par postMessage
+  // (le même protocole que le SDK officiel, sans le télécharger) pour obtenir
+  // un code de connexion ; le jeu l'échange ensuite auprès du serveur.
+  var gemspireActivity = (function () {
+    var params = new URLSearchParams(window.location.search);
+    var frameId = params.get("frame_id");
+    var inActivity = !!frameId && !!params.get("instance_id");
+    var state = { code: "", error: "" };
+    var parentOrigin = document.referrer ? new URL(document.referrer).origin : "*";
+    var clientId = "";
+    var authorizeNonce = "";
+
+    function send(opcode, payload) {
+      window.parent.postMessage([opcode, payload], parentOrigin);
+    }
+
+    function onMessage(event) {
+      if (!Array.isArray(event.data) || event.data[0] !== 1) {
+        return;  // seulement les messages FRAME (opcode 1)
+      }
+      var frame = event.data[1] || {};
+      if (frame.cmd === "DISPATCH" && frame.evt === "READY") {
+        authorizeNonce = String(Date.now()) + Math.random().toString(16).slice(2);
+        send(1, { cmd: "AUTHORIZE", nonce: authorizeNonce,
+                  args: { client_id: clientId, response_type: "code", state: "", prompt: "none",
+                          scope: ["identify"] } });
+      } else if (frame.nonce === authorizeNonce) {
+        if (frame.evt === "ERROR" || !frame.data || !frame.data.code) {
+          state.error = (frame.data && frame.data.message) || "Discord refused the sign-in.";
+        } else {
+          state.code = frame.data.code;
+        }
+      }
+    }
+
+    return {
+      active: inActivity,
+      // Poignée de main avec Discord, puis AUTHORIZE dès que Discord est prêt
+      start: function (id) {
+        if (!inActivity || clientId) {
+          return;
+        }
+        clientId = id;
+        window.addEventListener("message", onMessage);
+        send(0, { v: 1, encoding: "json", client_id: clientId, frame_id: frameId });
+      },
+      // "code:..." ou "error:..." une seule fois, "" en attendant
+      take: function () {
+        var result = state.code ? "code:" + state.code : state.error ? "error:" + state.error : "";
+        state.code = "";
+        state.error = "";
+        return result;
+      }
+    };
+  })();
 </script>
 {{{ SCRIPT }}}
 </body>

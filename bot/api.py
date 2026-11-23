@@ -10,7 +10,7 @@ import urllib.request
 
 
 class ApiError(RuntimeError):
-    """Refus du serveur, avec son message (« Joueur introuvable. »...)."""
+    """Refus du serveur, avec son message (« Player not found. »...)."""
 
 
 class SplendorApi:

@@ -7,8 +7,9 @@ v3.2 (Discord : présence, invitations, bot vocal ; serveur en ligne sur le
 Raspberry Pi, `https://gemspire.epsilon-forge.fr`).
 v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
-v3.5 (jeu dans le navigateur, site et bot bilingues).
-**Prochaines étapes** : v3.7 (Activité Discord, jeu en anglais), v3.8
+v3.5 (jeu dans le navigateur, site et bot bilingues), v3.6 (Gemspire),
+v3.7 (jeu en anglais et en français, Activité Discord).
+**Prochaines étapes** : v3.8
 (communauté), v3.9 (compétition), puis la **v4 : publication et test
 d'intrusion**, qui couvrira tout cela.
 
@@ -156,9 +157,10 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 
 ## v3.7 — Activité Discord et jeu en anglais
 
-- [ ] Interface du jeu en anglais, avec choix de la langue (anglais par
-  défaut, français).
-- [ ] Gemspire comme **Activité Discord** : on lance une partie directement
+- [x] Interface du jeu en anglais, avec choix de la langue (anglais par
+  défaut, français) : fenêtre, navigateur, console, messages du serveur.
+- [x] Gemspire comme **Activité Discord** (connexion et réseau ; la partie
+  liée au salon vocal viendra avec la v3.8) : on lance une partie directement
   dans un salon vocal, sans rien installer (la version navigateur intégrée à
   Discord avec l'Embedded App SDK : connexion par Discord, réseau par le
   proxy de Discord, partie liée au salon vocal).

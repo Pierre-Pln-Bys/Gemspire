@@ -314,10 +314,10 @@ Move ai_choose(const Game& game, bool medium)
 std::string ai_play(Game& game)
 {
     if (!ai_to_play(game)) {
-        return "Ce n'est pas à l'ordinateur de jouer.";
+        return "It's not the computer's turn.";
     }
     if (game.is_over()) {
-        return "La partie est terminée.";
+        return "The game is over.";
     }
     bool medium = game.current_player().controller == Controller::AiMedium;
     return apply_move(game, ai_choose(game, medium));

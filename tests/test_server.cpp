@@ -102,6 +102,9 @@ int main()
     get(client, "/me", "faux-jeton", 401);
     assert(get(client, "/me", alice)["pseudo"] == "");
     post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}}, 403);  // pas encore de pseudo
+    // Activité Discord : requête mal formée refusée (pas d'application Discord configurée dans le test)
+    post(client, "/auth/discord/activity", "", json::object(), 400);
+    post(client, "/auth/discord/activity", "", {{"code", "abc"}}, 400);
     post(client, "/me/pseudo", alice, {{"pseudo", "a"}}, 400);                 // trop court
     post(client, "/me/pseudo", alice, {{"pseudo", "Alice<script>"}}, 400);     // caractères interdits
     post(client, "/me/pseudo", alice, {{"pseudo", "Alice"}});
@@ -182,7 +185,8 @@ int main()
         };
         expire();  // Alice (1 tour manqué)
         view = get(client, timed_path, alice);
-        assert(view["missed"][0] == 1 && view["log"].back().get<std::string>().find("à temps") != std::string::npos);
+        assert(view["missed"][0] == 1 && view["log"].back().get<std::string>().find("in time") != std::string::npos
+           && view["log_fr"].back().get<std::string>().find("à temps") != std::string::npos);
         post(client, timed_path + "/move", bob, {{"type", "take"}, {"tokens", {1, 1, 1, 0, 0}}});
         expire();  // Alice (2)
         expire();  // Bob (1)
@@ -304,7 +308,7 @@ int main()
         assert(page && page->status == 200);
         json refused_login = get(client, "/auth/poll?login=bbbbbbbbbbbbbbbbbbbbbbb2", "");
         assert(refused_login["status"] == "error");
-        assert(refused_login["error"].get<std::string>().find("suspendu") != std::string::npos);
+        assert(refused_login["error"].get<std::string>().find("suspended") != std::string::npos);
         for (const json& player : get(client, "/leaderboard", "")["players"]) {
             assert(player["pseudo"] != "Bébert");
         }

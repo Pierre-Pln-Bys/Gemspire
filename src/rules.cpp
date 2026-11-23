@@ -77,10 +77,10 @@ std::string check_pick(const Resources& wanted, const Resources& bank)
     int different_colors = 0; // nombre de couleurs demandées
     for (int c = 0; c < COLOR_COUNT; c++) {
         if (wanted[c] < 0 || wanted[c] > 2) {
-            return "Quantité de jetons invalide.";
+            return "Invalid token amount.";
         }
         if (wanted[c] > bank[c]) {
-            return "Il n'y a pas assez de jetons de cette couleur dans la réserve.";
+            return "There aren't enough tokens of this colour in the bank.";
         }
         if (wanted[c] == 2) {
             double_color = c;
@@ -91,16 +91,16 @@ std::string check_pick(const Resources& wanted, const Resources& bank)
     }
 
     if (different_colors == 0) {
-        return "Aucun jeton demandé.";
+        return "No token requested.";
     }
 
     // Cas b) : 2 jetons de la même couleur, et rien d'autre
     if (double_color != -1) {
         if (different_colors > 1) {
-            return "On ne peut pas prendre 2 jetons identiques et d'autres jetons en plus.";
+            return "You can't take 2 identical tokens and other tokens as well.";
         }
         if (bank[double_color] < MIN_STACK_FOR_DOUBLE) {
-            return "Il faut au moins 4 jetons dans la pile pour en prendre 2 identiques.";
+            return "There must be at least 4 tokens in the stack to take 2 identical ones.";
         }
         return "";
     }
@@ -114,8 +114,8 @@ std::string check_pick(const Resources& wanted, const Resources& bank)
     }
     int expected = available_colors < 3 ? available_colors : 3;
     if (different_colors != expected) {
-        return "Il faut prendre " + std::to_string(expected)
-               + " jeton(s) de couleurs différentes.";
+        return expected == 1 ? "You must take 1 token."
+                             : "You must take " + std::to_string(expected) + " tokens of different colours.";
     }
     return "";
 }

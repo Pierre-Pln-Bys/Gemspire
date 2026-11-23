@@ -68,6 +68,29 @@ d'e-mail).
 
 Les jetons de session ne sont stockés qu'en empreinte SHA-256 dans la base.
 
+## Activité Discord
+
+Le jeu navigateur (`/play/`) peut s'ouvrir comme **Activité Discord** dans un
+salon vocal. Discord charge la page par son proxy (`https://<id>.discordsays.com`) ;
+le jeu y reconnaît les paramètres `frame_id` / `instance_id`, demande un code
+à Discord (`AUTHORIZE`, portée `identify`, par `postMessage` dans
+`web/shell.html`) et l'échange contre une session avec
+`POST /auth/discord/activity {"code": ...}` (sans `redirect_uri`, même compte
+que la connexion Discord habituelle). Les requêtes du jeu passent alors par
+`/api`.
+
+Réglages dans le portail Discord (application Gemspire) :
+
+1. **Activities > Settings** : activer les Activités (« Enable Activities »).
+2. **Activities > URL Mappings** (le plus long préfixe d'abord) :
+   - `/api` → `gemspire.epsilon-forge.fr`
+   - `/` → `gemspire.epsilon-forge.fr/play`
+3. **OAuth2 > Redirects** : l'adresse habituelle
+   (`https://gemspire.epsilon-forge.fr/auth/discord/callback`) suffit.
+4. Tester : dans un salon vocal, bouton « Activités » (fusée) > Gemspire.
+   Pendant le développement, seuls les membres de l'équipe de l'application
+   la voient.
+
 ## API (JSON)
 
 Authentification : en-tête `Authorization: Bearer <jeton>`.

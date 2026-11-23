@@ -26,8 +26,33 @@ EM_JS(void, sync_files, (), {
 });
 
 // Chaîne JavaScript -> chaîne allouée (à libérer)
+// Dans une Activité Discord, le serveur du jeu est derrière le proxy de Discord, sur /api
 EM_JS(char*, page_origin, (), {
-    var text = window.location.origin;
+    var text = window.location.origin + (window.gemspireActivity && gemspireActivity.active ? "/api" : "");
+    var size = lengthBytesUTF8(text) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(text, copy, size);
+    return copy;
+});
+
+EM_JS(char*, browser_language, (), {
+    var text = navigator.language || "en";
+    var size = lengthBytesUTF8(text) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(text, copy, size);
+    return copy;
+});
+
+EM_JS(int, activity_active, (), { return window.gemspireActivity && gemspireActivity.active ? 1 : 0; });
+
+EM_JS(void, activity_start, (const char* client_id), {
+    if (window.gemspireActivity) {
+        gemspireActivity.start(UTF8ToString(client_id));
+    }
+});
+
+EM_JS(char*, activity_take, (), {
+    var text = window.gemspireActivity ? gemspireActivity.take() : "";
     var size = lengthBytesUTF8(text) + 1;
     var copy = _malloc(size);
     stringToUTF8(text, copy, size);
@@ -63,6 +88,26 @@ std::string web_origin()
 void web_go_to(const std::string& url)
 {
     go_to(url.c_str());
+}
+
+bool web_in_activity()
+{
+    return activity_active() != 0;
+}
+
+void web_activity_start(const std::string& client_id)
+{
+    activity_start(client_id.c_str());
+}
+
+std::string web_activity_take()
+{
+    return take_string(activity_take());
+}
+
+std::string web_language()
+{
+    return take_string(browser_language());
 }
 
 std::string web_login_from_address()

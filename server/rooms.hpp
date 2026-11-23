@@ -43,7 +43,8 @@ struct OnlineGame {
     int id = 0;
     std::unique_ptr<Game> game;
     std::vector<Seat> seats;
-    std::vector<std::string> log;      // historique en phrases
+    std::vector<std::string> log;      // historique en phrases (anglais)
+    std::vector<std::string> log_fr;   // le même en français
     long version = 1;
     std::vector<int> elo_changes;      // rempli à la fin de la partie
     bool recorded = false;

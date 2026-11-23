@@ -175,7 +175,7 @@ bool Game::can_play() const
 // ---------------------------------------------------------------- Actions
 
 // Message d'erreur commun quand une action arrive à la mauvaise étape
-static const char* const WRONG_STEP = "Ce n'est pas le moment de faire cette action.";
+static const char* const WRONG_STEP = "It's not the time for this action.";
 
 std::string Game::take_tokens(const Resources& wanted)
 {
@@ -234,10 +234,10 @@ std::string Game::buy_card(int level, int position)
         return WRONG_STEP;
     }
     if (!valid_position(level, position)) {
-        return "Cette carte n'existe pas.";
+        return "This card doesn't exist.";
     }
     if (!can_buy(level, position)) {
-        return "Pas assez de ressources pour acheter cette carte.";
+        return "Not enough resources to buy this card.";
     }
     Card card = visible_[level - 1][position - 1];
     pay_for(card);
@@ -257,10 +257,10 @@ std::string Game::buy_reserved(int index)
     }
     std::vector<Card>& reserved = current().reserved;
     if (index < 1 || index > static_cast<int>(reserved.size())) {
-        return "Vous n'avez pas de carte réservée à cette position.";
+        return "You have no reserved card at this position.";
     }
     if (!can_buy_reserved(index)) {
-        return "Pas assez de ressources pour acheter cette carte.";
+        return "Not enough resources to buy this card.";
     }
     Card card = reserved[index - 1];
     pay_for(card);
@@ -279,26 +279,26 @@ std::string Game::reserve_card(int level, int position)
         return WRONG_STEP;
     }
     if (mode_ != Mode::Classic) {
-        return "La réservation n'existe pas en partie rapide.";
+        return "Reservations don't exist in a quick game.";
     }
     if (static_cast<int>(current_player().reserved.size()) >= MAX_RESERVED) {
-        return "Vous avez déjà 3 cartes réservées.";
+        return "You already have 3 reserved cards.";
     }
     if (level < 1 || level > LEVEL_COUNT) {
-        return "Ce niveau n'existe pas.";
+        return "This level doesn't exist.";
     }
 
     Card card = {0, Gem::White, {0, 0, 0, 0, 0}};
     if (position == 0) {
         std::vector<Card>& deck = decks_[level - 1];
         if (deck.empty()) {
-            return "La pioche de ce niveau est vide.";
+            return "This level's deck is empty.";
         }
         card = deck.back();
         deck.pop_back();
     } else {
         if (!valid_position(level, position)) {
-            return "Cette carte n'existe pas.";
+            return "This card doesn't exist.";
         }
         card = take_visible(level, position);
     }
@@ -338,7 +338,7 @@ std::string Game::discard(Gem color)
     }
     int c = index_of(color);
     if (current().tokens[c] == 0) {
-        return "Vous n'avez pas de jeton de cette couleur.";
+        return "You have no token of this colour.";
     }
     current().tokens[c]--;
     bank_[c]++;
@@ -357,7 +357,7 @@ std::string Game::discard_gold()
         return WRONG_STEP;
     }
     if (current().gold == 0) {
-        return "Vous n'avez pas de jeton or.";
+        return "You have no gold token.";
     }
     current().gold--;
     bank_gold_++;
@@ -404,7 +404,7 @@ std::string Game::choose_noble(int noble_index)
             return "";
         }
     }
-    return "Ce noble ne peut pas vous rendre visite.";
+    return "This noble can't visit you.";
 }
 
 // ---------------------------------------------------------------- Enchaînement du tour
@@ -476,7 +476,7 @@ void Game::next_player()
 std::string Game::skip_turn()
 {
     if (step_ != TurnStep::Action) {
-        return "On ne peut passer le tour qu'à l'étape Action.";
+        return "You can only pass during the Action step.";
     }
     // Pas compté comme un « passe » : le joueur pouvait jouer, la partie
     // n'est pas bloquée (les abandons finissent par la terminer)
@@ -488,13 +488,13 @@ std::string Game::skip_turn()
 std::string Game::forfeit(int player)
 {
     if (player < 0 || player >= static_cast<int>(players_.size())) {
-        return "Joueur inconnu.";
+        return "Unknown player.";
     }
     if (step_ == TurnStep::Over || players_[player].forfeited) {
         return "";
     }
     if (player == current_ && step_ != TurnStep::Action) {
-        return "Abandon impossible au milieu d'un tour (défausse ou choix du noble).";
+        return "You can't forfeit in the middle of a turn (discard or noble choice).";
     }
     players_[player].forfeited = true;
     events_.push_back(Event(EventType::Forfeit, player));

@@ -51,7 +51,7 @@ static bool read_int(const nlohmann::json& json, const char* key, int min, int m
 std::string move_from_json(const nlohmann::json& json, Move& move)
 {
     if (!json.is_object() || !json.contains("type") || !json["type"].is_string()) {
-        return "Coup mal formé.";
+        return "Malformed move.";
     }
     std::string type = json["type"].get<std::string>();
     move = Move();
@@ -59,11 +59,11 @@ std::string move_from_json(const nlohmann::json& json, Move& move)
         move.type = MoveType::TakeTokens;
         const nlohmann::json& tokens = json.contains("tokens") ? json["tokens"] : nlohmann::json();
         if (!tokens.is_array() || tokens.size() != COLOR_COUNT) {
-            return "Jetons mal formés.";
+            return "Malformed tokens.";
         }
         for (int c = 0; c < COLOR_COUNT; c++) {
             if (!tokens[c].is_number_integer() || tokens[c].get<long long>() < 0 || tokens[c].get<long long>() > 3) {
-                return "Jetons mal formés.";
+                return "Malformed tokens.";
             }
             move.tokens[c] = tokens[c].get<int>();
         }
@@ -72,21 +72,21 @@ std::string move_from_json(const nlohmann::json& json, Move& move)
     if (type == "buy" || type == "reserve") {
         move.type = type == "buy" ? MoveType::BuyCard : MoveType::Reserve;
         if (!read_int(json, "level", 1, LEVEL_COUNT, move.level) || !read_int(json, "position", 0, VISIBLE_PER_LEVEL, move.position)) {
-            return "Carte mal désignée.";
+            return "Badly specified card.";
         }
         return "";
     }
     if (type == "buy_reserved") {
         move.type = MoveType::BuyReserved;
-        return read_int(json, "index", 1, MAX_RESERVED, move.position) ? "" : "Carte réservée mal désignée.";
+        return read_int(json, "index", 1, MAX_RESERVED, move.position) ? "" : "Badly specified reserved card.";
     }
     if (type == "discard") {
         move.type = MoveType::Discard;
-        return read_int(json, "gem", 0, GOLD_GEM, move.gem) ? "" : "Jeton mal désigné.";
+        return read_int(json, "gem", 0, GOLD_GEM, move.gem) ? "" : "Badly specified token.";
     }
     if (type == "noble") {
         move.type = MoveType::ChooseNoble;
-        return read_int(json, "noble", 0, 9, move.noble) ? "" : "Noble mal désigné.";
+        return read_int(json, "noble", 0, 9, move.noble) ? "" : "Badly specified noble.";
     }
-    return "Type de coup inconnu.";
+    return "Unknown move type.";
 }

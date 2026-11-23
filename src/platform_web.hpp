@@ -23,6 +23,17 @@ std::string web_origin();
 // Quitte le jeu pour cette adresse (connexion Discord / Google dans le même onglet)
 void web_go_to(const std::string& url);
 
+// Activité Discord (jeu ouvert dans un salon vocal) : vrai si la page a été
+// ouverte par Discord. web_activity_start demande à Discord un code de
+// connexion pour l'application `client_id` ; web_activity_take renvoie
+// "code:...", "error:..." ou "" (pas encore de réponse).
+bool web_in_activity();
+void web_activity_start(const std::string& client_id);
+std::string web_activity_take();
+
+// Langue du navigateur ("fr-FR", "en-US"...)
+std::string web_language();
+
 // Connexion en cours au retour de Discord / Google (?login=... dans l'adresse),
 // "" sinon ; l'adresse est nettoyée
 std::string web_login_from_address();

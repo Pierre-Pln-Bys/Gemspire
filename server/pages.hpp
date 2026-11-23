@@ -4,13 +4,12 @@
 #include <string>
 #include <vector>
 
+#include "../src/i18n.hpp"
 #include "store.hpp"
 
 // Pages web du site (accueil, classement, conditions, confidentialité), en
 // anglais et en français. HTML et CSS simples, sans JavaScript, lisibles sur
 // téléphone.
-
-enum class Lang { English, French };
 
 // Réglages affichés dans les pages
 struct SiteInfo {

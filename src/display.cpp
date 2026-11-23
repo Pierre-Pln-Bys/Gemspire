@@ -31,14 +31,14 @@ static std::string ansi(const std::string& code, const std::string& text)
     return "\033[" + code + "m" + text + "\033[0m";
 }
 
-std::string color_name(Gem color)
+std::string color_name(Gem color, Lang lang)
 {
     switch (color) {
-    case Gem::White:  return "Blanc";
-    case Gem::Blue:   return "Bleu";
-    case Gem::Green:  return "Vert";
-    case Gem::Red:    return "Rouge";
-    case Gem::Black:  return "Noir";
+    case Gem::White:  return tr(lang, "White");
+    case Gem::Blue:   return tr(lang, "Blue");
+    case Gem::Green:  return tr(lang, "Green");
+    case Gem::Red:    return tr(lang, "Red");
+    case Gem::Black:  return tr(lang, "Black");
     }
     return "?";
 }
@@ -139,7 +139,7 @@ static void print_row(const std::vector<Block>& blocks, const std::string& margi
 
 // ---------------------------------------------------------------- Textes
 
-std::string format_resources(const Resources& resources)
+std::string format_resources(const Resources& resources, Lang lang)
 {
     std::string text;
     for (int c = 0; c < COLOR_COUNT; c++) {
@@ -149,24 +149,24 @@ std::string format_resources(const Resources& resources)
         if (!text.empty()) {
             text += ", ";
         }
-        text += colored(color_at(c), color_name(color_at(c)) + ": " + std::to_string(resources[c]));
+        text += colored(color_at(c), color_name(color_at(c), lang) + ": " + std::to_string(resources[c]));
     }
     if (text.empty()) {
-        return "aucun";
+        return tr(lang, "none");
     }
     return text;
 }
 
-std::string format_tokens(const Player& player)
+std::string format_tokens(const Player& player, Lang lang)
 {
-    std::string text = format_resources(player.tokens);
+    std::string text = format_resources(player.tokens, lang);
     if (player.gold > 0) {
-        if (text == "aucun") {
+        if (text == tr(lang, "none")) {
             text = "";
         } else {
             text += ", ";
         }
-        text += gold("Or: " + std::to_string(player.gold));
+        text += gold(tr(lang, "Gold") + ": " + std::to_string(player.gold));
     }
     return text;
 }
@@ -180,7 +180,7 @@ std::string format_tokens(const Player& player)
 //   │ ● 3 Blanc │
 //   │ ● 5 Vert  │
 //   └─ 2 * ─────┘   (numéro de la carte, * = achetable)
-static Block card_block(const Card& card, const std::string& label, bool buyable)
+static Block card_block(const Card& card, const std::string& label, bool buyable, Lang lang)
 {
     Gem c = card.provides;
     std::string side = colored(c, "│");
@@ -188,7 +188,7 @@ static Block card_block(const Card& card, const std::string& label, bool buyable
     block.push_back(colored(c, "┌" + repeat("─", CARD_INNER) + "┐"));
 
     std::string points = card.points > 0 ? bold(std::to_string(card.points)) : " ";
-    std::string gem = colored(c, "◆ " + color_name(c));
+    std::string gem = colored(c, "◆ " + color_name(c, lang));
     int spaces = CARD_INNER - 1 - visible_width(points) - visible_width(gem);
     block.push_back(side + " " + points + std::string(spaces, ' ') + gem + side);
 
@@ -198,7 +198,7 @@ static Block card_block(const Card& card, const std::string& label, bool buyable
         if (card.cost[i] > 0) {
             Gem cost_color = color_at(i);
             costs.push_back(" " + colored(cost_color, "●") + " " + std::to_string(card.cost[i])
-                            + " " + colored(cost_color, color_name(cost_color)));
+                            + " " + colored(cost_color, color_name(cost_color, lang)));
         }
     }
     for (int line = 0; line < 4; line++) {
@@ -215,26 +215,26 @@ static Block card_block(const Card& card, const std::string& label, bool buyable
 }
 
 // Emplacement vide (la pioche du niveau est épuisée)
-static Block empty_block()
+static Block empty_block(Lang lang)
 {
     Block block;
     for (int line = 0; line < BLOCK_HEIGHT; line++) {
-        std::string content = line == 3 ? center("(vide)", CARD_INNER + 2) : std::string(CARD_INNER + 2, ' ');
+        std::string content = line == 3 ? center(tr(lang, "(empty)"), CARD_INNER + 2) : std::string(CARD_INNER + 2, ' ');
         block.push_back(dim(content));
     }
     return block;
 }
 
 // La pioche d'un niveau, à gauche de la rangée
-static Block deck_block(int level, int count)
+static Block deck_block(int level, int count, Lang lang)
 {
     const std::string roman[] = {"I", "II", "III"};
     Block block;
     block.push_back("╔" + repeat("═", DECK_INNER) + "╗");
-    block.push_back("║" + center("NIVEAU", DECK_INNER) + "║");
+    block.push_back("║" + center(tr(lang, "LEVEL"), DECK_INNER) + "║");
     block.push_back("║" + center(bold(roman[level - 1]), DECK_INNER) + "║");
     block.push_back("║" + std::string(DECK_INNER, ' ') + "║");
-    block.push_back("║" + center("pioche", DECK_INNER) + "║");
+    block.push_back("║" + center(tr(lang, "deck"), DECK_INNER) + "║");
     block.push_back("║" + center(std::to_string(count), DECK_INNER) + "║");
     block.push_back("╚" + repeat("═", DECK_INNER) + "╝");
     return block;
@@ -258,7 +258,7 @@ static std::vector<std::string> wrap_name(const std::string& name, int width)
 }
 
 // Une tuile noble : nom, puis les bonus demandés
-static Block noble_block(const Noble& noble)
+static Block noble_block(const Noble& noble, Lang lang)
 {
     std::string side = gold("│");
     std::string title = " " + std::to_string(noble.points) + " pts ";
@@ -272,7 +272,7 @@ static Block noble_block(const Noble& noble)
         if (noble.cost[i] > 0) {
             Gem c = color_at(i);
             costs.push_back(" " + colored(c, "◆") + " " + std::to_string(noble.cost[i]) + " "
-                            + colored(c, color_name(c)));
+                            + colored(c, color_name(c, lang)));
         }
     }
     for (int line = 0; line < 3; line++) {
@@ -284,52 +284,52 @@ static Block noble_block(const Noble& noble)
 }
 
 // La réserve de jetons, sur le côté droit du plateau
-static std::vector<std::string> bank_lines(const Game& game)
+static std::vector<std::string> bank_lines(const Game& game, Lang lang)
 {
     std::vector<std::string> lines;
-    lines.push_back(bold("RÉSERVE"));
+    lines.push_back(bold(tr(lang, "BANK")));
     lines.push_back("");
     for (int c = 0; c < COLOR_COUNT; c++) {
         Gem color = color_at(c);
         std::string count = std::to_string(game.bank()[c]);
         lines.push_back(dim(std::to_string(c + 1)) + " " + colored(color, "●") + " " + count + " "
-                        + colored(color, color_name(color)));
+                        + colored(color, color_name(color, lang)));
     }
     if (game.mode() == Mode::Classic) {
-        lines.push_back("  " + gold("●") + " " + std::to_string(game.bank_gold()) + " " + gold("Or"));
+        lines.push_back("  " + gold("●") + " " + std::to_string(game.bank_gold()) + " " + gold(tr(lang, "Gold")));
     }
     return lines;
 }
 
 // ---------------------------------------------------------------- Plateau
 
-static void show_nobles(const Game& game)
+static void show_nobles(const Game& game, Lang lang)
 {
-    std::cout << bold(" NOBLES") << dim("  (3 pts, demandent des bonus ◆ = cartes possédées)") << "\n";
+    std::cout << bold(" NOBLES") << dim(tr(lang, "  (3 pts, require bonuses ◆ = owned cards)")) << "\n";
     std::vector<Block> blocks;
     for (const Noble& noble : game.nobles()) {
-        blocks.push_back(noble_block(noble));
+        blocks.push_back(noble_block(noble, lang));
     }
     if (blocks.empty()) {
-        std::cout << "   plus aucun noble\n";
+        std::cout << tr(lang, "   no nobles left") << "\n";
     } else {
         print_row(blocks, " ");
     }
 }
 
-static void show_cards(const Game& game)
+static void show_cards(const Game& game, Lang lang)
 {
     // Les 3 rangées (niveau 3 en haut, comme sur la table), la réserve à droite
     std::vector<std::string> left;
     for (int level = LEVEL_COUNT; level >= 1; level--) {
         std::vector<Block> blocks;
-        blocks.push_back(deck_block(level, game.deck_size(level)));
+        blocks.push_back(deck_block(level, game.deck_size(level), lang));
         const std::vector<Card>& row = game.visible(level);
         for (int i = 0; i < VISIBLE_PER_LEVEL; i++) {
             if (i < static_cast<int>(row.size())) {
-                blocks.push_back(card_block(row[i], std::to_string(i + 1), game.can_buy(level, i + 1)));
+                blocks.push_back(card_block(row[i], std::to_string(i + 1), game.can_buy(level, i + 1), lang));
             } else {
-                blocks.push_back(empty_block());
+                blocks.push_back(empty_block(lang));
             }
         }
         for (int line = 0; line < BLOCK_HEIGHT; line++) {
@@ -341,7 +341,7 @@ static void show_cards(const Game& game)
         }
     }
 
-    std::vector<std::string> bank = bank_lines(game);
+    std::vector<std::string> bank = bank_lines(game, lang);
     int bank_start = BLOCK_HEIGHT;  // la réserve commence en face du niveau II
     for (int i = 0; i < static_cast<int>(left.size()); i++) {
         std::cout << " " << left[i];
@@ -360,15 +360,14 @@ static std::string cell(int value)
     return pad("  " + text, 6);
 }
 
-static void show_players(const Game& game)
+static void show_players(const Game& game, Lang lang)
 {
-    const std::string short_names[] = {"Blanc", "Bleu", "Vert", "Rouge", "Noir"};
-    std::string header = pad(bold(" JOUEURS"), 17);
+    std::string header = pad(bold(tr(lang, " PLAYERS")), 17);
     for (int c = 0; c < COLOR_COUNT; c++) {
-        header += pad(colored(color_at(c), short_names[c]), 6);
+        header += pad(colored(color_at(c), color_name(color_at(c), lang)), 6);
     }
     if (game.mode() == Mode::Classic) {
-        header += gold("Or");
+        header += gold(tr(lang, "Gold"));
     }
     std::cout << header << "\n";
 
@@ -378,7 +377,7 @@ static void show_players(const Game& game)
 
         std::string name = (is_current ? player_colored(i, "▶ ") : "  ") + player_colored(i, player.name);
         std::string bonus_line = " " + pad(name, 9) + pad(" bonus", 7);
-        std::string token_line = " " + pad("", 9) + pad(" jetons", 7);
+        std::string token_line = " " + pad("", 9) + pad(tr(lang, " tokens"), 7);
         for (int c = 0; c < COLOR_COUNT; c++) {
             bonus_line += cell(player.bonuses()[c]);
             token_line += cell(player.tokens[c]);
@@ -392,90 +391,111 @@ static void show_players(const Game& game)
         }
 
         bonus_line += bold(std::to_string(player.score()) + " pts") + "  "
-                      + std::to_string(player.cards.size()) + " cartes  "
-                      + std::to_string(player.nobles.size()) + " nobles";
+                      + tr(lang, "{0} cards  {1} nobles",
+                           {std::to_string(player.cards.size()), std::to_string(player.nobles.size())});
         token_line += std::to_string(player.token_count()) + "/" + std::to_string(MAX_TOKENS_IN_HAND)
-                      + " jetons";
+                      + tr(lang, " tokens");
         if (game.mode() == Mode::Classic) {
-            token_line += "  " + std::to_string(player.reserved.size()) + " réservée(s)";
+            token_line += tr(lang, "  {0} reserved", {std::to_string(player.reserved.size())});
         }
         std::cout << bonus_line << "\n" << token_line << "\n";
     }
 }
 
-static void show_reserved(const Game& game)
+static void show_reserved(const Game& game, Lang lang)
 {
     const Player& me = game.current_player();
     if (game.mode() != Mode::Classic || me.reserved.empty()) {
         return;
     }
-    std::cout << "\n" << bold(" VOS CARTES RÉSERVÉES") << dim("  (a r <n> pour acheter)") << "\n";
+    std::cout << "\n" << bold(tr(lang, " YOUR RESERVED CARDS")) << dim(tr(lang, "  (b r <n> to buy)")) << "\n";
     std::vector<Block> blocks;
     for (int i = 0; i < static_cast<int>(me.reserved.size()); i++) {
-        blocks.push_back(card_block(me.reserved[i], "R" + std::to_string(i + 1), game.can_buy_reserved(i + 1)));
+        blocks.push_back(card_block(me.reserved[i], "R" + std::to_string(i + 1), game.can_buy_reserved(i + 1), lang));
     }
     print_row(blocks, " ");
 }
 
-void show_board(const Game& game)
+void show_board(const Game& game, Lang lang)
 {
-    std::string mode = game.mode() == Mode::Classic ? "classique" : "rapide";
-    std::string title = " GEMSPIRE (" + mode + ") - tour " + std::to_string(game.round())
-                        + " - au tour de ";
+    std::string mode = tr(lang, game.mode() == Mode::Classic ? "classic" : "quick");
+    std::string title = tr(lang, " GEMSPIRE ({0}) - round {1} - turn of ", {mode, std::to_string(game.round())});
     std::cout << "\n" << repeat("━", 79) << "\n" << bold(title)
               << player_colored(game.current_index(), game.current_player().name) << "\n"
               << repeat("━", 79) << "\n";
     if (game.is_last_round()) {
-        std::cout << bold(" DERNIER TOUR !") << "\n";
+        std::cout << bold(tr(lang, " LAST ROUND!")) << "\n";
     }
 
-    show_nobles(game);
+    show_nobles(game, lang);
     std::cout << "\n";
-    show_cards(game);
+    show_cards(game, lang);
     std::cout << "\n";
-    show_players(game);
-    show_reserved(game);
+    show_players(game, lang);
+    show_reserved(game, lang);
 
-    std::cout << dim("\n * = carte achetable    ? = aide") << "\n";
+    std::cout << dim(tr(lang, "\n * = card you can buy    ? = help")) << "\n";
 }
 
-void show_help(Mode mode)
+void show_help(Mode mode, Lang lang)
 {
-    std::cout << "\nCommandes :\n"
-              << "  j 1 3 5   prendre 3 jetons de couleurs différentes (ici Blanc, Vert, Noir)\n"
-              << "  j 2 2     prendre 2 jetons de la même couleur (pile d'au moins 4)\n"
-              << "  a 2 4     acheter la carte 4 du niveau 2\n";
-    if (mode == Mode::Classic) {
-        std::cout << "  a r 1     acheter votre carte réservée R1\n"
-                  << "  r 2 4     réserver la carte 4 du niveau 2 (+1 or s'il en reste)\n"
-                  << "  r 3 p     réserver la carte du dessus de la pioche du niveau 3\n";
+    // Les commandes françaises d'origine (j, a, r ... p) marchent aussi
+    if (lang == Lang::French) {
+        std::cout << "\nCommandes :\n"
+                  << "  j 1 3 5   prendre 3 jetons de couleurs différentes (ici Blanc, Vert, Noir)\n"
+                  << "  j 2 2     prendre 2 jetons de la même couleur (pile d'au moins 4)\n"
+                  << "  a 2 4     acheter la carte 4 du niveau 2\n";
+        if (mode == Mode::Classic) {
+            std::cout << "  a r 1     acheter votre carte réservée R1\n"
+                      << "  r 2 4     réserver la carte 4 du niveau 2 (+1 or s'il en reste)\n"
+                      << "  r 3 p     réserver la carte du dessus de la pioche du niveau 3\n";
+        }
+        std::cout << "  s         sauvegarder la partie (s fichier.splendor pour choisir le nom)\n"
+                  << "  ?         afficher cette aide\n"
+                  << "  q         quitter la partie\n"
+                  << "Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir";
+        if (mode == Mode::Classic) {
+            std::cout << "\n           6=Or (seulement pour défausser)";
+        }
+        std::cout << "\n";
+        return;
     }
-    std::cout << "  s         sauvegarder la partie (s fichier.splendor pour choisir le nom)\n"
-              << "  ?         afficher cette aide\n"
-              << "  q         quitter la partie\n"
-              << "Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir";
+    std::cout << "\nCommands:\n"
+              << "  t 1 3 5   take 3 tokens of different colours (here White, Green, Black)\n"
+              << "  t 2 2     take 2 tokens of the same colour (stack of at least 4)\n"
+              << "  b 2 4     buy card 4 of level 2\n";
     if (mode == Mode::Classic) {
-        std::cout << "\n           6=Or (seulement pour défausser)";
+        std::cout << "  b r 1     buy your reserved card R1\n"
+                  << "  r 2 4     reserve card 4 of level 2 (+1 gold if any is left)\n"
+                  << "  r 3 d     reserve the top card of the level 3 deck\n";
+    }
+    std::cout << "  s         save the game (s file.splendor to choose the name)\n"
+              << "  ?         show this help\n"
+              << "  q         quit the game\n"
+              << "Colours: 1=White 2=Blue 3=Green 4=Red 5=Black";
+    if (mode == Mode::Classic) {
+        std::cout << "\n         6=Gold (only to discard)";
     }
     std::cout << "\n";
 }
 
-void show_results(const Game& game)
+void show_results(const Game& game, Lang lang)
 {
-    std::cout << "\n" << repeat("━", 79) << "\n" << bold(" FIN DE PARTIE") << "\n" << repeat("━", 79) << "\n";
+    std::cout << "\n" << repeat("━", 79) << "\n" << bold(tr(lang, " GAME OVER")) << "\n" << repeat("━", 79) << "\n";
     if (game.is_blocked()) {
-        std::cout << "Partie bloquée : plus aucun joueur ne peut jouer.\n";
+        std::cout << tr(lang, "Game blocked: no player can move anymore.") << "\n";
     }
     for (int i = 0; i < static_cast<int>(game.players().size()); i++) {
         const Player& player = game.players()[i];
-        std::cout << "  " << pad(player_colored(i, player.name), 15) << " : " << player.score() << " pts, "
-                  << player.cards.size() << " cartes\n";
+        std::cout << "  " << pad(player_colored(i, player.name), 15) << " : "
+                  << tr(lang, "{0} pts, {1} cards", {std::to_string(player.score()), std::to_string(player.cards.size())})
+                  << "\n";
     }
     std::vector<int> winners = game.winners();
     if (winners.size() == 1) {
-        std::cout << "\nVictoire de " << player_colored(winners[0], game.players()[winners[0]].name) << " !\n";
+        std::cout << "\n" << tr(lang, "{0} wins!", {player_colored(winners[0], game.players()[winners[0]].name)}) << "\n";
     } else {
-        std::cout << "\nÉgalité parfaite entre :";
+        std::cout << "\n" << tr(lang, "Perfect tie between:");
         for (int i : winners) {
             std::cout << " " << game.players()[i].name;
         }
@@ -485,8 +505,8 @@ void show_results(const Game& game)
 
 // ---------------------------------------------------------------- Historique
 
-// Liste "2 Blanc, 1 Vert" sans couleurs ANSI (utilisable par la fenêtre)
-static std::string plain_tokens(const Resources& tokens, int gold_count)
+// Liste "2 White, 1 Green" sans couleurs ANSI (utilisable par la fenêtre)
+static std::string plain_tokens(const Resources& tokens, int gold_count, Lang lang)
 {
     std::string text;
     for (int c = 0; c < COLOR_COUNT; c++) {
@@ -494,51 +514,51 @@ static std::string plain_tokens(const Resources& tokens, int gold_count)
             if (!text.empty()) {
                 text += ", ";
             }
-            text += std::to_string(tokens[c]) + " " + color_name(color_at(c));
+            text += std::to_string(tokens[c]) + " " + color_name(color_at(c), lang);
         }
     }
     if (gold_count > 0) {
         if (!text.empty()) {
             text += ", ";
         }
-        text += std::to_string(gold_count) + " Or";
+        text += std::to_string(gold_count) + " " + tr(lang, "Gold");
     }
     return text;
 }
 
-static std::string plain_card(const Card& card)
+static std::string plain_card(const Card& card, Lang lang)
 {
-    std::string text = "une carte " + color_name(card.provides);
+    std::string text = tr(lang, "a {0} card", {color_name(card.provides, lang)});
     if (card.points > 0) {
         text += " (" + std::to_string(card.points) + (card.points > 1 ? " pts)" : " pt)");
     }
     return text;
 }
 
-std::string describe_event(const Game& game, const Event& event)
+std::string describe_event(const Game& game, const Event& event, Lang lang)
 {
     std::string name = game.players()[event.player].name;
     switch (event.type) {
     case EventType::TakeTokens:
-        return name + " prend " + plain_tokens(event.tokens, 0) + ".";
+        return tr(lang, "{0} takes {1}.", {name, plain_tokens(event.tokens, 0, lang)});
     case EventType::BuyCard:
-        return name + " achète " + plain_card(event.card) + ".";
+        return tr(lang, "{0} buys {1}.", {name, plain_card(event.card, lang)});
     case EventType::BuyReserved:
-        return name + " achète sa réservée, " + plain_card(event.card) + ".";
+        return tr(lang, "{0} buys their reserved card, {1}.", {name, plain_card(event.card, lang)});
     case EventType::Reserve: {
-        std::string text = name + " réserve " + (event.from_deck ? "une carte de la pioche" : plain_card(event.card));
-        return text + (event.gold > 0 ? " et prend un jeton or." : ".");
+        std::string card = event.from_deck ? tr(lang, "a card from the deck") : plain_card(event.card, lang);
+        return tr(lang, event.gold > 0 ? "{0} reserves {1} and takes a gold token." : "{0} reserves {1}.", {name, card});
     }
     case EventType::Discard:
-        return name + " défausse " + plain_tokens(event.tokens, event.gold) + ".";
+        return tr(lang, "{0} discards {1}.", {name, plain_tokens(event.tokens, event.gold, lang)});
     case EventType::NobleVisit:
-        return event.noble + " rend visite à " + name + " (+3 pts).";
+        return tr(lang, "{0} visits {1} (+3 pts).", {event.noble, name});
     case EventType::Pass:
-        return name + " ne peut rien faire et passe son tour.";
+        return tr(lang, "{0} can't do anything and passes.", {name});
     case EventType::Timeout:
-        return name + " n'a pas joué à temps et passe son tour.";
+        return tr(lang, "{0} didn't play in time and passes.", {name});
     case EventType::Forfeit:
-        return name + " abandonne la partie (classé dernier).";
+        return tr(lang, "{0} forfeits the game (ranked last).", {name});
     }
     return "";
 }

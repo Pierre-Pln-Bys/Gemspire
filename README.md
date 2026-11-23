@@ -52,9 +52,12 @@ make clean      # make clean-all supprime aussi la raylib compilée
 ./splendor-gui
 ```
 
+- **Langue** : anglais ou français, selon la langue du système (ou du
+  navigateur) au premier lancement ; bouton « Français » / « English » en haut
+  à droite de l'accueil (choix gardé dans `langue.txt`).
 - **Accueil** : nouvelle partie, reprise de la sauvegarde, quitter.
 - **Nouvelle partie** : mode, nombre de joueurs, puis pour chacun son nom, sa
-  couleur (Violet, Orange, Turquoise, Rose, Marron) et qui le joue (humain,
+  couleur (Violet, Orange, Turquoise, Rose, Marron ; Purple, Orange, Turquoise, Pink, Brown en anglais) et qui le joue (humain,
   ordinateur facile ou moyen).
 - **Plateau** : cliquer des jetons de la réserve puis « Prendre », ou une
   carte (ou une pioche) puis « Acheter » / « Réserver ». Contour doré = carte
@@ -74,6 +77,10 @@ make clean      # make clean-all supprime aussi la raylib compilée
 Sans rien installer : https://gemspire.epsilon-forge.fr/play/ (téléphone tenu
 à l'horizontale). Même jeu que la version à télécharger (même code C++,
 compilé en WebAssembly avec Emscripten), sans la Rich Presence Discord.
+
+La même page sert d'**Activité Discord** : lancée depuis un salon vocal, elle
+connecte le joueur avec son compte Discord sans autre étape (réglages du
+portail Discord : voir `server/README.md`).
 
 Compiler soi-même (Emscripten installé, `emcc` dans le PATH) :
 
@@ -124,24 +131,29 @@ le Raspberry Pi dans [deploy/README.md](deploy/README.md).
 
 ```bash
 ./splendor                  # le mode est demandé au lancement
-./splendor --rapide         # partie rapide
-./splendor --classique 42   # partie classique, graine fixe (rejouer la même partie)
+./splendor --quick          # partie rapide (ou --rapide)
+./splendor --classic 42     # partie classique, graine fixe (ou --classique)
 ./splendor --version        # affiche la version
 ```
 
+Langue : français si la variable `LANG` (ou `LANGUAGE`, `LC_ALL`) commence par
+`fr`, anglais sinon (`LANG=fr_FR.UTF-8 ./splendor`).
+
 Sauvegarde : `s` (ou `s fichier.splendor`) pendant la partie, puis
-`./splendor --charger partie.splendor` pour la reprendre (même format que la
+`./splendor --load partie.splendor` (ou `--charger`) pour la reprendre (même format que la
 version graphique).
 
 Pour chaque joueur, on choisit aussi qui le joue : humain (Entrée),
-ordinateur facile (`f`) ou ordinateur moyen (`m`).
+ordinateur facile (`e`, ou `f` en français) ou ordinateur moyen (`m`).
 
 Le plateau tient dans un terminal de 80 colonnes. Variable `NO_COLOR=1` pour
 désactiver les couleurs.
 
 ## Commandes
 
-Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir (6=Or, seulement pour défausser)
+Couleurs : 1=Blanc 2=Bleu 3=Vert 4=Rouge 5=Noir (6=Or, seulement pour défausser).
+Les commandes anglaises (`t` = take, `b` = buy, `r 3 d` = deck) et
+françaises (`j`, `a`, `r 3 p`) marchent dans les deux langues.
 
 | Commande  | Effet                                                    |
 |-----------|----------------------------------------------------------|

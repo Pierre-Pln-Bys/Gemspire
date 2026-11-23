@@ -16,13 +16,13 @@ std::string apply_move(Game& game, const Move& move)
             return game.discard_gold();
         }
         if (move.gem < 0 || move.gem >= COLOR_COUNT) {
-            return "Couleur inconnue.";
+            return "Unknown colour.";
         }
         return game.discard(color_at(move.gem));
     case MoveType::ChooseNoble:
         return game.choose_noble(move.noble);
     }
-    return "Coup inconnu.";
+    return "Unknown move.";
 }
 
 Move take_move(const Resources& tokens)

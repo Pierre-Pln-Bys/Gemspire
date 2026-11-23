@@ -4,6 +4,28 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [3.7.0] - 2026-11-23
+
+### Added
+- **The game speaks English and French**: window, browser version, console,
+  game log, rules and server messages. The language follows the system (or
+  the browser) on first launch; a « Français » / « English » button on the
+  home screen switches it (kept in `langue.txt`). Console: French when
+  `LANG` starts with `fr`.
+- **Discord Activity**: the browser version can run inside a Discord voice
+  channel and signs the player in with their Discord account
+  (`POST /auth/discord/activity`). Needs the URL mappings set in the Discord
+  developer portal (see `server/README.md`).
+- Console: English commands (`t` take, `b` buy, `r 3 d` reserve from the
+  deck) and options (`--quick`, `--classic`, `--load`); the French ones still
+  work.
+
+### Changed
+- Online games: the server sends the game log in both languages (`log`,
+  `log_fr`); error messages from the server and the bot routes are in
+  English (translated by the game).
+- Discord lobby announcements are in English.
+
 ## [3.6.0] - 2026-11-22
 
 ### Changed

@@ -10,6 +10,13 @@
 // ---------------------------------------------------------------- Placement
 
 // Ordonnée de la rangée d'un niveau (niveau 3 en haut, comme sur la table)
+// Texte anglais traduit dans la langue choisie ; les textes composés passent
+// par T(app, "{0}'s turn", {name}).
+static std::string T(const App& app, const std::string& english, const std::vector<std::string>& values = {})
+{
+    return tr(app.lang, english, values);
+}
+
 static float row_y(int level)
 {
     return 150.0f + (LEVEL_COUNT - level) * 150.0f;
@@ -69,25 +76,26 @@ static void add(std::vector<Button>& buttons, ButtonId id, const std::string& la
 static std::vector<Button> home_buttons()
 {
     std::vector<Button> buttons;
-    add(buttons, ButtonId::NewGame, "Nouvelle partie", {490, 390, 300, 54});
-    add(buttons, ButtonId::PlayOnline, "Jouer en ligne", {490, 456, 300, 54});
-    add(buttons, ButtonId::Resume, "Reprendre la sauvegarde", {490, 522, 300, 54}, 0, FileExists(SAVE_FILE));
+    add(buttons, ButtonId::NewGame, "New game", {490, 390, 300, 54});
+    add(buttons, ButtonId::PlayOnline, "Play online", {490, 456, 300, 54});
+    add(buttons, ButtonId::Resume, "Resume saved game", {490, 522, 300, 54}, 0, FileExists(SAVE_FILE));
 #ifndef __EMSCRIPTEN__
-    add(buttons, ButtonId::Quit, "Quitter", {490, 588, 300, 54});  // dans le navigateur : on ferme l'onglet
+    add(buttons, ButtonId::Quit, "Quit", {490, 588, 300, 54});  // dans le navigateur : on ferme l'onglet
 #endif
+    add(buttons, ButtonId::Language, "Français", {1110, 20, 150, 36});  // affiche l'autre langue
     return buttons;
 }
 
 static std::vector<Button> setup_buttons(const Setup& setup)
 {
     std::vector<Button> buttons;
-    add(buttons, ButtonId::Mode, "Rapide", {360, 120, 200, 40}, 0, true, setup.mode == Mode::Quick);
-    add(buttons, ButtonId::Mode, "Classique", {580, 120, 200, 40}, 1, true, setup.mode == Mode::Classic);
+    add(buttons, ButtonId::Mode, "Quick", {360, 120, 200, 40}, 0, true, setup.mode == Mode::Quick);
+    add(buttons, ButtonId::Mode, "Classic", {580, 120, 200, 40}, 1, true, setup.mode == Mode::Classic);
     for (int count = 2; count <= 4; count++) {
         add(buttons, ButtonId::Count, std::to_string(count), {360.0f + (count - 2) * 70, 190, 56, 40}, count, true,
             setup.count == count);
     }
-    const char* kinds[] = {"Humain", "Ordi facile", "Ordi moyen"};
+    const char* kinds[] = {"Human", "Easy AI", "Medium AI"};
     const Controller kind_values[] = {Controller::Human, Controller::AiEasy, Controller::AiMedium};
     for (int p = 0; p < setup.count; p++) {
         float y = 280.0f + p * 90;
@@ -105,8 +113,8 @@ static std::vector<Button> setup_buttons(const Setup& setup)
                 setup.kinds[p] == kind_values[k]);
         }
     }
-    add(buttons, ButtonId::Back, "Retour", {200, 690, 200, 50});
-    add(buttons, ButtonId::Start, "Jouer", {880, 690, 200, 50});
+    add(buttons, ButtonId::Back, "Back", {200, 690, 200, 50});
+    add(buttons, ButtonId::Start, "Play", {880, 690, 200, 50});
     return buttons;
 }
 
@@ -118,42 +126,42 @@ static std::vector<Button> board_buttons(const App& app)
     bool online = app.online.in_game;
     if (game.is_over()) {
         if (online) {
-            add(buttons, ButtonId::BackOnline, "Retour au menu en ligne", {490, 560, 300, 44});
+            add(buttons, ButtonId::BackOnline, "Back to online menu", {490, 560, 300, 44});
         } else {
-            add(buttons, ButtonId::Replay, "Rejouer", {490, 560, 140, 44});
+            add(buttons, ButtonId::Replay, "Play again", {490, 560, 140, 44});
             add(buttons, ButtonId::Menu, "Menu", {650, 560, 140, 44});
         }
         return buttons;
     }
     if (online) {
-        add(buttons, ButtonId::BackOnline, "Menu en ligne", {790, 8, 140, 30});
+        add(buttons, ButtonId::BackOnline, "Online menu", {790, 8, 140, 30});
         bool confirm = GetTime() < app.online.forfeit_confirm;
-        add(buttons, ButtonId::Forfeit, confirm ? "Confirmer ?" : "Abandonner", {940, 8, 140, 30}, 0, true, confirm);
+        add(buttons, ButtonId::Forfeit, confirm ? "Confirm?" : "Forfeit", {940, 8, 140, 30}, 0, true, confirm);
     } else {
         add(buttons, ButtonId::Menu, "Menu", {790, 8, 120, 30});
-        add(buttons, ButtonId::Save, "Sauvegarder", {920, 8, 160, 30});
+        add(buttons, ButtonId::Save, "Save", {920, 8, 160, 30});
     }
-    add(buttons, ButtonId::Journal, "Journal", {1090, 8, 170, 30}, 0, true, app.journal_open);
+    add(buttons, ButtonId::Journal, "Log", {1090, 8, 170, 30}, 0, true, app.journal_open);
     if (app.curtain || app.journal_open || !human_turn(app) || game.step() != TurnStep::Action) {
         return buttons;
     }
 
     std::vector<Button> actions;
     if (total(app.selection) > 0) {
-        add(actions, ButtonId::Take, "Prendre", {});
-        add(actions, ButtonId::Cancel, "Annuler", {});
+        add(actions, ButtonId::Take, "Take", {});
+        add(actions, ButtonId::Cancel, "Cancel", {});
     } else if (app.target == Target::Visible) {
-        add(actions, ButtonId::Buy, "Acheter", {}, 0, game.can_buy(app.target_level, app.target_index + 1));
+        add(actions, ButtonId::Buy, "Buy", {}, 0, game.can_buy(app.target_level, app.target_index + 1));
         if (game.mode() == Mode::Classic) {
-            add(actions, ButtonId::Reserve, "Réserver", {}, 0, game.can_reserve());
+            add(actions, ButtonId::Reserve, "Reserve", {}, 0, game.can_reserve());
         }
-        add(actions, ButtonId::Cancel, "Annuler", {});
+        add(actions, ButtonId::Cancel, "Cancel", {});
     } else if (app.target == Target::Deck) {
-        add(actions, ButtonId::Reserve, "Réserver", {}, 0, game.can_reserve());
-        add(actions, ButtonId::Cancel, "Annuler", {});
+        add(actions, ButtonId::Reserve, "Reserve", {}, 0, game.can_reserve());
+        add(actions, ButtonId::Cancel, "Cancel", {});
     } else if (app.target == Target::Reserved) {
-        add(actions, ButtonId::Buy, "Acheter", {}, 0, game.can_buy_reserved(app.target_index + 1));
-        add(actions, ButtonId::Cancel, "Annuler", {});
+        add(actions, ButtonId::Buy, "Buy", {}, 0, game.can_buy_reserved(app.target_index + 1));
+        add(actions, ButtonId::Cancel, "Cancel", {});
     }
     // Deux boutons par ligne dans le panneau d'action
     for (int i = 0; i < static_cast<int>(actions.size()); i++) {
@@ -169,12 +177,12 @@ static std::vector<Button> login_buttons(const App& app)
 {
     std::vector<Button> buttons;
     bool waiting = !app.online.login_id.empty();
-    add(buttons, ButtonId::LoginDiscord, "Se connecter avec Discord", {470, 330, 340, 56}, 0, !waiting);
-    add(buttons, ButtonId::LoginGoogle, "Se connecter avec Google", {470, 400, 340, 56}, 0, !waiting);
+    add(buttons, ButtonId::LoginDiscord, "Sign in with Discord", {470, 330, 340, 56}, 0, !waiting);
+    add(buttons, ButtonId::LoginGoogle, "Sign in with Google", {470, 400, 340, 56}, 0, !waiting);
     if (app.online.dev_login) {
-        add(buttons, ButtonId::LoginDev, "Connexion de test", {470, 470, 340, 44}, 0, !waiting);
+        add(buttons, ButtonId::LoginDev, "Test sign-in", {470, 470, 340, 44}, 0, !waiting);
     }
-    add(buttons, ButtonId::BackHome, waiting ? "Annuler" : "Retour", {540, 600, 200, 46});
+    add(buttons, ButtonId::BackHome, waiting ? "Cancel" : "Back", {540, 600, 200, 46});
     return buttons;
 }
 
@@ -182,8 +190,8 @@ static std::vector<Button> pseudo_buttons(const App& app)
 {
     std::vector<Button> buttons;
     add(buttons, ButtonId::PseudoBox, app.online.pseudo_input, {440, 340, 400, 48}, 0, true, app.online.focus == 1);
-    add(buttons, ButtonId::PseudoOk, "Valider", {540, 420, 200, 50}, 0, app.net.pending() == 0);
-    add(buttons, ButtonId::Logout, "Se déconnecter", {540, 600, 200, 44});
+    add(buttons, ButtonId::PseudoOk, "Confirm", {540, 420, 200, 50}, 0, app.net.pending() == 0);
+    add(buttons, ButtonId::Logout, "Sign out", {540, 600, 200, 44});
     return buttons;
 }
 
@@ -193,34 +201,34 @@ static std::vector<Button> online_buttons(const App& app)
     std::vector<Button> buttons;
     // Proposition du bot Discord : seule la fenêtre de proposition est active
     if (!online.offer_channel.empty()) {
-        add(buttons, ButtonId::CreateMode, "Rapide", {410, 380, 150, 40}, 0, true, online.create_mode == Mode::Quick);
-        add(buttons, ButtonId::CreateMode, "Classique", {570, 380, 150, 40}, 1, true, online.create_mode == Mode::Classic);
+        add(buttons, ButtonId::CreateMode, "Quick", {410, 380, 150, 40}, 0, true, online.create_mode == Mode::Quick);
+        add(buttons, ButtonId::CreateMode, "Classic", {570, 380, 150, 40}, 1, true, online.create_mode == Mode::Classic);
         for (int seats = 2; seats <= 4; seats++) {
-            add(buttons, ButtonId::CreateSeats, std::to_string(seats) + " joueurs", {410.0f + (seats - 2) * 155, 440, 145, 40},
+            add(buttons, ButtonId::CreateSeats, T(app, "{0} players", {std::to_string(seats)}), {410.0f + (seats - 2) * 155, 440, 145, 40},
                 seats, true, online.create_seats == seats);
         }
-        add(buttons, ButtonId::OfferCreate, "Créer la partie", {410, 510, 230, 50}, 0, app.net.pending() == 0);
-        add(buttons, ButtonId::OfferIgnore, "Ignorer", {650, 510, 220, 50});
+        add(buttons, ButtonId::OfferCreate, "Create game", {410, 510, 230, 50}, 0, app.net.pending() == 0);
+        add(buttons, ButtonId::OfferIgnore, "Ignore", {650, 510, 220, 50});
         return buttons;
     }
     // Créer une partie
-    add(buttons, ButtonId::CreateMode, "Rapide", {200, 330, 150, 40}, 0, true, online.create_mode == Mode::Quick);
-    add(buttons, ButtonId::CreateMode, "Classique", {360, 330, 150, 40}, 1, true, online.create_mode == Mode::Classic);
+    add(buttons, ButtonId::CreateMode, "Quick", {200, 330, 150, 40}, 0, true, online.create_mode == Mode::Quick);
+    add(buttons, ButtonId::CreateMode, "Classic", {360, 330, 150, 40}, 1, true, online.create_mode == Mode::Classic);
     for (int seats = 2; seats <= 4; seats++) {
-        add(buttons, ButtonId::CreateSeats, std::to_string(seats) + " joueurs", {200.0f + (seats - 2) * 105, 390, 95, 40},
+        add(buttons, ButtonId::CreateSeats, T(app, "{0} players", {std::to_string(seats)}), {200.0f + (seats - 2) * 105, 390, 95, 40},
             seats, true, online.create_seats == seats);
     }
-    add(buttons, ButtonId::CreateLobby, "Créer le salon", {200, 460, 310, 50}, 0, app.net.pending() == 0);
+    add(buttons, ButtonId::CreateLobby, "Create lobby", {200, 460, 310, 50}, 0, app.net.pending() == 0);
     // Rejoindre une partie
     add(buttons, ButtonId::CodeBox, online.code_input, {770, 330, 310, 48}, 0, true, online.focus == 2);
-    add(buttons, ButtonId::JoinLobby, "Rejoindre", {770, 400, 310, 50}, 0,
+    add(buttons, ButtonId::JoinLobby, "Join", {770, 400, 310, 50}, 0,
         online.code_input.size() == 5 && app.net.pending() == 0);
     if (online.game_id != 0 && !online.game_over) {
-        add(buttons, ButtonId::ReturnToGame, "Revenir à la partie en cours", {440, 560, 400, 50});
+        add(buttons, ButtonId::ReturnToGame, "Back to the current game", {440, 560, 400, 50});
     }
-    add(buttons, ButtonId::ShowLeaderboard, "Classement", {200, 680, 200, 46});
-    add(buttons, ButtonId::Logout, "Se déconnecter", {540, 680, 200, 46});
-    add(buttons, ButtonId::BackHome, "Accueil", {880, 680, 200, 46});
+    add(buttons, ButtonId::ShowLeaderboard, "Leaderboard", {200, 680, 200, 46});
+    add(buttons, ButtonId::Logout, "Sign out", {540, 680, 200, 46});
+    add(buttons, ButtonId::BackHome, "Home", {880, 680, 200, 46});
     return buttons;
 }
 
@@ -228,13 +236,13 @@ static std::vector<Button> lobby_buttons(const App& app)
 {
     const OnlineState& online = app.online;
     std::vector<Button> buttons;
-    add(buttons, ButtonId::CopyCode, "Copier le code", {430, 250, 200, 40});
-    add(buttons, ButtonId::Invite, "Copier une invitation", {650, 250, 200, 40});
+    add(buttons, ButtonId::CopyCode, "Copy code", {430, 250, 200, 40});
+    add(buttons, ButtonId::Invite, "Copy an invite", {650, 250, 200, 40});
     if (online.lobby_host == online.account) {
-        add(buttons, ButtonId::LobbyStart, "Lancer la partie", {440, 600, 400, 54}, 0,
+        add(buttons, ButtonId::LobbyStart, "Start game", {440, 600, 400, 54}, 0,
             online.lobby_members.size() >= 2 && app.net.pending() == 0);
     }
-    add(buttons, ButtonId::LobbyLeave, "Quitter le salon", {540, 680, 200, 46});
+    add(buttons, ButtonId::LobbyLeave, "Leave lobby", {540, 680, 200, 46});
     return buttons;
 }
 
@@ -249,13 +257,13 @@ std::vector<Button> visible_buttons(const App& app)
     case Screen::Lobby: return lobby_buttons(app);
     case Screen::Leaderboard: {
         std::vector<Button> buttons;
-        add(buttons, ButtonId::BackOnline, "Retour", {540, 700, 200, 46});
+        add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
         return buttons;
     }
     case Screen::Update: {
         std::vector<Button> buttons;
-        add(buttons, ButtonId::Download, "Télécharger la mise à jour", {440, 470, 400, 54});
-        add(buttons, ButtonId::Quit, "Quitter", {540, 540, 200, 46});
+        add(buttons, ButtonId::Download, "Download the update", {440, 470, 400, 54});
+        add(buttons, ButtonId::Quit, "Quit", {540, 540, 200, 46});
         return buttons;
     }
     case Screen::Board: break;
@@ -329,9 +337,12 @@ static void shadow(Rectangle rect, float radius)
 
 enum class Align { Left, Center, Right };
 
+// measure, text et text_centered traduisent eux-mêmes un texte simple
+// ("New game" -> « Nouvelle partie ») ; un texte sans traduction (nom de
+// joueur, nombre, texte déjà traduit) reste tel quel.
 static Vector2 measure(const App& app, const std::string& text, float size, bool bold)
 {
-    return MeasureTextEx(bold ? app.bold : app.font, text.c_str(), size, 0);
+    return MeasureTextEx(bold ? app.bold : app.font, T(app, text).c_str(), size, 0);
 }
 
 // Écrit `text` ; y est le haut du texte
@@ -344,7 +355,7 @@ static void text(const App& app, const std::string& str, float x, float y, float
     } else if (align == Align::Right) {
         x -= size_px.x;
     }
-    DrawTextEx(bold ? app.bold : app.font, str.c_str(), {x, y}, size, 0, color);
+    DrawTextEx(bold ? app.bold : app.font, T(app, str).c_str(), {x, y}, size, 0, color);
 }
 
 // Écrit `text` centré sur le point (cx, cy)
@@ -352,12 +363,14 @@ static void text_centered(const App& app, const std::string& str, float cx, floa
                           Color color)
 {
     Vector2 size_px = measure(app, str, size, bold);
-    DrawTextEx(bold ? app.bold : app.font, str.c_str(), {cx - size_px.x / 2, cy - size_px.y / 2}, size, 0, color);
+    DrawTextEx(bold ? app.bold : app.font, T(app, str).c_str(), {cx - size_px.x / 2, cy - size_px.y / 2}, size, 0,
+               color);
 }
 
 // Texte réduit (puis coupé) pour tenir dans `width`
-static std::string fit(const App& app, const std::string& str, float width, float& size, float min_size)
+static std::string fit(const App& app, const std::string& english, float width, float& size, float min_size)
 {
+    std::string str = T(app, english);
     while (size > min_size && measure(app, str, size, false).x > width) {
         size -= 0.5f;
     }
@@ -504,7 +517,7 @@ static void draw_deck(const App& app, int level, int count, bool selected)
     Rectangle r = deck_rect(level);
     if (count == 0) {
         dashed_rect(r, {255, 255, 255, 80});
-        text_centered(app, "vide", r.x + r.width / 2, r.y + r.height / 2, 15, false, SOFT_TEXT);
+        text_centered(app, "empty", r.x + r.width / 2, r.y + r.height / 2, 15, false, SOFT_TEXT);
         return;
     }
     // Petit décalage pour donner l'impression d'une pile
@@ -514,7 +527,7 @@ static void draw_deck(const App& app, int level, int count, bool selected)
     }
     draw_card_back(app, level, r, true);
     text_centered(app, std::to_string(count), r.x + r.width / 2, r.y + 96, 20, true, WHITE_TEXT);
-    text_centered(app, "cartes", r.x + r.width / 2, r.y + 117, 12, false, WHITE_TEXT);
+    text_centered(app, "cards", r.x + r.width / 2, r.y + 117, 12, false, WHITE_TEXT);
     if (selected) {
         outline(r, 8, 4, WHITE_TEXT);
     }
@@ -562,19 +575,19 @@ static void draw_header(const App& app)
 {
     const Game& game = *app.game;
     text(app, "GEMSPIRE", 30, 8, 28, true, GOLD_UI);
-    std::string mode = game.mode() == Mode::Classic ? "Partie classique" : "Partie rapide";
+    std::string mode = game.mode() == Mode::Classic ? "Classic game" : "Quick game";
     text(app, mode, 30, 44, 13, false, SOFT_TEXT);
-    text(app, "Tour " + std::to_string(game.round()), 30, 62, 13, false, SOFT_TEXT);
+    text(app, T(app, "Round {0}", {std::to_string(game.round())}), 30, 62, 13, false, SOFT_TEXT);
     // En ligne : temps restant pour jouer ce tour
     if (app.online.in_game && !game.is_over()) {
         int left = static_cast<int>(app.online.turn_deadline - GetTime());
         left = left < 0 ? 0 : left;
         std::string clock = std::to_string(left / 60) + ":" + (left % 60 < 10 ? "0" : "") + std::to_string(left % 60);
-        text(app, "Temps : " + clock, 30, 78, 13, true, left <= 20 ? ERROR_TEXT : SOFT_TEXT);
+        text(app, T(app, "Time: {0}", {clock}), 30, 78, 13, true, left <= 20 ? ERROR_TEXT : SOFT_TEXT);
     }
     text(app, "Nobles", 30, 96, 15, true, WHITE_TEXT);
     if (game.is_last_round() && !game.is_over()) {
-        text(app, "Dernier tour !", 30, 120, 14, true, ERROR_TEXT);
+        text(app, "Last round!", 30, 120, 14, true, ERROR_TEXT);
     }
 }
 
@@ -633,7 +646,7 @@ static void draw_nobles(const App& app)
 static void draw_bank(const App& app)
 {
     const Game& game = *app.game;
-    text(app, "Réserve", 668, 140, 15, true, WHITE_TEXT, Align::Center);
+    text(app, "Bank", 668, 140, 15, true, WHITE_TEXT, Align::Center);
     int count = game.mode() == Mode::Classic ? COLOR_COUNT + 1 : COLOR_COUNT;
     for (int gem = 0; gem < count; gem++) {
         Vector2 center = bank_token_center(gem);
@@ -677,11 +690,11 @@ static void draw_players(const App& app)
         text(app, player.name, name_x, r.y + 10, 21, true, own);
         if (app.online.in_game && p < static_cast<int>(app.online.seat_elos.size())) {
             float width = measure(app, player.name, 21, true).x;
-            std::string extra = "Elo " + std::to_string(app.online.seat_elos[p]) + (p == app.online.my_seat ? " (vous)" : "");
+            std::string extra = "Elo " + std::to_string(app.online.seat_elos[p]) + (p == app.online.my_seat ? T(app, " (you)") : "");
             text(app, extra, name_x + width + 10, r.y + 16, 12, false, SOFT_TEXT);
         } else if (player.controller != Controller::Human) {
             float width = measure(app, player.name, 21, true).x;
-            std::string kind = player.controller == Controller::AiEasy ? "(ordinateur facile)" : "(ordinateur moyen)";
+            std::string kind = player.controller == Controller::AiEasy ? "(easy AI)" : "(medium AI)";
             text(app, kind, name_x + width + 10, r.y + 16, 12, false, SOFT_TEXT);
         }
         text(app, std::to_string(player.score()), r.x + r.width - 52, r.y + 6, 34, true, WHITE_TEXT, Align::Right);
@@ -701,18 +714,18 @@ static void draw_players(const App& app)
         }
 
         // Jetons en main
-        text(app, "Jetons", r.x + 20, r.y + 112, 13, false, SOFT_TEXT);
+        text(app, "Tokens", r.x + 20, r.y + 112, 13, false, SOFT_TEXT);
         int kinds = classic ? COLOR_COUNT + 1 : COLOR_COUNT;
         for (int gem = 0; gem < kinds; gem++) {
             int amount = gem == GOLD_INDEX ? player.gold : player.tokens[gem];
             draw_token(app, gem, player_token_center(p, gem), PLAYER_TOKEN_RADIUS, std::to_string(amount), amount == 0);
         }
 
-        std::string info = std::to_string(player.token_count()) + "/10 jetons   "
-                           + std::to_string(player.cards.size()) + " cartes   "
-                           + std::to_string(player.nobles.size()) + " noble(s)";
+        std::string info = T(app, "{0}/10 tokens   {1} cards   {2} noble(s)",
+                             {std::to_string(player.token_count()), std::to_string(player.cards.size()),
+                              std::to_string(player.nobles.size())});
         if (classic) {
-            info += "   " + std::to_string(player.reserved.size()) + " réservée(s)";
+            info += T(app, "   {0} reserved", {std::to_string(player.reserved.size())});
         }
         text(app, info, r.x + 20, r.y + 150, 13, false, SOFT_TEXT);
 
@@ -731,8 +744,8 @@ static void draw_reserved(const App& app)
     int seat = viewer_seat(app);
     const Player& me = game.players()[seat];
     Color own = player_color(app, seat);
-    text(app, "Réservées", 30, 645, 14, true, WHITE_TEXT);
-    text(app, "de", 30, 664, 14, false, WHITE_TEXT);
+    text(app, "Reserved", 30, 645, 14, true, WHITE_TEXT);
+    text(app, "by", 30, 664, 14, false, WHITE_TEXT);
     float size = 16;
     text(app, fit(app, me.name, 110, size, 10), 30, 684, size, true, own);
 
@@ -792,23 +805,23 @@ static void draw_action_panel(const App& app)
 
     std::string title;
     if (app.online.in_game && app.online.move_pending) {
-        title = "Envoi du coup…";
+        title = "Sending move…";
     } else if (app.online.in_game && !human_turn(app)) {
-        title = "Au tour de " + game.current_player().name;
+        title = T(app, "{0}'s turn", {game.current_player().name});
     } else if (!human_turn(app)) {
-        title = game.current_player().name + " réfléchit…";
+        title = T(app, "{0} is thinking…", {game.current_player().name});
     } else if (game.step() == TurnStep::Discard) {
-        title = "Défaussez vos jetons en trop";
+        title = "Discard your extra tokens";
     } else if (game.step() == TurnStep::ChooseNoble) {
-        title = "Choisissez un noble";
+        title = "Choose a noble";
     } else if (total(app.selection) > 0) {
-        title = "Jetons choisis :";
+        title = "Selected tokens:";
     } else if (app.target == Target::Visible || app.target == Target::Reserved) {
-        title = "Carte choisie";
+        title = "Selected card";
     } else if (app.target == Target::Deck) {
-        title = "Pioche du niveau " + std::to_string(app.target_level);
+        title = T(app, "Level {0} deck", {std::to_string(app.target_level)});
     } else {
-        title = "Choisissez une action";
+        title = "Choose an action";
     }
     float size = 15;
     text(app, fit(app, title, r.width - 24, size, 11), r.x + 12, r.y + 12, size, true, WHITE_TEXT);
@@ -822,10 +835,10 @@ static void draw_action_panel(const App& app)
             }
         }
     } else if (human_turn(app) && game.step() == TurnStep::Action && app.target == Target::None) {
-        text(app, "Cliquez des jetons (touches 1 à 5),", r.x + 12, r.y + 40, 13, false, SOFT_TEXT);
-        text(app, "une carte ou une pioche.", r.x + 12, r.y + 58, 13, false, SOFT_TEXT);
-        text(app, "Entrée valide, Échap annule.", r.x + 12, r.y + 76, 13, false, SOFT_TEXT);
-        text(app, "Contour doré = carte achetable", r.x + 12, r.y + 104, 13, false, GOLD_UI);
+        text(app, "Click tokens (keys 1 to 5),", r.x + 12, r.y + 40, 13, false, SOFT_TEXT);
+        text(app, "a card or a deck.", r.x + 12, r.y + 58, 13, false, SOFT_TEXT);
+        text(app, "Enter confirms, Esc cancels.", r.x + 12, r.y + 76, 13, false, SOFT_TEXT);
+        text(app, "Gold outline = card you can buy", r.x + 12, r.y + 104, 13, false, GOLD_UI);
     }
 }
 
@@ -850,24 +863,25 @@ static void draw_tooltip(const App& app, Vector2 mouse)
     for (int level = 1; level <= LEVEL_COUNT && tip.empty(); level++) {
         for (int i = 0; i < static_cast<int>(game.visible(level).size()) && tip.empty(); i++) {
             if (point_in(mouse, card_rect(level, i))) {
-                tip = missing_text(game, game.visible(level)[i]);
+                tip = missing_text(game, game.visible(level)[i], app.lang);
                 if (tip.empty()) {
-                    tip = "Vous pouvez acheter cette carte.";
+                    tip = "You can buy this card.";
                 }
             }
         }
         if (tip.empty() && point_in(mouse, deck_rect(level))) {
-            tip = "Pioche du niveau " + std::to_string(level) + " : " + std::to_string(game.deck_size(level))
-                  + " cartes" + (game.mode() == Mode::Classic ? " (cliquez pour réserver le dessus)" : "");
+            tip = T(app, game.mode() == Mode::Classic ? "Level {0} deck: {1} cards (click to reserve the top card)"
+                                                      : "Level {0} deck: {1} cards",
+                    {std::to_string(level), std::to_string(game.deck_size(level))});
         }
     }
     if (game.mode() == Mode::Classic) {
         const std::vector<Card>& reserved = game.current_player().reserved;
         for (int i = 0; i < static_cast<int>(reserved.size()) && tip.empty(); i++) {
             if (point_in(mouse, reserved_rect(i))) {
-                tip = missing_text(game, reserved[i]);
+                tip = missing_text(game, reserved[i], app.lang);
                 if (tip.empty()) {
-                    tip = "Vous pouvez acheter cette carte.";
+                    tip = "You can buy this card.";
                 }
             }
         }
@@ -879,10 +893,10 @@ static void draw_tooltip(const App& app, Vector2 mouse)
             for (int c = 0; c < COLOR_COUNT; c++) {
                 int gap = game.nobles()[i].cost[c] - bonus[c];
                 if (gap > 0) {
-                    missing += (missing.empty() ? "" : ", ") + std::to_string(gap) + " " + color_name(color_at(c));
+                    missing += (missing.empty() ? "" : ", ") + std::to_string(gap) + " " + color_name(color_at(c), app.lang);
                 }
             }
-            tip = missing.empty() ? "Ce noble vous rendra visite." : "Bonus manquants : " + missing;
+            tip = missing.empty() ? T(app, "This noble will visit you.") : T(app, "Missing bonuses: {0}", {missing});
         }
     }
     if (tip.empty()) {
@@ -927,25 +941,25 @@ static void draw_journal(const App& app)
     DrawRectangle(0, 0, static_cast<int>(BOARD_WIDTH), static_cast<int>(BOARD_HEIGHT), {0, 0, 0, 120});
     rounded(r, 14, {18, 48, 34, 245});
     outline(r, 14, 2, GOLD_UI, 0);
-    text(app, "Journal de la partie", r.x + 24, r.y + 18, 24, true, GOLD_UI);
-    text(app, "J ou clic pour fermer", r.x + r.width - 24, r.y + 26, 13, false, SOFT_TEXT, Align::Right);
+    text(app, "Game log", r.x + 24, r.y + 18, 24, true, GOLD_UI);
+    text(app, "J or click to close", r.x + r.width - 24, r.y + 26, 13, false, SOFT_TEXT, Align::Right);
 
     // En ligne, l'historique vient du serveur (phrases déjà écrites)
     std::vector<std::string> lines;
     std::vector<int> owners;
     if (app.online.in_game) {
-        lines = app.online.log;
+        lines = app.lang == Lang::French && !app.online.log_fr.empty() ? app.online.log_fr : app.online.log;
         owners.assign(lines.size(), -1);
     } else {
         for (const Event& event : game.events()) {
-            lines.push_back(describe_event(game, event));
+            lines.push_back(describe_event(game, event, app.lang));
             owners.push_back(event.player);
         }
     }
     const int shown = 21;
     int first = std::max(0, static_cast<int>(lines.size()) - shown);
     if (lines.empty()) {
-        text(app, "Rien pour l'instant.", r.x + 24, r.y + 70, 15, false, SOFT_TEXT);
+        text(app, "Nothing yet.", r.x + 24, r.y + 70, 15, false, SOFT_TEXT);
     }
     for (int i = first; i < static_cast<int>(lines.size()); i++) {
         float y = r.y + 64 + (i - first) * 23.0f;
@@ -985,9 +999,9 @@ static void draw_curtain(const App& app)
 {
     const Game& game = *app.game;
     DrawRectangle(0, 0, static_cast<int>(BOARD_WIDTH), static_cast<int>(BOARD_HEIGHT), {6, 26, 17, 235});
-    text_centered(app, "Au tour de", 640, 330, 26, false, SOFT_TEXT);
+    text_centered(app, "Next up", 640, 330, 26, false, SOFT_TEXT);
     text_centered(app, game.current_player().name, 640, 385, 56, true, player_color(app, game.current_index()));
-    text_centered(app, "Cliquez ou appuyez sur Entrée pour afficher le plateau", 640, 460, 18, false, SOFT_TEXT);
+    text_centered(app, "Click or press Enter to show the board", 640, 460, 18, false, SOFT_TEXT);
 }
 
 static void draw_results(const App& app, Vector2 mouse)
@@ -997,20 +1011,20 @@ static void draw_results(const App& app, Vector2 mouse)
     Rectangle r = {370, 190, 560, 430};
     rounded(r, 16, {31, 77, 54, 255});
     outline(r, 16, 3, GOLD_UI, 0);
-    text_centered(app, "Fin de partie", 640, 235, 34, true, GOLD_UI);
+    text_centered(app, "Game over", 640, 235, 34, true, GOLD_UI);
     if (game.is_blocked()) {
-        text_centered(app, "(plus aucun joueur ne pouvait jouer)", 640, 268, 13, false, WHITE_TEXT);
+        text_centered(app, "(no player could move anymore)", 640, 268, 13, false, WHITE_TEXT);
     }
     std::vector<int> winners = game.winners();
-    std::string headline = winners.size() == 1 ? "Victoire de " + game.players()[winners[0]].name + " !"
-                                               : std::string("Égalité parfaite !");
+    std::string headline = winners.size() == 1 ? T(app, "{0} wins!", {game.players()[winners[0]].name})
+                                               : T(app, "Perfect tie!");
     text_centered(app, headline, 640, 305, 24, true, WHITE_TEXT);
     for (int i = 0; i < static_cast<int>(game.players().size()); i++) {
         const Player& player = game.players()[i];
         float y = 345 + i * 36.0f;
         text(app, player.name, 440, y, 19, true, player_color(app, i));
         text(app, std::to_string(player.score()) + " pts", 720, y, 19, true, GOLD_UI, Align::Right);
-        text(app, std::to_string(player.cards.size()) + " cartes", 840, y + 2, 15, false, WHITE_TEXT, Align::Right);
+        text(app, T(app, "{0} cards", {std::to_string(player.cards.size())}), 840, y + 2, 15, false, WHITE_TEXT, Align::Right);
         // En ligne : variation d'Elo
         if (app.online.in_game && i < static_cast<int>(app.online.elo_changes.size())) {
             int change = app.online.elo_changes[i];
@@ -1069,7 +1083,7 @@ static void draw_home(const App& app, Vector2 mouse)
         draw_button(app, button, mouse);
     }
     if (!FileExists(SAVE_FILE)) {
-        text_centered(app, "(aucune sauvegarde trouvée)", 640, 662, 13, false, SOFT_TEXT);
+        text_centered(app, "(no saved game found)", 640, 662, 13, false, SOFT_TEXT);
     }
     if (!app.message.empty()) {
         text_centered(app, app.message, 640, 700, 15, false, app.message_is_error ? ERROR_TEXT : SOFT_TEXT);
@@ -1092,15 +1106,15 @@ static void draw_setup(const App& app, Vector2 mouse)
 {
     const Setup& setup = app.setup;
     draw_felt();
-    text(app, "Nouvelle partie", 200, 40, 40, true, GOLD_UI);
+    text(app, "New game", 200, 40, 40, true, GOLD_UI);
     text(app, "Mode", 200, 128, 19, true, WHITE_TEXT);
-    text(app, setup.mode == Mode::Classic ? "Avec or et réservation (règles complètes)"
-                                          : "Sans or ni réservation (plus court)",
+    text(app, setup.mode == Mode::Classic ? "With gold and reservations (full rules)"
+                                          : "No gold, no reservations (shorter)",
          800, 130, 14, false, SOFT_TEXT);
-    text(app, "Joueurs", 200, 198, 19, true, WHITE_TEXT);
-    text(app, "Nom", 200, 252, 14, false, SOFT_TEXT);
-    text(app, "Couleur", 530, 252, 14, false, SOFT_TEXT);
-    text(app, "Joué par", 790, 252, 14, false, SOFT_TEXT);
+    text(app, "Players", 200, 198, 19, true, WHITE_TEXT);
+    text(app, "Name", 200, 252, 14, false, SOFT_TEXT);
+    text(app, "Colour", 530, 252, 14, false, SOFT_TEXT);
+    text(app, "Played by", 790, 252, 14, false, SOFT_TEXT);
 
     for (const Button& button : setup_buttons(setup)) {
         if (button.id == ButtonId::NameBox) {
@@ -1120,7 +1134,7 @@ static void draw_setup(const App& app, Vector2 mouse)
         }
     }
     if (setup.focused_name >= 0) {
-        text(app, "Tapez le nom, puis Entrée.", 200, 650, 14, false, SOFT_TEXT);
+        text(app, "Type the name, then Enter.", 200, 650, 14, false, SOFT_TEXT);
     }
 }
 
@@ -1149,12 +1163,12 @@ static void draw_message_line(const App& app, float y)
 static void draw_login(const App& app, Vector2 mouse)
 {
     draw_felt();
-    text_centered(app, "Jouer en ligne", 640, 150, 44, true, GOLD_UI);
-    text_centered(app, "Connectez-vous avec Discord ou Google : aucun mot de passe n'est demandé ni stocké.", 640,
+    text_centered(app, "Play online", 640, 150, 44, true, GOLD_UI);
+    text_centered(app, "Sign in with Discord or Google: no password is asked or stored.", 640,
                   215, 17, false, SOFT_TEXT);
-    text_centered(app, "Serveur : " + app.net.server(), 640, 250, 14, false, alpha(SOFT_TEXT, 0.7f));
+    text_centered(app, T(app, "Server: {0}", {app.net.server()}), 640, 250, 14, false, alpha(SOFT_TEXT, 0.7f));
     if (!app.online.login_id.empty()) {
-        text_centered(app, "Terminez la connexion dans votre navigateur…", 640, 545, 18, true, WHITE_TEXT);
+        text_centered(app, "Finish signing in in your browser…", 640, 545, 18, true, WHITE_TEXT);
     }
     draw_buttons_of(app, login_buttons(app), mouse);
     draw_message_line(app, 660);
@@ -1163,8 +1177,8 @@ static void draw_login(const App& app, Vector2 mouse)
 static void draw_pseudo(const App& app, Vector2 mouse)
 {
     draw_felt();
-    text_centered(app, "Choisissez votre pseudo", 640, 200, 40, true, GOLD_UI);
-    text_centered(app, "3 à 16 caractères : lettres, chiffres, espaces, - et _. Il sera visible dans le classement.",
+    text_centered(app, "Choose your username", 640, 200, 40, true, GOLD_UI);
+    text_centered(app, "3 to 16 characters: letters, digits, spaces, - and _. It will be shown on the leaderboard.",
                   640, 270, 16, false, SOFT_TEXT);
     draw_buttons_of(app, pseudo_buttons(app), mouse);
     draw_message_line(app, 520);
@@ -1174,13 +1188,13 @@ static void draw_online(const App& app, Vector2 mouse)
 {
     const OnlineState& online = app.online;
     draw_felt();
-    text(app, "En ligne", 200, 50, 40, true, GOLD_UI);
+    text(app, "Online", 200, 50, 40, true, GOLD_UI);
     // Carte du compte
     Rectangle card = {760, 50, 320, 110};
     rounded(card, 12, {0, 0, 0, 90});
     text(app, online.pseudo, card.x + 20, card.y + 14, 24, true, WHITE_TEXT);
     text(app, "Elo " + std::to_string(online.elo), card.x + 20, card.y + 50, 20, true, GOLD_UI);
-    text(app, std::to_string(online.games) + " parties, " + std::to_string(online.wins) + " victoires", card.x + 20,
+    text(app, T(app, "{0} games, {1} wins", {std::to_string(online.games), std::to_string(online.wins)}), card.x + 20,
          card.y + 80, 15, false, SOFT_TEXT);
 
     if (!online.offer_channel.empty()) {
@@ -1190,16 +1204,16 @@ static void draw_online(const App& app, Vector2 mouse)
         outline(box, 16, 3, GOLD_UI, 0);
         text_centered(app, "Discord", 640, 275, 18, false, SOFT_TEXT);
         float size = 24;
-        text_centered(app, fit(app, "Salon vocal « " + online.offer_name + " »", 480, size, 14), 640, 310, size, true,
+        text_centered(app, fit(app, T(app, "Voice channel “{0}”", {online.offer_name}), 480, size, 14), 640, 310, size, true,
                       GOLD_UI);
-        text_centered(app, "Choisissez la partie : le salon sera limité au nombre de joueurs.", 640, 348, 15, false,
+        text_centered(app, "Choose the game: the channel will be limited to the number of players.", 640, 348, 15, false,
                       WHITE_TEXT);
         draw_buttons_of(app, online_buttons(app), mouse);
         draw_message_line(app, 640);
         return;
     }
-    text(app, "Créer une partie", 200, 270, 22, true, WHITE_TEXT);
-    text(app, "Rejoindre avec un code", 770, 270, 22, true, WHITE_TEXT);
+    text(app, "Create a game", 200, 270, 22, true, WHITE_TEXT);
+    text(app, "Join with a code", 770, 270, 22, true, WHITE_TEXT);
     draw_buttons_of(app, online_buttons(app), mouse);
     draw_message_line(app, 640);
 }
@@ -1208,25 +1222,26 @@ static void draw_lobby(const App& app, Vector2 mouse)
 {
     const OnlineState& online = app.online;
     draw_felt();
-    text_centered(app, "Salon", 640, 70, 26, false, SOFT_TEXT);
+    text_centered(app, "Lobby", 640, 70, 26, false, SOFT_TEXT);
     text_centered(app, online.lobby_code, 640, 140, 76, true, GOLD_UI);
-    text_centered(app, "Partie " + online.lobby_mode + " — " + std::to_string(online.lobby_members.size()) + " / "
-                           + std::to_string(online.lobby_seats) + " joueurs. Donnez ce code à vos amis.",
+    text_centered(app, T(app, "{0} — {1} / {2} players. Give this code to your friends.",
+                         {T(app, online.lobby_mode == "classique" ? "Classic game" : "Quick game"),
+                          std::to_string(online.lobby_members.size()), std::to_string(online.lobby_seats)}),
                   640, 215, 16, false, SOFT_TEXT);
     for (int i = 0; i < online.lobby_seats; i++) {
         Rectangle row = {440, 320.0f + i * 62, 400, 52};
         rounded(row, 10, {0, 0, 0, static_cast<unsigned char>(i < static_cast<int>(online.lobby_members.size()) ? 100 : 40)});
         if (i < static_cast<int>(online.lobby_members.size())) {
             DrawCircleV({row.x + 26, row.y + 26}, 9, PLAYER_COLORS[i % PLAYER_COLOR_COUNT].color);
-            text(app, online.lobby_members[i] + (i == 0 ? "  (hôte)" : ""), row.x + 48, row.y + 14, 20, true, WHITE_TEXT);
+            text(app, online.lobby_members[i] + (i == 0 ? "  (host)" : ""), row.x + 48, row.y + 14, 20, true, WHITE_TEXT);
             text(app, "Elo " + std::to_string(online.lobby_elos[i]), row.x + row.width - 16, row.y + 16, 17, false,
                  GOLD_UI, Align::Right);
         } else {
-            text(app, "place libre", row.x + 48, row.y + 15, 18, false, alpha(SOFT_TEXT, 0.6f));
+            text(app, "free seat", row.x + 48, row.y + 15, 18, false, alpha(SOFT_TEXT, 0.6f));
         }
     }
     if (online.lobby_host != online.account) {
-        text_centered(app, "En attente de l'hôte…", 640, 627, 18, false, SOFT_TEXT);
+        text_centered(app, "Waiting for the host…", 640, 627, 18, false, SOFT_TEXT);
     }
     draw_buttons_of(app, lobby_buttons(app), mouse);
     draw_message_line(app, 760);
@@ -1239,12 +1254,12 @@ static void draw_update(const App& app, Vector2 mouse)
     Rectangle r = {290, 200, 700, 410};
     rounded(r, 18, {0, 0, 0, 110});
     outline(r, 18, 3, GOLD_UI, 0);
-    text_centered(app, "Mise à jour nécessaire", 640, 260, 38, true, GOLD_UI);
-    text_centered(app, "Cette version de Gemspire (" + std::string(SPLENDOR_VERSION) + ") n'est plus acceptée", 640,
+    text_centered(app, "Update required", 640, 260, 38, true, GOLD_UI);
+    text_centered(app, T(app, "This version of Gemspire ({0}) is no longer accepted", {SPLENDOR_VERSION}), 640,
                   330, 20, false, WHITE_TEXT);
-    text_centered(app, "par le serveur. Téléchargez la version " + app.min_version + " ou plus récente.", 640, 362,
+    text_centered(app, T(app, "by the server. Download version {0} or newer.", {app.min_version}), 640, 362,
                   20, false, WHITE_TEXT);
-    text_centered(app, "Votre partie locale en cours est sauvegardée.", 640, 410, 16, false, SOFT_TEXT);
+    text_centered(app, "Your current local game is saved.", 640, 410, 16, false, SOFT_TEXT);
     draw_buttons_of(app, visible_buttons(app), mouse);
 }
 
@@ -1252,14 +1267,14 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
 {
     const OnlineState& online = app.online;
     draw_felt();
-    text_centered(app, "Classement", 640, 60, 40, true, GOLD_UI);
+    text_centered(app, "Leaderboard", 640, 60, 40, true, GOLD_UI);
     Rectangle table = {290, 110, 700, 570};
     rounded(table, 14, {0, 0, 0, 90});
     text(app, "#", table.x + 24, table.y + 16, 15, true, SOFT_TEXT);
     text(app, "Joueur", table.x + 70, table.y + 16, 15, true, SOFT_TEXT);
     text(app, "Elo", table.x + 470, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
-    text(app, "Parties", table.x + 570, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
-    text(app, "Victoires", table.x + 676, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
+    text(app, "Games", table.x + 570, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
+    text(app, "Wins", table.x + 676, table.y + 16, 15, true, SOFT_TEXT, Align::Right);
     int count = std::min(static_cast<int>(online.board_names.size()), 20);
     for (int i = 0; i < count; i++) {
         float y = table.y + 50 + i * 25.5f;
@@ -1272,7 +1287,7 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
         text(app, std::to_string(online.board_wins[i]), table.x + 676, y, 16, false, color, Align::Right);
     }
     if (count == 0) {
-        text_centered(app, app.net.pending() > 0 ? "Chargement…" : "Personne n'a encore joué en ligne.", 640, 380, 18,
+        text_centered(app, app.net.pending() > 0 ? "Loading…" : "Nobody has played online yet.", 640, 380, 18,
                       false, SOFT_TEXT);
     }
     draw_buttons_of(app, visible_buttons(app), mouse);
@@ -1297,7 +1312,7 @@ void draw_app(const App& app, Vector2 mouse)
     }
 }
 
-std::string missing_text(const Game& game, const Card& card)
+std::string missing_text(const Game& game, const Card& card, Lang lang)
 {
     const Player& me = game.current_player();
     if (missing_tokens(me.bonuses(), me.tokens, card) <= me.gold) {
@@ -1308,12 +1323,12 @@ std::string missing_text(const Game& game, const Card& card)
     for (int c = 0; c < COLOR_COUNT; c++) {
         int gap = to_pay[c] - me.tokens[c];
         if (gap > 0) {
-            text_out += (text_out.empty() ? "" : ", ") + std::to_string(gap) + " " + color_name(color_at(c));
+            text_out += (text_out.empty() ? "" : ", ") + std::to_string(gap) + " " + color_name(color_at(c), lang);
         }
     }
-    text_out = "Il manque " + text_out;
+    text_out = tr(lang, "Missing {0}", {text_out});
     if (me.gold > 0) {
-        text_out += " (vous avez " + std::to_string(me.gold) + " or)";
+        text_out += tr(lang, " (you have {0} gold)", {std::to_string(me.gold)});
     }
     return text_out;
 }

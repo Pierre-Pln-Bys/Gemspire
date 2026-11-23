@@ -96,7 +96,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertFalse(api.unban("Tricheur")["banned"])
         with self.assertRaises(ApiError) as caught:
             api.ban("Personne", 1)
-        self.assertEqual(str(caught.exception), "Joueur introuvable.")
+        self.assertEqual(str(caught.exception), "Player not found.")
         with self.assertRaises(ApiError):
             api.cancel_game(12345)
         api.delete_account(pseudo="Tricheur")
