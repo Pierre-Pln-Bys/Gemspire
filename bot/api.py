@@ -86,6 +86,10 @@ class SplendorApi:
     def unban(self, pseudo):
         return self._request("POST", "/bot/unban", {"pseudo": pseudo})
 
+    def end_season(self):
+        """Termine la saison : {"ended", "season", "top": [{"pseudo", "elo"}, ...]}"""
+        return self._request("POST", "/bot/season/end", {})
+
     def cancel_game(self, game_id):
         return self._request("POST", "/bot/cancel-game", {"game_id": int(game_id)})
 

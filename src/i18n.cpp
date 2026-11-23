@@ -354,6 +354,33 @@ static const std::map<std::string, std::string>& french_table()
         {"Account not linked: sign in to Gemspire with Discord first.",
          "Compte non lié : connectez-vous d'abord à Gemspire avec Discord."},
 
+        // --- Spectateurs
+        {"Watch live games", "Regarder des parties"},
+        {"Games in progress", "Parties en cours"},
+        {"Watch", "Regarder"},
+        {"Stop watching", "Arrêter de regarder"},
+        {"No game in progress right now.", "Aucune partie en cours pour le moment."},
+
+        // --- Mes parties et rediffusions
+        {"Live games", "En cours"},
+        {"My games", "Mes parties"},
+        {"Replay", "Revoir"},
+        {"Exit replay", "Quitter"},
+        {"No online game yet.", "Pas encore de partie en ligne."},
+        {"No replay for this game.", "Pas de rediffusion pour cette partie."},
+        {"Damaged replay.", "Rediffusion abîmée."},
+
+        // --- Saisons
+        {"Leaderboard — Season {0}", "Classement — saison {0}"},
+        {"Season {0}", "Saison {0}"},
+
+        // --- Recherche de partie
+        {"Find an opponent", "Trouver un adversaire"},
+        {"Finding an opponent…", "Recherche d'un adversaire…"},
+        {"Waiting: {0} s · {1} player(s) searching", "Attente : {0} s · {1} joueur(s) en recherche"},
+        {"An opponent with a close Elo; the range widens while you wait.",
+         "Un adversaire d'Elo proche ; l'écart accepté grandit pendant l'attente."},
+
         // --- Rich Presence Discord
         {"In a lobby ({0})", "Dans un salon ({0})"},
         {"Waiting for players", "En attente de joueurs"},

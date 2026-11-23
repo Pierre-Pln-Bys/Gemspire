@@ -223,10 +223,11 @@ std::string page_home(const SiteInfo& site, Lang lang)
     return layout(site, lang, T(lang, "Home", "Accueil"), "/", body.str());
 }
 
-std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players)
+std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players, int season)
 {
     std::ostringstream body;
     body << "<h1>" << T(lang, "Leaderboard", "Classement") << "</h1><p class=\"soft\">"
+         << T(lang, "Season ", "Saison ") << season << " · "
          << T(lang, "Elo ranking of online games (updated after every finished game).",
               "Classement Elo des parties en ligne (mis à jour à chaque partie terminée).")
          << "</p><div class=\"card\">";

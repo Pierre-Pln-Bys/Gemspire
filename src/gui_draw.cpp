@@ -51,7 +51,7 @@ bool point_in(Vector2 point, Rectangle rect)
 // Vrai si celui qui est devant l'écran peut jouer maintenant
 static bool human_turn(const App& app)
 {
-    if (!app.game || app.game->is_over()) {
+    if (!app.game || app.game->is_over() || app.replay.active) {
         return false;
     }
     if (app.online.in_game) {
@@ -125,13 +125,31 @@ static std::vector<Button> board_buttons(const App& app)
     const Game& game = *app.game;
 
     bool online = app.online.in_game;
+    if (app.replay.active) {
+        // Rediffusion : quitter, action précédente, lecture / pause, action suivante
+        add(buttons, ButtonId::ReplayExit, "Exit replay", {790, 8, 170, 30});
+        add(buttons, ButtonId::ReplayPrevious, "<", {970, 8, 60, 30}, 0, app.replay.step > 0);
+        add(buttons, ButtonId::ReplayPlay, app.replay.playing ? "Pause" : "Play", {1040, 8, 110, 30}, 0,
+            app.replay.step < app.replay.count, app.replay.playing);
+        add(buttons, ButtonId::ReplayNext, ">", {1160, 8, 100, 30}, 0, app.replay.step < app.replay.count);
+        return buttons;
+    }
     if (game.is_over()) {
-        if (online) {
+        if (online && app.online.replay_id > 0) {
+            add(buttons, ButtonId::BackOnline, "Back to online menu", {410, 560, 250, 44});
+            add(buttons, ButtonId::ReplayGame, "Replay", {680, 560, 190, 44}, app.online.replay_id);
+        } else if (online) {
             add(buttons, ButtonId::BackOnline, "Back to online menu", {490, 560, 300, 44});
         } else {
             add(buttons, ButtonId::Replay, "Play again", {490, 560, 140, 44});
             add(buttons, ButtonId::Menu, "Menu", {650, 560, 140, 44});
         }
+        return buttons;
+    }
+    if (online && app.online.my_seat < 0) {
+        // Spectateur : on regarde seulement (ni abandon, ni chat)
+        add(buttons, ButtonId::BackOnline, "Stop watching", {790, 8, 360, 30});
+        add(buttons, ButtonId::Journal, "Log", {1158, 8, 102, 30}, 0, true, app.journal_open);
         return buttons;
     }
     if (online) {
@@ -254,6 +272,9 @@ static std::vector<Button> online_buttons(const App& app)
     add(buttons, ButtonId::ShowAchievements,
         T(app, "Achievements ({0}/{1})", {std::to_string(online.achievements.size()), std::to_string(ACHIEVEMENT_COUNT)}),
         {760, 170, 320, 36});
+    add(buttons, ButtonId::ShowLive, "Live games", {760, 214, 155, 36});
+    add(buttons, ButtonId::ShowHistory, "My games", {925, 214, 155, 36});
+    add(buttons, ButtonId::FindMatch, "Find an opponent", {770, 470, 310, 50}, 0, app.net.pending() == 0);
     add(buttons, ButtonId::ShowLeaderboard, "Leaderboard", {200, 680, 190, 46});
     add(buttons, ButtonId::ShowFriends, "Friends", {410, 680, 190, 46});
     add(buttons, ButtonId::Logout, "Sign out", {680, 680, 190, 46});
@@ -289,6 +310,31 @@ std::vector<Button> visible_buttons(const App& app)
         add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
         return buttons;
     }
+    case Screen::Live: {
+        std::vector<Button> buttons;
+        int count = std::min(static_cast<int>(app.online.live_games.size()), 8);
+        for (int i = 0; i < count; i++) {
+            add(buttons, ButtonId::WatchGame, "Watch", {935, 128.0f + i * 66, 125, 40}, app.online.live_games[i].id);
+        }
+        add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
+        return buttons;
+    }
+    case Screen::Matchmaking: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::CancelMatch, "Cancel", {540, 560, 200, 46});
+        return buttons;
+    }
+    case Screen::History: {
+        std::vector<Button> buttons;
+        int count = std::min(static_cast<int>(app.online.past_games.size()), HISTORY_SHOWN);
+        for (int i = 0; i < count; i++) {
+            if (app.online.past_games[i].replay) {
+                add(buttons, ButtonId::ReplayGame, "Replay", {955, 122.0f + i * 54, 110, 38}, app.online.past_games[i].id);
+            }
+        }
+        add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
+        return buttons;
+    }
     case Screen::Achievements: {
         std::vector<Button> buttons;
         add(buttons, ButtonId::BackOnline, "Back", {540, 720, 200, 46});
@@ -305,6 +351,8 @@ std::vector<Button> visible_buttons(const App& app)
             float y = 236.0f + i * 50;
             if (line.relation == "incoming") {
                 add(buttons, ButtonId::FriendAccept, "Accept", {800, y, 125, 38}, i);
+            } else if (line.game_id > 0) {
+                add(buttons, ButtonId::WatchGame, "Watch", {800, y, 125, 38}, line.game_id);
             }
             add(buttons, ButtonId::FriendRemove,
                 line.relation == "friend" ? "Remove" : line.relation == "incoming" ? "Decline" : "Cancel",
@@ -860,7 +908,7 @@ static void draw_action_panel(const App& app)
     std::string title;
     if (app.online.in_game && app.online.move_pending) {
         title = "Sending move…";
-    } else if (app.online.in_game && !human_turn(app)) {
+    } else if ((app.online.in_game || app.replay.active) && !human_turn(app)) {
         title = T(app, "{0}'s turn", {game.current_player().name});
     } else if (!human_turn(app)) {
         title = T(app, "{0} is thinking…", {game.current_player().name});
@@ -1188,6 +1236,89 @@ static void draw_results(const App& app, Vector2 mouse)
 
 static void draw_buttons_of(const App& app, const std::vector<Button>& buttons, Vector2 mouse);  // plus bas
 
+static void draw_message_line(const App& app, float y);  // plus bas
+
+// Recherche de partie : attente d'un adversaire d'Elo proche
+static void draw_matchmaking(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt();
+    text_centered(app, "Finding an opponent…", 640, 250, 40, true, GOLD_UI);
+    text_centered(app, online.create_mode == Mode::Classic ? "Classic game" : "Quick game", 640, 310, 20, false,
+                  WHITE_TEXT);
+    text_centered(app, T(app, "Waiting: {0} s · {1} player(s) searching",
+                         {std::to_string(online.match_waited), std::to_string(online.match_players)}),
+                  640, 360, 17, false, SOFT_TEXT);
+    text_centered(app, "An opponent with a close Elo; the range widens while you wait.", 640, 400, 15, false,
+                  SOFT_TEXT);
+    // Petit indicateur qui tourne
+    for (int i = 0; i < 8; i++) {
+        float angle = static_cast<float>(GetTime() * 3 + i * 0.785);
+        DrawCircleV({640 + 26 * std::cos(angle), 480 + 26 * std::sin(angle)}, 4 + i * 0.6f, alpha(GOLD_UI, 0.2f + i * 0.1f));
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+    draw_message_line(app, 640);
+}
+
+// Mes dernières parties en ligne, avec leur rediffusion
+static void draw_history(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    text_centered(app, "My games", 640, 60, 40, true, GOLD_UI);
+    Rectangle table = {200, 110, 880, 560};
+    rounded(table, 14, {0, 0, 0, 90});
+    int count = std::min(static_cast<int>(app.online.past_games.size()), HISTORY_SHOWN);
+    for (int i = 0; i < count; i++) {
+        const PastGame& past = app.online.past_games[i];
+        float y = 120.0f + i * 54;
+        Color place = past.place == 0 ? GOLD_UI : WHITE_TEXT;
+        text(app, "#" + std::to_string(past.place + 1), 225, y + 10, 20, true, place);
+        std::string title = T(app, past.mode == "classique" ? "Classic game" : "Quick game") + " · "
+                            + std::to_string(past.score) + " pts · " + (past.elo_change >= 0 ? "+" : "")
+                            + std::to_string(past.elo_change) + " Elo";
+        text(app, title, 280, y + 4, 16, true, WHITE_TEXT);
+        std::string players;
+        for (const std::string& player : past.players) {
+            players += (players.empty() ? "" : ", ") + player;
+        }
+        float size = 14;
+        text(app, fit(app, players, 650, size, 10), 280, y + 26, size, false, SOFT_TEXT);
+    }
+    if (count == 0) {
+        text_centered(app, app.net.pending() > 0 ? "Loading…" : "No online game yet.", 640, 380, 18, false, SOFT_TEXT);
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+    draw_message_line(app, 760);
+}
+
+// Parties en cours à regarder
+static void draw_live(const App& app, Vector2 mouse)
+{
+    draw_felt();
+    text_centered(app, "Games in progress", 640, 60, 40, true, GOLD_UI);
+    Rectangle table = {200, 110, 880, 560};
+    rounded(table, 14, {0, 0, 0, 90});
+    int count = std::min(static_cast<int>(app.online.live_games.size()), 8);
+    for (int i = 0; i < count; i++) {
+        const LiveGame& live = app.online.live_games[i];
+        float y = 120.0f + i * 66;
+        std::string title = T(app, live.mode == "classique" ? "Classic game" : "Quick game") + " · "
+                            + T(app, "Round {0}", {std::to_string(live.round)});
+        text(app, title, 230, y + 6, 16, true, GOLD_UI);
+        std::string players;
+        for (const std::string& player : live.players) {
+            players += (players.empty() ? "" : "   ") + player;
+        }
+        float size = 16;
+        text(app, fit(app, players, 680, size, 11), 230, y + 30, size, false, WHITE_TEXT);
+    }
+    if (count == 0) {
+        text_centered(app, app.net.pending() > 0 ? "Loading…" : "No game in progress right now.", 640, 380, 18, false,
+                      SOFT_TEXT);
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+}
+
 // Liste des succès : débloqués en or, les autres grisés
 static void draw_achievements(const App& app, Vector2 mouse)
 {
@@ -1372,6 +1503,16 @@ static void draw_online(const App& app, Vector2 mouse)
     text(app, "Elo " + std::to_string(online.elo), card.x + 20, card.y + 50, 20, true, GOLD_UI);
     text(app, T(app, "{0} games, {1} wins", {std::to_string(online.games), std::to_string(online.wins)}), card.x + 20,
          card.y + 80, 15, false, SOFT_TEXT);
+    // Saison en cours et badges des saisons passées (top 10)
+    if (online.season > 0) {
+        text(app, T(app, "Season {0}", {std::to_string(online.season)}), card.x + card.width - 20, card.y + 18, 14, false,
+             SOFT_TEXT, Align::Right);
+    }
+    if (!online.badges.empty()) {
+        float size = 14;
+        text(app, fit(app, online.badges, 150, size, 10), card.x + card.width - 20, card.y + 54, size, true, GOLD_UI,
+             Align::Right);
+    }
 
     if (!online.offer_channel.empty()) {
         // Fenêtre de proposition : le bot a créé un salon vocal pour ce joueur
@@ -1443,7 +1584,9 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
 {
     const OnlineState& online = app.online;
     draw_felt();
-    text_centered(app, "Leaderboard", 640, 60, 40, true, GOLD_UI);
+    text_centered(app, online.season > 0 ? T(app, "Leaderboard — Season {0}", {std::to_string(online.season)})
+                                         : T(app, "Leaderboard"),
+                  640, 60, 40, true, GOLD_UI);
     Rectangle table = {290, 110, 700, 570};
     rounded(table, 14, {0, 0, 0, 90});
     text(app, "#", table.x + 24, table.y + 16, 15, true, SOFT_TEXT);
@@ -1522,6 +1665,9 @@ void draw_app(const App& app, Vector2 mouse)
     case Screen::Leaderboard: draw_leaderboard(app, mouse); break;
     case Screen::Friends: draw_friends(app, mouse); break;
     case Screen::Achievements: draw_achievements(app, mouse); break;
+    case Screen::Live: draw_live(app, mouse); break;
+    case Screen::History: draw_history(app, mouse); break;
+    case Screen::Matchmaking: draw_matchmaking(app, mouse); break;
     case Screen::Update: draw_update(app, mouse); break;
     case Screen::Board:
         if (app.game) {

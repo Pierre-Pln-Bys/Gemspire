@@ -111,6 +111,9 @@ Depuis l'accueil, « Jouer en ligne » :
    rapides, sourdine d'un joueur. **Amis** (menu en ligne) : ajout par
    pseudo, statut en ligne / en partie. **Succès** : 11 à débloquer, liste
    dans le menu en ligne.
+7. **Compétition** : « Trouver un adversaire » (Elo proche), « En cours »
+   pour regarder une partie, « Mes parties » pour revoir les siennes coup par
+   coup, saisons classées avec badges pour le top 10.
 
 **Discord** :
 

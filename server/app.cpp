@@ -89,7 +89,7 @@ static bool version_allowed(const std::string& version, const std::string& minim
 // ne sont pas concernés.
 static bool route_needs_version(const std::string& path)
 {
-    const char* prefixes[] = {"/me", "/lobbies", "/games/", "/friends", "/auth/poll", "/auth/logout", "/config"};
+    const char* prefixes[] = {"/me", "/lobbies", "/games/", "/friends", "/replays/", "/matchmaking", "/auth/poll", "/auth/logout", "/config"};
     for (const char* prefix : prefixes) {
         if (path.compare(0, std::string(prefix).size(), prefix) == 0) {
             return true;
@@ -123,6 +123,16 @@ static std::string date_text(long long seconds)
 }
 
 // Compte vu par le bot (commandes /profil, /historique, modération)
+// Badges de saison : [{"season": 1, "rank": 2}, ...]
+static json badges_json(Store& store, int id)
+{
+    json list = json::array();
+    for (const SeasonBadge& badge : store.badges(id)) {
+        list.push_back({{"season", badge.season}, {"rank", badge.rank}});
+    }
+    return list;
+}
+
 static json account_json(Store& store, int id)
 {
     Account account;
@@ -137,6 +147,7 @@ static json account_json(Store& store, int id)
             {"wins", account.wins},
             {"rank", store.rank_of(id)},
             {"achievements", store.achievements(id).size()},
+            {"badges", badges_json(store, id)},
             {"banned", account.banned()},
             {"banned_until", account.banned_until},
             {"ban_reason", account.ban_reason}};
@@ -568,7 +579,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         reply(response, 200, {{"id", account.id}, {"pseudo", account.pseudo}, {"provider", account.provider},
                               {"elo", account.elo}, {"games", account.games}, {"wins", account.wins},
-                              {"achievements", store_.achievements(id)}});
+                              {"achievements", store_.achievements(id)}, {"badges", badges_json(store_, id)},
+                              {"season", store_.current_season()}});
     });
 
     // Notifications du jeu (attente longue) ; elles servent aussi de présence
@@ -619,9 +631,91 @@ void ServerApp::setup_routes(httplib::Server& server)
         json list = json::array();
         for (const Friend& entry : store_.friends(id)) {
             list.push_back({{"pseudo", entry.pseudo}, {"elo", entry.elo}, {"relation", entry.relation},
-                            {"status", entry.relation == "friend" ? rooms_.status_of(entry.account) : "unknown"}});
+                            {"status", entry.relation == "friend" ? rooms_.status_of(entry.account) : "unknown"},
+                            {"game_id", entry.relation == "friend" ? rooms_.playing_game(entry.account) : 0}});
         }
         reply(response, 200, {{"friends", list}});
+    });
+
+    // --- Recherche de partie (adversaire d'Elo proche)
+    server.Post(R"(/matchmaking/(join|leave))", [this](const httplib::Request& request, httplib::Response& response) {
+        Seat seat;
+        std::string error;
+        json body;
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        if (!seat_for(id, seat, error)) {
+            reply_error(response, 403, error);
+            return;
+        }
+        if (request.matches[1] == "leave") {
+            rooms_.leave_queue(id);
+        } else {
+            Mode mode = parse_body(request, body) && body.is_object()
+                                && body.value("mode", std::string("classique")) == "rapide"
+                            ? Mode::Quick
+                            : Mode::Classic;
+            rooms_.join_queue(seat, mode);
+        }
+        json state;
+        rooms_.queue_json(id, state);
+        reply(response, 200, state);
+    });
+
+    server.Get("/matchmaking", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json state;
+        rooms_.queue_json(id, state);
+        reply(response, 200, state);
+    });
+
+    // Mes dernières parties (avec rediffusion) et rediffusion d'une partie
+    server.Get("/me/games", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json games = json::array();
+        for (const HistoryEntry& entry : store_.history(id, 15)) {
+            games.push_back({{"id", entry.game_id}, {"mode", entry.mode}, {"finished_at", entry.finished_at},
+                             {"place", entry.place}, {"score", entry.score}, {"elo_change", entry.elo_change},
+                             {"cancelled", entry.cancelled}, {"replay", entry.has_replay && !entry.cancelled},
+                             {"players", entry.players}});
+        }
+        reply(response, 200, {{"games", games}});
+    });
+
+    server.Get(R"(/replays/(\d{1,9}))", [this](const httplib::Request& request, httplib::Response& response) {
+        if (authenticate(request) == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        std::string replay = store_.replay(std::stoi(request.matches[1]));
+        json body = json::parse(replay, nullptr, false);
+        if (replay.empty() || body.is_discarded()) {
+            reply_error(response, 404, "No replay for this game.");
+            return;
+        }
+        reply(response, 200, body);
+    });
+
+    // Parties en cours à regarder (mode spectateur : GET /games/ID sans être assis)
+    server.Get("/games/live", [this](const httplib::Request& request, httplib::Response& response) {
+        if (authenticate(request) == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json games;
+        rooms_.live_games_json(games);
+        reply(response, 200, {{"games", games}});
     });
 
     server.Post(R"(/friends/(add|remove))", [this](const httplib::Request& request, httplib::Response& response) {
@@ -1012,6 +1106,23 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"offered", true}});
     });
 
+    // Fin de saison (/mod new-season) : classement archivé, Elo rapprochés de 1000
+    server.Post("/bot/season/end", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Invalid bot key.");
+            return;
+        }
+        int ended = store_.current_season();
+        json top = json::array();
+        for (const Account& account : store_.end_season()) {
+            if (top.size() < 10) {
+                top.push_back({{"pseudo", account.pseudo}, {"elo", account.elo}});
+            }
+        }
+        std::cout << "Saison " << ended << " terminée" << std::endl;
+        reply(response, 200, {{"ended", ended}, {"season", store_.current_season()}, {"top", top}});
+    });
+
     // Rôles de rang : Elo des joueurs liés à Discord
     server.Get("/bot/ranks", [this](const httplib::Request& request, httplib::Response& response) {
         if (!bot_allowed(request)) {
@@ -1088,7 +1199,8 @@ void ServerApp::setup_routes(httplib::Server& server)
     });
     auto leaderboard_page = [this, site, lang_of](Lang fallback) {
         return [this, site, lang_of, fallback](const httplib::Request& request, httplib::Response& response) {
-            reply_site(response, page_leaderboard(site, lang_of(request, fallback), store_.leaderboard(100)));
+            reply_site(response, page_leaderboard(site, lang_of(request, fallback), store_.leaderboard(100),
+                                                       store_.current_season()));
         };
     };
     // /leaderboard : page pour un navigateur (il demande du HTML), JSON pour le
@@ -1103,7 +1215,7 @@ void ServerApp::setup_routes(httplib::Server& server)
             list.push_back({{"pseudo", account.pseudo}, {"elo", account.elo}, {"games", account.games},
                             {"wins", account.wins}});
         }
-        reply(response, 200, {{"players", list}});
+        reply(response, 200, {{"players", list}, {"season", store_.current_season()}});
     });
     server.Get("/classement", leaderboard_page(Lang::French));
     auto terms_page = [site, lang_of](Lang fallback) {

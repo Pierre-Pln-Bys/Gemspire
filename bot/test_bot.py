@@ -16,7 +16,7 @@ from api import SplendorApi  # noqa: E402
 import tempfile  # noqa: E402
 
 from api import ApiError  # noqa: E402
-from logic import (TempChannel, rank_role_changes, rank_tier, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
+from logic import (TempChannel, format_podium, rank_role_changes, rank_tier, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
                    format_profile, format_ranking, frequent_opponents, is_create_channel, load_state, offer_message,
                    save_state, should_delete, temp_channel_name)
 
@@ -70,6 +70,17 @@ class LogicTests(unittest.TestCase):
         self.assertEqual(rank_role_changes(["@everyone", "Joueur"], 1120), ("Sapphire", []))
         self.assertEqual(rank_role_changes(["Ruby", "Joueur"], 1120), ("Sapphire", ["Ruby"]))
         self.assertEqual(rank_role_changes(["Sapphire"], 1120), (None, []))
+
+    def test_profile_extras(self):
+        text = format_profile({"found": True, "pseudo": "A", "elo": 1100, "games": 4, "wins": 2, "achievements": 3,
+                               "badges": [{"season": 1, "rank": 2}]})
+        self.assertIn("3 achievement(s)", text)
+        self.assertIn("S1 #2", text)
+
+    def test_podium(self):
+        self.assertEqual(format_podium([{"pseudo": "A", "elo": 1300}, {"pseudo": "B", "elo": 1200}]),
+                         "🥇 **A** (1300) · 🥈 **B** (1200)")
+        self.assertEqual(format_podium([]), "—")
 
     def test_parse_id(self):
         self.assertEqual(parse_id(" 1574139585007718474 "), 1574139585007718474)

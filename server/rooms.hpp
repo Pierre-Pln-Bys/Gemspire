@@ -21,6 +21,9 @@ const int FINISHED_GAME_SECONDS = 3600; // une partie finie reste visible 1 heur
 const int CHAT_MAX_CHARS = 120;         // longueur d'un message du chat
 const int CHAT_KEPT = 50;               // messages gardés par partie
 const int REACTION_COUNT = 6;           // réactions rapides (« gg », « bonne chance »...)
+const int MATCH_BASE_GAP = 100;         // recherche de partie : écart d'Elo accepté au départ...
+const int MATCH_GAP_PER_SECOND = 20;    // ... qui s'élargit chaque seconde d'attente
+
 
 // Un message du chat d'une partie (gardé en mémoire avec la partie seulement)
 struct ChatMessage {
@@ -36,6 +39,13 @@ struct Seat {
     int account;
     std::string pseudo;
     int elo;
+};
+
+// Un joueur qui cherche un adversaire
+struct QueueEntry {
+    Seat seat;
+    Mode mode;
+    long long since;   // début de l'attente (secondes)
 };
 
 // Salon d'attente : on le rejoint avec son code, l'hôte lance la partie
@@ -64,6 +74,9 @@ struct OnlineGame {
     long long turn_start = 0;          // début du tour en cours (secondes)
     std::vector<int> missed;           // tours manqués d'affilée, par place
     long long finished_at = 0;         // fin de la partie (pour l'oublier ensuite)
+    unsigned seed = 0;                 // graine de la partie (rediffusion)
+    nlohmann::json actions = nlohmann::json::array();  // tout ce qui a changé la partie, dans l'ordre
+    int record_id = 0;                 // numéro dans la base une fois enregistrée (rediffusion)
     std::vector<std::vector<std::string>> new_achievements;  // succès débloqués à la fin, par place
     std::vector<ChatMessage> chat;     // derniers messages du chat
     long next_chat = 1;
@@ -88,6 +101,13 @@ public:
     bool lobby_json(const std::string& code, long since, nlohmann::json& out);
 
     std::string play(int game_id, int account, const Move& move);
+    // --- Recherche de partie : deux joueurs du même mode, d'Elo proche (l'écart
+    //     accepté grandit avec l'attente), partie à 2 lancée tout de suite
+    void join_queue(const Seat& me, Mode mode);
+    void leave_queue(int account);
+    // {"status": "idle" | "waiting" (+ "waited", "players_waiting") | "matched" (+ "game_id")}
+    void queue_json(int account, nlohmann::json& out);
+
     // Chat de la partie : texte libre (`reaction` = -1) ou réaction rapide.
     // Anti-spam : 1 message par seconde, 6 par tranche de 20 secondes.
     std::string chat(int game_id, int account, const std::string& text, int reaction);
@@ -107,6 +127,10 @@ public:
     bool is_online(int account);
     // "playing" (partie en cours), "online" ou "offline" (liste d'amis)
     std::string status_of(int account);
+    // Partie en cours de ce joueur (0 : aucune), pour la regarder
+    int playing_game(int account);
+    // Parties en cours qu'on peut regarder (spectateurs), les mieux classées d'abord
+    void live_games_json(nlohmann::json& out);
 
     // --- Notifications vers le jeu d'un joueur (ex. proposition du bot Discord)
     void notify(int account, nlohmann::json notification);
@@ -138,7 +162,12 @@ private:
     std::vector<nlohmann::json> bot_events_;
     long next_bot_event_ = 1;
 
+    std::vector<QueueEntry> queue_;     // recherche de partie
+    std::map<int, int> matched_;        // compte -> partie trouvée (pas encore vue par le jeu)
+
     std::string new_code();
+    int new_game(const std::vector<Seat>& seats, Mode mode);  // verrou déjà pris
+    void try_match();                                          // verrou déjà pris
     void lobby_changed(const Lobby& lobby, bool closed);
     void remove_from_lobbies(int account);
     void finish_game(OnlineGame& online);

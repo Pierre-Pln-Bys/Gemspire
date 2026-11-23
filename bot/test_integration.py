@@ -98,6 +98,8 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(ApiError):
             api.challenge(999, 902, "classique")  # pas de compte lié
         self.assertEqual(api.ranks(), [])        # personne n'a encore joué
+        season = api.end_season()
+        self.assertEqual((season["ended"], season["season"], season["top"]), (1, 2, []))
 
     def test_moderation(self):
         login = "y" * 24

@@ -9,9 +9,10 @@ v3.3 (temps de jeu et abandon en ligne, site web), v3.4 (serveur Discord :
 commandes du bot, classement, modération).
 v3.5 (jeu dans le navigateur, site et bot bilingues), v3.6 (Gemspire),
 v3.7 (jeu en anglais et en français, Activité Discord), v3.8 (chat, amis,
-succès, `/challenge`, rôles de rang).
-**Prochaines étapes** : v3.9 (compétition), puis la **v4 : publication et test
-d'intrusion**, qui couvrira tout cela.
+succès, `/challenge`, rôles de rang), v3.9 (spectateurs, rediffusions,
+saisons, recherche de partie).
+**Prochaine étape** : la **v4 : publication et test d'intrusion**, qui
+couvrira tout cela.
 
 Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://github.com/users/Pierre-Pln-Bys/projects/2)
 (une issue par case ci-dessous, un jalon GitHub par version).
@@ -177,9 +178,9 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 
 ## v3.9 — Compétition
 
-- [ ] Mode spectateur et rediffusion des parties (historique d'événements).
-- [ ] Saisons classées (Elo remis partiellement à zéro, badges).
-- [ ] Recherche de partie automatique à Elo proche.
+- [x] Mode spectateur et rediffusion des parties (graine et actions enregistrées).
+- [x] Saisons classées (Elo remis partiellement à zéro, badges).
+- [x] Recherche de partie automatique à Elo proche.
 
 ## v4 — Publication et sécurité (version majeure)
 

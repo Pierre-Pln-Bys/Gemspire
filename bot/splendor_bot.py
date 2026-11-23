@@ -32,7 +32,7 @@ from discord import app_commands
 
 from api import ApiError, SplendorApi
 from logic import (CREATE_CHANNEL_NAME, DELETE_DELAY_SECONDS, DOWNLOAD_URL, OFFER_RETRY_COUNT, OFFER_RETRY_SECONDS,
-                   RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
+                   RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, format_podium, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
                    format_history, format_profile, format_ranking, is_create_channel, load_state, offer_message,
                    parse_id, save_state, should_delete, site_page, temp_channel_name)
 from texts import COMMAND_FR, lang_of, tr
@@ -462,6 +462,34 @@ async def mod_cancel(interaction: discord.Interaction, number: app_commands.Rang
     await answer(interaction, tr("cancel_ok", user_lang(interaction), number=number), private=True)
     await mod_log(interaction.guild, tr("cancel_log", guild_lang(interaction.guild), user=interaction.user.mention,
                                         number=number))
+
+
+@moderation.command(name=_("new-season"),
+                    description=_("End the ranked season (archives the top 50, badges for the top 10)"))
+@app_commands.rename(confirm=_("confirm"))
+@app_commands.describe(confirm=_("Really end the season for everyone"))
+async def mod_new_season(interaction: discord.Interaction, confirm: bool = False):
+    if await refuse_if_not_moderator(interaction):
+        return
+    lang = user_lang(interaction)
+    if not confirm:
+        await answer(interaction, tr("season_confirm", lang), private=True)
+        return
+    result = await call_api(interaction, api.end_season)
+    if result is None:
+        return
+    guild_language = guild_lang(interaction.guild)
+    text = tr("season_end", guild_language, ended=result.get("ended"), season=result.get("season"),
+              podium=format_podium(result.get("top", [])))
+    channel = find_text_channel(interaction.guild, ranking_channel_names, ranking_channel_id)
+    if channel is not None:
+        try:
+            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
+        except discord.Forbidden:
+            pass
+    await mod_log(interaction.guild, tr("season_log", guild_language, user=interaction.user.mention,
+                                        ended=result.get("ended")))
+    await answer(interaction, text)
 
 
 @moderation.command(name=_("delete-account"), description=_("Delete a Gemspire account (GDPR request)"))

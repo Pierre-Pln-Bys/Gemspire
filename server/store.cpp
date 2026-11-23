@@ -120,6 +120,17 @@ Store::Store(const std::string& path)
          " friend_id INTEGER NOT NULL REFERENCES accounts(id),"
          " created_at INTEGER NOT NULL,"
          " PRIMARY KEY (account_id, friend_id));");
+    // Saisons (v3.9)
+    exec("CREATE TABLE IF NOT EXISTS seasons ("
+         " number INTEGER PRIMARY KEY,"
+         " started_at INTEGER NOT NULL,"
+         " ended_at INTEGER NOT NULL DEFAULT 0);");
+    exec("CREATE TABLE IF NOT EXISTS season_results ("
+         " season INTEGER NOT NULL,"
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " rank INTEGER NOT NULL,"
+         " elo INTEGER NOT NULL,"
+         " PRIMARY KEY (season, account_id));");
     // Succès (v3.8)
     exec("CREATE TABLE IF NOT EXISTS achievements ("
          " account_id INTEGER NOT NULL REFERENCES accounts(id),"
@@ -130,6 +141,8 @@ Store::Store(const std::string& path)
     exec("ALTER TABLE accounts ADD COLUMN banned_until INTEGER NOT NULL DEFAULT 0;");
     exec("ALTER TABLE accounts ADD COLUMN ban_reason TEXT NOT NULL DEFAULT '';");
     exec("ALTER TABLE games ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;");
+    // v3.9 : rediffusion (graine, joueurs et actions en JSON)
+    exec("ALTER TABLE games ADD COLUMN replay TEXT NOT NULL DEFAULT '';");
 }
 
 bool Account::banned() const
@@ -254,13 +267,14 @@ void Store::delete_session(const std::string& token)
     remove.done();
 }
 
-void Store::record_game(Mode mode, const std::vector<GameResult>& results)
+int Store::record_game(Mode mode, const std::vector<GameResult>& results, const std::string& replay)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     exec("BEGIN;");
-    Statement game(db_, "INSERT INTO games (mode, finished_at) VALUES (?, ?)");
+    Statement game(db_, "INSERT INTO games (mode, finished_at, replay) VALUES (?, ?, ?)");
     game.bind(1, std::string(mode == Mode::Classic ? "classique" : "rapide"));
     game.bind(2, static_cast<long long>(std::time(nullptr)));
+    game.bind(3, replay);
     game.done();
     long long game_id = sqlite3_last_insert_rowid(db_);
     for (const GameResult& result : results) {
@@ -279,6 +293,15 @@ void Store::record_game(Mode mode, const std::vector<GameResult>& results)
         update.done();
     }
     exec("COMMIT;");
+    return static_cast<int>(game_id);
+}
+
+std::string Store::replay(int game_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT replay FROM games WHERE id = ? AND cancelled = 0");
+    find.bind(1, static_cast<long long>(game_id));
+    return find.row() ? find.text(0) : "";
 }
 
 std::vector<Account> Store::leaderboard(int limit)
@@ -302,6 +325,64 @@ std::vector<Account> Store::leaderboard(int limit)
         accounts.push_back(account);
     }
     return accounts;
+}
+
+int Store::current_season()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT MAX(number) FROM seasons WHERE ended_at = 0");
+    if (find.row() && find.integer(0) > 0) {
+        return find.integer(0);
+    }
+    Statement last(db_, "SELECT IFNULL(MAX(number), 0) FROM seasons");
+    int number = last.row() ? last.integer(0) + 1 : 1;
+    Statement create(db_, "INSERT INTO seasons (number, started_at) VALUES (?, ?)");
+    create.bind(1, static_cast<long long>(number));
+    create.bind(2, static_cast<long long>(std::time(nullptr)));
+    create.done();
+    return number;
+}
+
+std::vector<Account> Store::end_season()
+{
+    int season = current_season();
+    std::vector<Account> top = leaderboard(SEASON_ARCHIVED);
+    std::lock_guard<std::mutex> lock(mutex_);
+    exec("BEGIN;");
+    for (int i = 0; i < static_cast<int>(top.size()); i++) {
+        Statement archive(db_, "INSERT OR REPLACE INTO season_results (season, account_id, rank, elo) VALUES (?, ?, ?, ?)");
+        archive.bind(1, static_cast<long long>(season));
+        archive.bind(2, static_cast<long long>(top[i].id));
+        archive.bind(3, static_cast<long long>(i + 1));
+        archive.bind(4, static_cast<long long>(top[i].elo));
+        archive.done();
+    }
+    long long now = std::time(nullptr);
+    Statement close(db_, "UPDATE seasons SET ended_at = ? WHERE number = ?");
+    close.bind(1, now);
+    close.bind(2, static_cast<long long>(season));
+    close.done();
+    Statement next(db_, "INSERT INTO seasons (number, started_at) VALUES (?, ?)");
+    next.bind(1, static_cast<long long>(season + 1));
+    next.bind(2, now);
+    next.done();
+    // Elo rapproché de 1000 (à mi-chemin) ; parties et victoires sont gardées
+    exec("UPDATE accounts SET elo = 1000 + (elo - 1000) / 2;");
+    exec("COMMIT;");
+    return top;
+}
+
+std::vector<SeasonBadge> Store::badges(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement list(db_, "SELECT season, rank FROM season_results WHERE account_id = ? AND rank <= ? ORDER BY season");
+    list.bind(1, static_cast<long long>(id));
+    list.bind(2, static_cast<long long>(SEASON_BADGES));
+    std::vector<SeasonBadge> result;
+    while (list.row()) {
+        result.push_back({list.integer(0), list.integer(1)});
+    }
+    return result;
 }
 
 std::vector<std::pair<std::string, int>> Store::discord_ranks()
@@ -370,7 +451,7 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<HistoryEntry> entries;
     Statement list(db_, "SELECT g.id, g.mode, g.finished_at, p.place, p.score, p.elo_after - p.elo_before,"
-                        " g.cancelled FROM game_players p JOIN games g ON g.id = p.game_id"
+                        " g.cancelled, g.replay != '' FROM game_players p JOIN games g ON g.id = p.game_id"
                         " WHERE p.account_id = ? ORDER BY g.id DESC LIMIT ?");
     list.bind(1, static_cast<long long>(id));
     list.bind(2, static_cast<long long>(limit));
@@ -383,6 +464,7 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
         entry.score = list.integer(4);
         entry.elo_change = list.integer(5);
         entry.cancelled = list.integer(6) != 0;
+        entry.has_replay = list.integer(7) != 0;
         entries.push_back(entry);
     }
     for (HistoryEntry& entry : entries) {

@@ -90,3 +90,48 @@ std::string move_from_json(const nlohmann::json& json, Move& move)
     }
     return "Unknown move type.";
 }
+
+std::string replay_game(const nlohmann::json& replay, int steps, std::unique_ptr<Game>& game, int& count)
+{
+    if (!replay.is_object() || !replay.contains("seed") || !replay["seed"].is_number_unsigned()
+        || !replay.contains("names") || !replay["names"].is_array() || !replay.contains("actions")
+        || !replay["actions"].is_array()) {
+        return "Damaged replay.";
+    }
+    std::vector<std::string> names;
+    for (const nlohmann::json& name : replay["names"]) {
+        if (!name.is_string()) {
+            return "Damaged replay.";
+        }
+        names.push_back(name.get<std::string>());
+    }
+    if (names.size() < 2 || names.size() > 4) {
+        return "Damaged replay.";
+    }
+    Mode mode = replay.value("mode", std::string("classique")) == "rapide" ? Mode::Quick : Mode::Classic;
+    game.reset(new Game(names, replay["seed"].get<unsigned>(), mode));
+    const nlohmann::json& actions = replay["actions"];
+    count = static_cast<int>(actions.size());
+    int last = steps < 0 || steps > count ? count : steps;
+    for (int i = 0; i < last; i++) {
+        const nlohmann::json& action = actions[i];
+        std::string error;
+        if (action.contains("move")) {
+            Move move;
+            error = move_from_json(action["move"], move);
+            if (error.empty()) {
+                error = apply_move(*game, move);
+            }
+        } else if (action.contains("skip")) {
+            error = game->skip_turn();
+        } else if (action.contains("forfeit") && action["forfeit"].is_number_integer()) {
+            error = game->forfeit(action["forfeit"].get<int>());
+        } else {
+            error = "Damaged replay.";
+        }
+        if (!error.empty()) {
+            return "Damaged replay.";
+        }
+    }
+    return "";
+}

@@ -1,5 +1,7 @@
 #include "rooms.hpp"
 
+#include <algorithm>
+#include <cstdlib>
 #include <chrono>
 #include <ctime>
 
@@ -7,6 +9,7 @@
 #include "../src/ai.hpp"
 #include "../src/display.hpp"
 #include "../src/elo.hpp"
+#include "../src/move_json.hpp"
 #include "../src/save.hpp"
 
 Rooms::Rooms(Store& store) : store_(store), random_(std::random_device{}()) {}
@@ -228,24 +231,127 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
         if (lobby.members.size() < 2) {
             return "At least 2 players are needed.";
         }
-        std::vector<std::string> names;
-        for (const Seat& seat : lobby.members) {
-            names.push_back(seat.pseudo);
-        }
-        OnlineGame& online = games_[next_game_];
-        online.id = next_game_;
-        online.game.reset(new Game(names, random_(), lobby.mode));
-        online.seats = lobby.members;
-        online.missed.assign(lobby.members.size(), 0);
-        online.turn_start = now_seconds();
-        lobby.game_id = next_game_;
+        game_id = new_game(lobby.members, lobby.mode);
+        lobby.game_id = game_id;
         lobby.version++;
         lobby_changed(lobby, false);
-        game_id = next_game_;
-        next_game_++;
     }
     changed_.notify_all();
     return "";
+}
+
+int Rooms::new_game(const std::vector<Seat>& seats, Mode mode)
+{
+    std::vector<std::string> names;
+    for (const Seat& seat : seats) {
+        names.push_back(seat.pseudo);
+    }
+    OnlineGame& online = games_[next_game_];
+    online.id = next_game_;
+    online.seed = random_();
+    online.game.reset(new Game(names, online.seed, mode));
+    online.seats = seats;
+    online.missed.assign(seats.size(), 0);
+    online.turn_start = now_seconds();
+    return next_game_++;
+}
+
+// ---------------------------------------------------------------- Recherche de partie
+
+// Écart d'Elo accepté après `waited` secondes d'attente : 100, puis +20 par seconde
+static int allowed_gap(long long waited)
+{
+    return MATCH_BASE_GAP + MATCH_GAP_PER_SECOND * static_cast<int>(waited);
+}
+
+void Rooms::try_match()
+{
+    long long now = now_seconds();
+    // Jeu fermé pendant l'attente (plus de nouvelles depuis 15 s) : retiré de la file
+    for (auto it = queue_.begin(); it != queue_.end();) {
+        auto seen = last_seen_.find(it->seat.account);
+        bool gone = seen == last_seen_.end() || std::time(nullptr) - seen->second > 15;
+        it = gone && now - it->since > 15 ? queue_.erase(it) : std::next(it);
+    }
+    bool found = true;
+    while (found) {
+        found = false;
+        int best_a = -1;
+        int best_b = -1;
+        int best_gap = 0;
+        for (int a = 0; a < static_cast<int>(queue_.size()); a++) {
+            for (int b = a + 1; b < static_cast<int>(queue_.size()); b++) {
+                if (queue_[a].mode != queue_[b].mode) {
+                    continue;
+                }
+                int gap = std::abs(queue_[a].seat.elo - queue_[b].seat.elo);
+                long long waited = now - std::min(queue_[a].since, queue_[b].since);
+                if (gap <= allowed_gap(waited) && (best_a < 0 || gap < best_gap)) {
+                    best_a = a;
+                    best_b = b;
+                    best_gap = gap;
+                }
+            }
+        }
+        if (best_a >= 0) {
+            QueueEntry first = queue_[best_a];
+            QueueEntry second = queue_[best_b];
+            int game_id = new_game({first.seat, second.seat}, first.mode);
+            matched_[first.seat.account] = game_id;
+            matched_[second.seat.account] = game_id;
+            queue_.erase(queue_.begin() + best_b);
+            queue_.erase(queue_.begin() + best_a);
+            found = true;
+        }
+    }
+}
+
+void Rooms::join_queue(const Seat& me, Mode mode)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        remove_from_lobbies(me.account);
+        matched_.erase(me.account);
+        for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+            if (it->seat.account == me.account) {
+                queue_.erase(it);
+                break;
+            }
+        }
+        queue_.push_back({me, mode, now_seconds()});
+        try_match();
+    }
+    changed_.notify_all();
+}
+
+void Rooms::leave_queue(int account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+        if (it->seat.account == account) {
+            queue_.erase(it);
+            break;
+        }
+    }
+}
+
+void Rooms::queue_json(int account, nlohmann::json& out)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto matched = matched_.find(account);
+    if (matched != matched_.end()) {
+        out = {{"status", "matched"}, {"game_id", matched->second}};
+        matched_.erase(matched);
+        return;
+    }
+    for (const QueueEntry& entry : queue_) {
+        if (entry.seat.account == account) {
+            out = {{"status", "waiting"}, {"waited", now_seconds() - entry.since},
+                   {"players_waiting", static_cast<int>(queue_.size())}};
+            return;
+        }
+    }
+    out = {{"status", "idle"}};
 }
 
 bool Rooms::lobby_json(const std::string& code, long since, nlohmann::json& out)
@@ -288,7 +394,14 @@ void Rooms::finish_game(OnlineGame& online)
         results.push_back({online.seats[i].account, places[i], online.game->players()[i].score(), ratings[i],
                            ratings[i] + online.elo_changes[i]});
     }
-    store_.record_game(online.game->mode(), results);
+    // Rediffusion : même graine, mêmes joueurs, mêmes actions = même partie
+    nlohmann::json names = nlohmann::json::array();
+    for (const Player& player : online.game->players()) {
+        names.push_back(player.name);
+    }
+    nlohmann::json replay = {{"seed", online.seed}, {"mode", online.game->mode() == Mode::Classic ? "classique" : "rapide"},
+                             {"names", names}, {"actions", online.actions}};
+    online.record_id = store_.record_game(online.game->mode(), results, replay.dump());
     online.recorded = true;
     // Succès : seuls les nouveaux sont gardés pour l'écran de fin
     online.new_achievements.assign(online.seats.size(), {});
@@ -328,6 +441,7 @@ std::string Rooms::play(int game_id, int account, const Move& move)
         if (!error.empty()) {
             return error;
         }
+        online.actions.push_back({{"move", move_to_json(move)}});
         online.missed[current] = 0;  // il a joué lui-même
         after_change(online, before);
     }
@@ -378,6 +492,7 @@ std::string Rooms::forfeit(int game_id, int account)
         if (!error.empty()) {
             return error;
         }
+        online.actions.push_back({{"forfeit", seat}});
         after_change(online, before);
     }
     changed_.notify_all();
@@ -389,6 +504,12 @@ void Rooms::remove_account(int account)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         remove_from_lobbies(account);
+        for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+            if (it->seat.account == account) {
+                queue_.erase(it);
+                break;
+            }
+        }
         for (auto& entry : games_) {
             OnlineGame& online = entry.second;
             Game& game = *online.game;
@@ -399,11 +520,15 @@ void Rooms::remove_account(int account)
                 size_t before = game.events().size();
                 // Tour en cours à moitié joué (défausse, noble) : on le termine d'abord
                 while (!game.is_over() && game.current_index() == seat && game.step() != TurnStep::Action) {
-                    if (!apply_move(game, ai_choose(game, false)).empty()) {
+                    Move forced = ai_choose(game, false);
+                    if (!apply_move(game, forced).empty()) {
                         break;
                     }
+                    online.actions.push_back({{"move", move_to_json(forced)}});
                 }
-                game.forfeit(seat);
+                if (game.forfeit(seat).empty()) {
+                    online.actions.push_back({{"forfeit", seat}});
+                }
                 after_change(online, before);
             }
         }
@@ -418,6 +543,8 @@ void Rooms::tick()
     {
         std::lock_guard<std::mutex> lock(mutex_);
         long long now = now_seconds();
+        // L'écart d'Elo accepté grandit avec l'attente : nouvelle tentative chaque seconde
+        try_match();
         for (auto it = games_.begin(); it != games_.end();) {
             OnlineGame& online = it->second;
             Game& game = *online.game;
@@ -436,16 +563,19 @@ void Rooms::tick()
                 // Défausse ou choix du noble en attente : le serveur les termine
                 // (coups imposés, choisis par l'IA facile), puis le tour passe
                 while (!game.is_over() && game.current_index() == late && game.step() != TurnStep::Action) {
-                    if (!apply_move(game, ai_choose(game, false)).empty()) {
+                    Move forced = ai_choose(game, false);
+                    if (!apply_move(game, forced).empty()) {
                         break;
                     }
+                    online.actions.push_back({{"move", move_to_json(forced)}});
                 }
                 if (!game.is_over() && game.current_index() == late && game.step() == TurnStep::Action) {
                     game.skip_turn();
+                    online.actions.push_back({{"skip", true}});
                 }
                 online.missed[late]++;
-                if (!game.is_over() && online.missed[late] >= MAX_MISSED_TURNS) {
-                    game.forfeit(late);
+                if (!game.is_over() && online.missed[late] >= MAX_MISSED_TURNS && game.forfeit(late).empty()) {
+                    online.actions.push_back({{"forfeit", late}});
                 }
                 after_change(online, before);
                 any_change = true;
@@ -491,6 +621,7 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
         out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo}});
     }
     out["achievements"] = online.new_achievements;
+    out["replay_id"] = online.record_id;
     out["chat"] = nlohmann::json::array();
     for (const ChatMessage& message : online.chat) {
         out["chat"].push_back({{"id", message.id}, {"seat", message.seat}, {"text", message.text},
@@ -594,22 +725,56 @@ bool Rooms::is_online(int account)
     return found != last_seen_.end() && std::time(nullptr) - found->second < 70;
 }
 
-std::string Rooms::status_of(int account)
+int Rooms::playing_game(int account)
 {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        for (const auto& entry : games_) {
-            if (entry.second.game->is_over()) {
-                continue;
-            }
-            for (const Seat& seat : entry.second.seats) {
-                if (seat.account == account) {
-                    return "playing";
-                }
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& entry : games_) {
+        if (entry.second.game->is_over()) {
+            continue;
+        }
+        for (const Seat& seat : entry.second.seats) {
+            if (seat.account == account) {
+                return entry.first;
             }
         }
     }
+    return 0;
+}
+
+std::string Rooms::status_of(int account)
+{
+    if (playing_game(account) != 0) {
+        return "playing";
+    }
     return is_online(account) ? "online" : "offline";
+}
+
+void Rooms::live_games_json(nlohmann::json& out)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::pair<int, int>> order;  // (Elo moyen, numéro)
+    for (const auto& entry : games_) {
+        if (entry.second.game->is_over()) {
+            continue;
+        }
+        int total = 0;
+        for (const Seat& seat : entry.second.seats) {
+            total += seat.elo;
+        }
+        order.push_back({total / static_cast<int>(entry.second.seats.size()), entry.first});
+    }
+    std::sort(order.rbegin(), order.rend());
+    out = nlohmann::json::array();
+    for (size_t i = 0; i < order.size() && i < 20; i++) {
+        const OnlineGame& online = games_.at(order[i].second);
+        nlohmann::json players = nlohmann::json::array();
+        for (int p = 0; p < static_cast<int>(online.seats.size()); p++) {
+            players.push_back({{"pseudo", online.seats[p].pseudo}, {"elo", online.seats[p].elo},
+                               {"score", online.game->players()[p].score()}});
+        }
+        out.push_back({{"id", online.id}, {"mode", online.game->mode() == Mode::Classic ? "classique" : "rapide"},
+                       {"round", online.game->round()}, {"players", players}});
+    }
 }
 
 void Rooms::notify(int account, nlohmann::json notification)

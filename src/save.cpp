@@ -108,7 +108,7 @@ std::string write_game(const Game& game, int viewer)
     }
 
     for (int l = 0; l < LEVEL_COUNT; l++) {
-        write_cards(out, "deck " + std::to_string(l + 1), viewer >= 0 ? hidden_cards(game.decks_[l]) : game.decks_[l]);
+        write_cards(out, "deck " + std::to_string(l + 1), viewer != -1 ? hidden_cards(game.decks_[l]) : game.decks_[l]);
         write_cards(out, "visible " + std::to_string(l + 1), game.visible_[l]);
     }
     out << "board_nobles " << game.nobles_.size() << "\n";

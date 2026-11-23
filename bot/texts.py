@@ -40,6 +40,8 @@ TEXTS = {
     "no_player": {"en": "No Gemspire player found.", "fr": "Aucun joueur Gemspire trouvé."},
     "profile_rank": {"en": " · #{rank} on the leaderboard", "fr": " · {rank}ᵉ au classement"},
     "profile_stats": {"en": "{games} games · {wins} wins ({rate}%)", "fr": "{games} parties · {wins} victoires ({rate} %)"},
+    "profile_achievements": {"en": "🏅 {count} achievement(s)", "fr": "🏅 {count} succès"},
+    "profile_badges": {"en": "🏆 Seasons: {badges}", "fr": "🏆 Saisons : {badges}"},
     "banned_forever": {"en": "⛔ Account suspended permanently", "fr": "⛔ Compte suspendu définitivement"},
     "banned_until": {"en": "⛔ Account suspended until {date}", "fr": "⛔ Compte suspendu jusqu'au {date}"},
     "not_linked_member": {
@@ -98,6 +100,17 @@ TEXTS = {
     "challenge_self": {"en": "Pick someone else to challenge.", "fr": "Choisissez quelqu'un d'autre à défier."},
     "mode_classic": {"en": "classic", "fr": "classique"},
     "mode_quick": {"en": "quick", "fr": "rapide"},
+    "season_confirm": {
+        "en": "This ends the season for everyone (Elo brought halfway back to 1000). Run it again with "
+              "`confirm: True`.",
+        "fr": "Cela termine la saison pour tout le monde (Elo ramenés à mi-chemin de 1000). Relancez avec "
+              "`confirmer: True`."},
+    "season_end": {
+        "en": "🏁 **Season {ended} is over!**\n{podium}\nSeason {season} starts now: everyone's Elo moved halfway "
+              "back to 1000. Good luck!",
+        "fr": "🏁 **La saison {ended} est terminée !**\n{podium}\nLa saison {season} commence : les Elo sont ramenés "
+              "à mi-chemin de 1000. Bonne chance !"},
+    "season_log": {"en": "🏁 {user} ended season {ended}", "fr": "🏁 {user} a terminé la saison {ended}"},
     "report_log": {"en": "🚩 **Report** from {user} against **{pseudo}**: {reason}",
                    "fr": "🚩 **Signalement** de {user} contre **{pseudo}** : {reason}"},
     "report_ok": {"en": "Thanks, the moderators received your report.",
@@ -163,6 +176,11 @@ COMMAND_FR = {
     "number": "numero",
     "Game number": "Numéro de la partie",
     "delete-account": "supprimer-compte",
+    "new-season": "nouvelle-saison",
+    "End the ranked season (archives the top 50, badges for the top 10)":
+        "Terminer la saison classée (archive le top 50, badges pour le top 10)",
+    "confirm": "confirmer",
+    "Really end the season for everyone": "Vraiment terminer la saison pour tout le monde",
     "Delete a Gemspire account (GDPR request)": "Supprimer un compte Gemspire (demande RGPD)",
 }
 

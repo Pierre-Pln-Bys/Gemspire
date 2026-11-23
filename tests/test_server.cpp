@@ -149,6 +149,16 @@ int main()
     assert(lobby["members"].size() == 2);
     int game_id = post(client, "/lobbies/" + code + "/start", alice, json::object())["game_id"];
     assert(game_id > 0 && get(client, "/lobbies/" + code, alice)["game_id"] == game_id);
+    // Parties à regarder, et statut « en partie » (avec le numéro) pour les amis
+    {
+        json live = get(client, "/games/live", bob)["games"];
+        assert(!live.empty() && live[0]["id"] == game_id && live[0]["players"].size() == 2);
+        post(client, "/friends/add", alice, {{"pseudo", "Bébert"}});
+        post(client, "/friends/add", bob, {{"pseudo", "Alice"}});
+        json friends = get(client, "/friends", alice)["friends"];
+        assert(friends[0]["status"] == "playing" && friends[0]["game_id"] == game_id);
+        post(client, "/friends/remove", alice, {{"pseudo", "Bébert"}});
+    }
 
     // --- Coups invalides
     std::string path = "/games/" + std::to_string(game_id);
@@ -213,6 +223,26 @@ int main()
         assert((ended_places[0] == ended_places[1]) == (changes[0] == 0));
     }
     post(client, path + "/move", alice, {{"type", "take"}, {"tokens", {1, 1, 1, 0, 0}}}, 400);  // terminée
+    // Rediffusion : rejouer les actions enregistrées redonne exactement la même fin
+    {
+        int replay_id = final_state["replay_id"];
+        assert(replay_id > 0);
+        json replay = get(client, "/replays/" + std::to_string(replay_id), bob);
+        std::unique_ptr<Game> replayed;
+        int count = 0;
+        assert(replay_game(replay, -1, replayed, count).empty() && count >= moves && replayed->is_over());
+        std::unique_ptr<Game> served;
+        assert(load_game(final_state["save"], served).empty());
+        assert(replayed->round() == served->round());
+        for (int p = 0; p < 2; p++) {
+            assert(replayed->players()[p].score() == served->players()[p].score());
+            assert(replayed->players()[p].cards.size() == served->players()[p].cards.size());
+        }
+        assert(replay_game(replay, 3, replayed, count).empty() && !replayed->is_over());
+        json mine = get(client, "/me/games", alice)["games"];
+        assert(mine[0]["id"] == replay_id && mine[0]["replay"] == true);
+        get(client, "/replays/999999", bob, 404);
+    }
     // Succès : « first_game » pour les deux, montré dans la partie et dans /me
     {
         json finished = get(client, path, alice);
@@ -268,23 +298,63 @@ int main()
         post(client, quit_path + "/forfeit", alice, json::object(), 400);  // déjà finie
     }
 
-    // --- Informations cachées : Bob ne voit ni les pioches ni les réservées d'Alice
-    std::string bob_text = get(client, path, bob)["save"];
+    // --- Informations cachées : Bob ne voit ni les pioches ni les réservées
+    //     d'Alice ; un spectateur ne voit aucune pioche non plus
+    std::string eve = login(client, "eve", "eeeeeeeeeeeeeeeeeeeeeeee");
+    json spectator_view = get(client, path, eve);
+    assert(spectator_view["your_seat"] == -1);
     std::string hidden = "card 0 0 0 0 0 0 0";
-    // Entre « deck L » et « visible L », toutes les cartes sont cachées (une pioche
-    // peut être vide en fin de partie : on regarde les trois)
-    size_t count = 0;
-    for (int level = 1; level <= 3; level++) {
-        size_t deck = bob_text.find("deck " + std::to_string(level) + " ");
-        size_t visible = bob_text.find("visible " + std::to_string(level) + " ");
-        assert(deck != std::string::npos && visible != std::string::npos);
-        std::string deck_part = bob_text.substr(deck, visible - deck);
-        for (size_t at = deck_part.find("card "); at != std::string::npos; at = deck_part.find("card ", at + 1)) {
-            assert(deck_part.compare(at, hidden.size(), hidden) == 0);
-            count++;
+    for (const std::string& text : {get(client, path, bob)["save"].get<std::string>(),
+                                    spectator_view["save"].get<std::string>()}) {
+        // Entre « deck L » et « visible L », toutes les cartes sont cachées (une pioche
+        // peut être vide en fin de partie : on regarde les trois)
+        size_t count = 0;
+        for (int level = 1; level <= 3; level++) {
+            size_t deck = text.find("deck " + std::to_string(level) + " ");
+            size_t visible = text.find("visible " + std::to_string(level) + " ");
+            assert(deck != std::string::npos && visible != std::string::npos);
+            std::string deck_part = text.substr(deck, visible - deck);
+            for (size_t at = deck_part.find("card "); at != std::string::npos; at = deck_part.find("card ", at + 1)) {
+                assert(deck_part.compare(at, hidden.size(), hidden) == 0);
+                count++;
+            }
         }
+        assert(count > 0);
     }
-    assert(count > 0);
+
+    // --- Recherche de partie : deux joueurs du même mode, d'Elo proche, partie lancée
+    {
+        assert(get(client, "/matchmaking", alice)["status"] == "idle");
+        json waiting = post(client, "/matchmaking/join", alice, {{"mode", "rapide"}});
+        assert(waiting["status"] == "waiting");
+        post(client, "/matchmaking/leave", alice, json::object());
+        assert(get(client, "/matchmaking", alice)["status"] == "idle");
+        post(client, "/matchmaking/join", alice, {{"mode", "rapide"}});
+        assert(post(client, "/matchmaking/join", bob, {{"mode", "classique"}})["status"] == "waiting");  // autre mode
+        json matched = post(client, "/matchmaking/join", bob, {{"mode", "rapide"}});
+        assert(matched["status"] == "matched");
+        json found = get(client, "/matchmaking", alice);
+        assert(found["status"] == "matched" && found["game_id"] == matched["game_id"]);
+        std::string match_path = "/games/" + std::to_string(found["game_id"].get<int>());
+        assert(get(client, match_path, alice)["your_seat"] >= 0);
+        post(client, match_path + "/forfeit", bob, json::object());  // on la termine
+    }
+
+    // --- Saisons : fin de saison par le bot, badges, Elo rapprochés de 1000
+    {
+        assert(get(client, "/me", alice)["season"] == 1);
+        int alice_elo = get(client, "/me", alice)["elo"];
+        httplib::Headers season_bot = {{"X-Bot-Key", "cle-de-test-du-bot"}};
+        auto ended = client.Post("/bot/season/end", season_bot, "{}", "application/json");
+        assert(ended && ended->status == 200);
+        json result = json::parse(ended->body);
+        assert(result["ended"] == 1 && result["season"] == 2 && !result["top"].empty());
+        json me = get(client, "/me", alice);
+        assert(me["season"] == 2 && me["elo"] == 1000 + (alice_elo - 1000) / 2);
+        assert(!me["badges"].empty() && me["badges"][0]["season"] == 1);
+        auto refused_season = client.Post("/bot/season/end", "{}", "application/json");
+        assert(refused_season && refused_season->status == 403);
+    }
 
     // --- Discord : présence, proposition du bot, salon lié au vocal
     httplib::Headers bot = {{"X-Bot-Key", "cle-de-test-du-bot"}};
@@ -343,9 +413,10 @@ int main()
         assert(bot_get("/bot/profile?pseudo=personne")["found"] == false);
         assert(bot_get("/bot/profile?discord_id=123456")["pseudo"] == "Carole");
 
-        // Historique : 3 parties pour Alice, avec les pseudos des joueurs
+        // Historique : 4 parties pour Alice (dont celle de la recherche de partie),
+        // avec les pseudos des joueurs
         json history = bot_get("/bot/history?pseudo=Alice");
-        assert(history["games_list"].size() == 3);
+        assert(history["games_list"].size() == 4);
         json last_game = history["games_list"][0];
         assert(last_game["players"].size() == 2);
         int elo_before_cancel = bot_get("/bot/profile?pseudo=Alice")["elo"];

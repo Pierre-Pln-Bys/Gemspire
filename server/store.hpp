@@ -36,6 +36,7 @@ struct HistoryEntry {
     int score;
     int elo_change;
     bool cancelled;
+    bool has_replay;                    // rediffusion enregistrée (parties depuis la v3.9)
     std::vector<std::string> players;   // pseudos de tous les joueurs, dans l'ordre des places
 };
 
@@ -57,6 +58,17 @@ struct Friend {
 };
 
 const int MAX_FRIENDS = 100;
+
+// Saisons classées : à la fin d'une saison, les SEASON_ARCHIVED premiers sont
+// archivés (badge pour les SEASON_BADGES premiers) et chaque Elo est ramené à
+// mi-chemin de 1000.
+const int SEASON_ARCHIVED = 50;
+const int SEASON_BADGES = 10;
+
+struct SeasonBadge {
+    int season;
+    int rank;     // 1 = premier
+};
 
 // Stockage SQLite : comptes, sessions, historique des parties.
 // Toutes les méthodes sont protégées par un verrou (serveur multi-thread).
@@ -82,8 +94,11 @@ public:
     int account_for_token(const std::string& token);  // 0 si inconnu
     void delete_session(const std::string& token);
 
-    // Enregistre une partie terminée et met à jour Elo, parties et victoires
-    void record_game(Mode mode, const std::vector<GameResult>& results);
+    // Enregistre une partie terminée et met à jour Elo, parties et victoires ;
+    // `replay` : de quoi la rejouer (JSON : graine, noms, actions). Renvoie son numéro.
+    int record_game(Mode mode, const std::vector<GameResult>& results, const std::string& replay = "");
+    // Rediffusion d'une partie ("" si aucune)
+    std::string replay(int game_id);
     // Classement (sans les comptes suspendus)
     std::vector<Account> leaderboard(int limit);
     int rank_of(int id);                         // place au classement (0 : pas classé)
@@ -97,6 +112,13 @@ public:
     // --- Succès : true si `code` est nouveau pour ce compte (il est alors enregistré)
     bool unlock_achievement(int id, const std::string& code);
     std::vector<std::string> achievements(int id);
+
+    // --- Saisons
+    int current_season();                       // numéro de la saison en cours (la 1 est créée au besoin)
+    // Termine la saison : archive le classement, rapproche les Elo de 1000,
+    // commence la suivante. Renvoie le classement archivé (les premiers).
+    std::vector<Account> end_season();
+    std::vector<SeasonBadge> badges(int id);    // places dans le top 10 des saisons passées
 
     // Comptes Discord classés (au moins une partie, non suspendus) :
     // identifiant Discord et Elo, pour les rôles de rang du bot

@@ -24,7 +24,7 @@ const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 const char* const DEFAULT_SERVER = "https://gemspire.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
-enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements };
+enum class Screen { Home, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements, Live, History, Matchmaking };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -41,6 +41,11 @@ enum class ButtonId {
     Chat, ChatSend, ChatBox, ChatReaction, ChatMute,
     // Amis
     ShowFriends, FriendBox, FriendAdd, FriendAccept, FriendRemove, ShowAchievements,
+    // Spectateurs
+    ShowLive, WatchGame,
+    // Mes parties et rediffusions
+    FindMatch, CancelMatch,
+    ShowHistory, ReplayGame, ReplayPrevious, ReplayNext, ReplayPlay, ReplayExit,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
     // Plateau
@@ -129,8 +134,40 @@ struct FriendLine {
     int elo;
     std::string relation;   // "friend", "incoming" (demande reçue), "outgoing" (demande envoyée)
     std::string status;     // amis : "playing", "online", "offline"
+    int game_id = 0;        // partie en cours (à regarder), 0 sinon
+};
+
+// Une partie en cours, dans la liste des parties à regarder
+struct LiveGame {
+    int id;
+    std::string mode;                 // "classique" ou "rapide"
+    int round;
+    std::vector<std::string> players; // « pseudo (Elo) — score pts »
 };
 const int FRIENDS_SHOWN = 9;
+
+// Une de mes parties en ligne terminées (écran Mes parties)
+struct PastGame {
+    int id;
+    std::string mode;
+    long long finished_at;
+    int place;              // 0 = premier
+    int score;
+    int elo_change;
+    bool replay;            // rediffusion disponible
+    std::vector<std::string> players;
+};
+const int HISTORY_SHOWN = 10;
+
+// Rediffusion en cours : la partie est refaite depuis le début jusqu'à `step`
+struct ReplayState {
+    bool active = false;
+    std::string data;       // rediffusion (JSON envoyé par le serveur)
+    int step = 0;           // actions déjà rejouées
+    int count = 0;          // nombre total d'actions
+    bool playing = false;   // lecture automatique
+    double next_step = 0;
+};
 
 // Tout ce qui concerne le jeu en ligne
 struct OnlineState {
@@ -176,6 +213,7 @@ struct OnlineState {
     double chat_toast_until = 0;
     std::vector<int> seat_elos;
     std::vector<int> elo_changes;
+    int replay_id = 0;               // rediffusion de la partie finie (0 : pas encore)
     long notification_last = -1;     // dernière notification vue (-1 : pas encore demandé)
     bool notification_poll_running = false;
     std::string offer_channel;       // proposition du bot Discord : salon vocal à lier
@@ -183,8 +221,16 @@ struct OnlineState {
     bool activity_lobby_asked = false; // Activité Discord : salon partagé déjà demandé
     std::string pending_join;        // code reçu de Discord (« Rejoindre ») en attente de connexion
     std::vector<std::string> achievements;      // succès du compte (codes, envoyés par /me)
+    int season = 0;                             // saison classée en cours
+    std::string badges;                         // places dans le top 10 des saisons passées (« S1 #2 · S3 #7 »)
     std::vector<std::string> new_achievements;  // succès débloqués par la partie qui vient de finir
     std::vector<FriendLine> friends;       // liste d'amis (écran Amis)
+    std::vector<LiveGame> live_games;      // parties en cours (écran Regarder)
+    std::vector<PastGame> past_games;      // mes dernières parties (écran Mes parties)
+    int match_waited = 0;                  // recherche de partie : secondes d'attente
+    int match_players = 0;                 // joueurs qui cherchent en ce moment
+    double next_match_poll = 0;
+    double next_live_poll = 0;
     std::string friend_input;
     double next_friends_poll = 0;
     std::vector<std::string> board_names;  // classement
@@ -217,6 +263,7 @@ struct App {
     bool quit = false;
     NetClient net;
     OnlineState online;
+    ReplayState replay;
     DiscordPresence discord;
     std::string min_version;               // version exigée par le serveur (écran « Mise à jour »)
     std::string download_url;

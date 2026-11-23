@@ -150,6 +150,14 @@ def format_ranking(players, updated_at=None, lang="en"):
     return "\n".join(lines)
 
 
+def format_podium(top):
+    """« 🥇 Alice (1320) · 🥈 Bob (1250) · 🥉 Sam (1190) » pour l'annonce de fin de saison."""
+    parts = []
+    for index, player in enumerate(top[:3]):
+        parts.append("{} **{}** ({})".format(MEDALS[index], player.get("pseudo", "?"), player.get("elo", 0)))
+    return " · ".join(parts) if parts else "—"
+
+
 def rank_tier(elo):
     """Nom du rôle de rang pour cet Elo (« Ruby » à partir de 1000...)."""
     for minimum, name, _color in RANK_TIERS:
@@ -187,6 +195,14 @@ def format_profile(profile, lang="en"):
                                        tr("profile_rank", lang, rank=rank) if rank else ""),
              tr("profile_stats", lang, games=profile.get("games", 0), wins=profile.get("wins", 0),
                 rate=win_rate(profile))]
+    extras = []
+    if profile.get("achievements"):
+        extras.append(tr("profile_achievements", lang, count=profile["achievements"]))
+    badges = ["S{} #{}".format(b.get("season", 0), b.get("rank", 0)) for b in profile.get("badges") or []]
+    if badges:
+        extras.append(tr("profile_badges", lang, badges=", ".join(badges)))
+    if extras:
+        lines.append(" · ".join(extras))
     if profile.get("banned"):
         if profile.get("banned_until") == -1:
             lines.append(tr("banned_forever", lang))

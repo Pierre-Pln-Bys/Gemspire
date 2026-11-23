@@ -115,6 +115,11 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | POST | `/games/ID/move` | un coup (voir `src/move_json.hpp`) |
 | POST | `/games/ID/forfeit` | abandon (classé dernier, Elo perdu) |
 | POST | `/games/ID/chat` | `{"text": "..."}` (1 à 120 caractères) ou `{"reaction": 0..5}` ; 1 message par seconde, 6 par 20 s |
+| GET | `/games/live` | parties en cours à regarder (20 au plus, les mieux classées d'abord) ; un non-joueur qui lit `/games/ID` est spectateur (tout caché) |
+| GET | `/me/games` | mes 15 dernières parties (`replay` : rediffusion disponible) |
+| GET | `/replays/ID` | rediffusion : `seed`, `mode`, `names`, `actions` (`move`, `skip`, `forfeit`), rejouée par `replay_game` |
+| POST | `/matchmaking/join` · `/matchmaking/leave` | `{"mode": ...}` : file d'attente ; écart d'Elo accepté 100 + 20 par seconde d'attente |
+| GET | `/matchmaking` | `idle`, `waiting` (`waited`, `players_waiting`) ou `matched` (`game_id`) |
 | GET | `/friends` | amis (`relation` : `friend`, `incoming`, `outgoing` ; `status` des amis : `playing`, `online`, `offline`) |
 | POST | `/friends/add` · `/friends/remove` | `{"pseudo": "..."}` : demande ou acceptation, retrait |
 | GET | `/leaderboard` | 50 meilleurs Elo |
@@ -127,7 +132,10 @@ par place, voir `src/achievements.cpp`).
 Routes du bot (en-tête `X-Bot-Key`) ajoutées en v3.8 : `GET /bot/ranks`
 (Elo des joueurs liés à Discord, pour les rôles de rang) et
 `POST /bot/challenge` (`discord_id`, `target_discord_id`, `mode`) qui crée un
-salon à 2 places et prévient les deux jeux.
+salon à 2 places et prévient les deux jeux. En v3.9 : `POST /bot/season/end`
+(fin de saison : top 50 archivé, badges du top 10, Elo ramenés à mi-chemin de
+1000) ; `/me` et `/leaderboard` donnent la saison en cours (`season`), `/me`
+et `/bot/profile` les badges.
 
 ## Version du jeu
 

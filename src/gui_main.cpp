@@ -244,7 +244,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
@@ -556,6 +556,9 @@ static void enter_online_game(App& app, int game_id)
 static void apply_game_state(App& app, const nlohmann::json& body)
 {
     OnlineState& online = app.online;
+    if (app.replay.active || !online.in_game) {
+        return;  // une rediffusion, ou on a quitté la partie : la réponse arrive trop tard
+    }
     long version = body.value("version", 0L);
     if (version <= online.game_version && app.game) {
         return;
@@ -576,6 +579,7 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     online.game_over = body.value("over", false);
     online.turn_deadline = GetTime() + body.value("turn_seconds_left", 0);
     online.elo_changes = body.value("elo_changes", std::vector<int>());
+    online.replay_id = body.value("replay_id", 0);
     online.new_achievements.clear();
     if (body.contains("achievements") && body["achievements"].is_array() && online.my_seat >= 0
         && online.my_seat < static_cast<int>(body["achievements"].size())) {
@@ -652,6 +656,7 @@ static std::string error_of(const NetResponse& response, const nlohmann::json& b
 }
 
 static void save_current_game(App& app);  // plus bas
+static void start_replay(App& app, const std::string& data);  // plus bas
 
 static void handle_responses(App& app)
 {
@@ -760,6 +765,13 @@ static void handle_responses(App& app)
                 online.games = body.value("games", 0);
                 online.wins = body.value("wins", 0);
                 online.achievements = body.value("achievements", std::vector<std::string>());
+                online.season = body.value("season", 0);
+                online.badges.clear();
+                for (const nlohmann::json& badge : body.value("badges", nlohmann::json::array())) {
+                    online.badges += (online.badges.empty() ? "" : " · ") + std::string("S")
+                                     + std::to_string(badge.value("season", 0)) + " #"
+                                     + std::to_string(badge.value("rank", 0));
+                }
                 if (online.pseudo.empty()) {
                     app.screen = Screen::Pseudo;
                     online.focus = 1;
@@ -830,9 +842,61 @@ static void handle_responses(App& app)
                     for (const nlohmann::json& entry : body["friends"]) {
                         if (entry.value("relation", std::string()) == relation) {
                             online.friends.push_back({entry.value("pseudo", std::string()), entry.value("elo", 1000),
-                                                      relation, entry.value("status", std::string())});
+                                                      relation, entry.value("status", std::string()),
+                                                      entry.value("game_id", 0)});
                         }
                     }
+                }
+            }
+            break;
+        case TagMatch:
+            if (!ok) {
+                set_message(app, error_of(response, body, app), true);
+                if (app.screen == Screen::Matchmaking) {
+                    app.screen = Screen::Online;
+                }
+            } else if (body.value("status", std::string()) == "matched") {
+                enter_online_game(app, body.value("game_id", 0));
+            } else if (app.screen == Screen::Matchmaking && body.value("status", std::string()) == "waiting") {
+                online.match_waited = body.value("waited", 0);
+                online.match_players = body.value("players_waiting", 0);
+            }
+            break;
+        case TagHistory:
+            if (ok && body.contains("games") && body["games"].is_array()) {
+                online.past_games.clear();
+                for (const nlohmann::json& entry : body["games"]) {
+                    if (entry.value("cancelled", false)) {
+                        continue;
+                    }
+                    online.past_games.push_back({entry.value("id", 0), entry.value("mode", std::string()),
+                                                 entry.value("finished_at", 0LL), entry.value("place", 0),
+                                                 entry.value("score", 0), entry.value("elo_change", 0),
+                                                 entry.value("replay", false),
+                                                 entry.value("players", std::vector<std::string>())});
+                }
+            } else if (!ok) {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagReplay:
+            if (ok) {
+                start_replay(app, response.body);
+            } else {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagLive:
+            if (ok && body.contains("games") && body["games"].is_array()) {
+                online.live_games.clear();
+                for (const nlohmann::json& entry : body["games"]) {
+                    LiveGame live = {entry.value("id", 0), entry.value("mode", std::string()), entry.value("round", 1), {}};
+                    for (const nlohmann::json& player : entry.value("players", nlohmann::json::array())) {
+                        live.players.push_back(player.value("pseudo", std::string()) + " ("
+                                               + std::to_string(player.value("elo", 1000)) + ") — "
+                                               + std::to_string(player.value("score", 0)) + " pts");
+                    }
+                    online.live_games.push_back(live);
                 }
             }
             break;
@@ -916,6 +980,7 @@ static void handle_responses(App& app)
                 online.board_elos.clear();
                 online.board_games.clear();
                 online.board_wins.clear();
+                online.season = body.value("season", online.season);
                 for (const nlohmann::json& player : body["players"]) {
                     online.board_names.push_back(player.value("pseudo", std::string()));
                     online.board_elos.push_back(player.value("elo", 1000));
@@ -1019,6 +1084,39 @@ static void press_online_button(App& app, const Button& button)
     }
     case ButtonId::JoinLobby:
         app.net.send(TagJoin, "POST", "/lobbies/" + online.code_input + "/join");
+        break;
+    case ButtonId::ShowLive:
+        app.screen = Screen::Live;
+        app.message.clear();
+        online.live_games.clear();
+        online.next_live_poll = 0;
+        break;
+    case ButtonId::WatchGame:
+        if (button.value > 0) {
+            enter_online_game(app, button.value);
+        }
+        break;
+    case ButtonId::FindMatch:
+        app.screen = Screen::Matchmaking;
+        app.message.clear();
+        online.match_waited = 0;
+        online.match_players = 0;
+        online.next_match_poll = GetTime() + 2;
+        app.net.send(TagMatch, "POST", "/matchmaking/join",
+                     nlohmann::json({{"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"}}).dump());
+        break;
+    case ButtonId::CancelMatch:
+        app.net.send(TagMatchLeave, "POST", "/matchmaking/leave");  // réponse ignorée
+        app.screen = Screen::Online;
+        break;
+    case ButtonId::ShowHistory:
+        app.screen = Screen::History;
+        app.message.clear();
+        online.past_games.clear();
+        app.net.send(TagHistory, "GET", "/me/games");
+        break;
+    case ButtonId::ReplayGame:
+        app.net.send(TagReplay, "GET", "/replays/" + std::to_string(button.value));
         break;
     case ButtonId::ShowAchievements:
         app.screen = Screen::Achievements;
@@ -1377,8 +1475,103 @@ static void board_keys(App& app)
     }
 }
 
+// Rediffusion : refait la partie jusqu'à l'action `step`
+static void show_replay_step(App& app, int step)
+{
+    ReplayState& replay = app.replay;
+    std::unique_ptr<Game> game;
+    int count = 0;
+    std::string error = replay_game(nlohmann::json::parse(replay.data, nullptr, false), step, game, count);
+    if (!error.empty() || !game) {
+        replay.active = false;
+        app.screen = Screen::History;
+        set_message(app, error.empty() ? "Damaged replay." : error, true);
+        return;
+    }
+    replay.count = count;
+    replay.step = step < 0 || step > count ? count : step;
+    app.game = std::move(game);
+    app.curtain = false;
+    app.shown_events = static_cast<int>(app.game->events().size());
+    std::string last = app.game->events().empty()
+                           ? tr(app.lang, "{0}'s turn.", {app.game->current_player().name})
+                           : describe_event(*app.game, app.game->events().back(), app.lang);
+    set_message(app, tr(app.lang, "Action {0}/{1}", {std::to_string(replay.step), std::to_string(replay.count)}) + " — "
+                         + last, false);
+}
+
+static void start_replay(App& app, const std::string& data)
+{
+    app.replay = ReplayState();
+    app.replay.active = true;
+    app.replay.data = data;
+    app.online.in_game = false;
+    show_replay_step(app, 0);
+    if (!app.replay.active) {
+        return;
+    }
+    start_board(app);
+    app.player_colors.clear();
+    for (int p = 0; p < static_cast<int>(app.game->players().size()); p++) {
+        app.player_colors.push_back(p);
+    }
+    show_replay_step(app, 0);
+}
+
+// Boutons et touches de la rediffusion (flèches, Espace, Échap)
+static void update_replay(App& app, Vector2 mouse)
+{
+    ReplayState& replay = app.replay;
+    ButtonId pressed = ButtonId::Back;  // aucun
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        for (const Button& button : visible_buttons(app)) {
+            if (point_in(mouse, button.rect) && button.enabled) {
+                pressed = button.id;
+            }
+        }
+    }
+    if (IsKeyPressed(KEY_LEFT)) {
+        pressed = ButtonId::ReplayPrevious;
+    } else if (IsKeyPressed(KEY_RIGHT)) {
+        pressed = ButtonId::ReplayNext;
+    } else if (IsKeyPressed(KEY_SPACE)) {
+        pressed = ButtonId::ReplayPlay;
+    } else if (IsKeyPressed(KEY_ESCAPE)) {
+        pressed = ButtonId::ReplayExit;
+    }
+    if (pressed == ButtonId::ReplayExit) {
+        replay.active = false;
+        app.game.reset();
+        app.screen = Screen::History;
+        app.message.clear();
+        return;
+    }
+    if (pressed == ButtonId::ReplayPrevious && replay.step > 0) {
+        replay.playing = false;
+        show_replay_step(app, replay.step - 1);
+    } else if (pressed == ButtonId::ReplayNext && replay.step < replay.count) {
+        replay.playing = false;
+        show_replay_step(app, replay.step + 1);
+    } else if (pressed == ButtonId::ReplayPlay && replay.step < replay.count) {
+        replay.playing = !replay.playing;
+        replay.next_step = GetTime();
+    }
+    // Lecture automatique : une action toutes les 0,8 s
+    if (replay.playing && GetTime() >= replay.next_step) {
+        replay.next_step = GetTime() + 0.8;
+        show_replay_step(app, replay.step + 1);
+        if (replay.step >= replay.count) {
+            replay.playing = false;
+        }
+    }
+}
+
 static void update_board(App& app, Vector2 mouse)
 {
+    if (app.replay.active) {
+        update_replay(app, mouse);
+        return;
+    }
     Game& game = *app.game;
     double now = GetTime();
 
@@ -1442,6 +1635,8 @@ static void update_board(App& app, Vector2 mouse)
             if (point_in(mouse, button.rect)) {
                 if (button.enabled && button.id == ButtonId::Chat) {
                     press_chat_button(app, button);
+                } else if (button.enabled && button.id == ButtonId::ReplayGame) {
+                    app.net.send(TagReplay, "GET", "/replays/" + std::to_string(button.value));
                 } else if (button.enabled) {
                     press_board_button(app, button.id);
                 }
@@ -1600,6 +1795,14 @@ static void update(App& app, Vector2 mouse)
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
             press_online_button(app, {ButtonId::PseudoOk, "", true, {}, 0, false});
         }
+    }
+    if (app.screen == Screen::Matchmaking && GetTime() >= online.next_match_poll) {
+        online.next_match_poll = GetTime() + 2;
+        app.net.send(TagMatch, "GET", "/matchmaking");
+    }
+    if (app.screen == Screen::Live && GetTime() >= online.next_live_poll && app.net.pending() == 0) {
+        online.next_live_poll = GetTime() + 5;
+        app.net.send(TagLive, "GET", "/games/live");
     }
     if (app.screen == Screen::Friends) {
         if (GetTime() >= online.next_friends_poll && app.net.pending() == 0) {

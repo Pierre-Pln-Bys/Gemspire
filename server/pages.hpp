@@ -26,7 +26,8 @@ Lang page_lang(const std::string& lang_parameter, const std::string& accept_lang
 std::string html_escape(const std::string& text);
 
 std::string page_home(const SiteInfo& site, Lang lang);
-std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players);
+// `season` : numéro de la saison classée en cours
+std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players, int season);
 std::string page_terms(const SiteInfo& site, Lang lang);
 std::string page_privacy(const SiteInfo& site, Lang lang);
 std::string page_not_found(const SiteInfo& site, Lang lang);

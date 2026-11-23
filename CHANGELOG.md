@@ -4,6 +4,27 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [3.9.0] - 2026-11-23
+
+### Added
+- **Spectator mode**: « Live games » in the online menu lists the games in
+  progress; « Watch » opens one in read-only mode (no hidden information).
+  Friends in a game have a « Watch » button too.
+- **Replays**: every online game is recorded (seed and actions). « My games »
+  lists your last 15 games; « Replay » plays one back step by step (arrows,
+  Space for play / pause). Also available from the results screen.
+- **Ranked seasons**: the leaderboard shows the current season. Moderators end
+  it with `/mod new-season` (with confirmation): the top 50 is archived, the
+  top 10 earn a badge (shown in the game and in `/profile`), and every Elo moves
+  halfway back to 1000. The end of the season is announced in the leaderboard
+  channel.
+- **Find an opponent**: automatic 2-player matchmaking by Elo (same mode; the
+  accepted gap starts at 100 and widens while you wait).
+- Bot `/profile` shows achievements and season badges.
+
+### Fixed
+- A spectator could see the order of the decks.
+
 ## [3.8.0] - 2026-11-23
 
 ### Added
