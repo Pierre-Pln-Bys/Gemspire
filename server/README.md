@@ -158,10 +158,18 @@ Les comptes Discord listés dans `SPLENDOR_ADMIN_DISCORD_IDS` ont accès à :
     renommer, fixer l'Elo, donner / retirer un badge de saison, déconnecter
     partout, suspendre / réactiver, supprimer (taper `DELETE`), annuler l'Elo
     d'une partie ;
+  - **graphique des parties par jour** (30 jours) ;
+  - **terminer une partie en cours bloquée** (sans Elo ni enregistrement : les
+    jeux des joueurs reviennent au menu en ligne) ;
+  - **version minimale du jeu** modifiable sans redémarrer (vide : revient à
+    `SPLENDOR_MIN_VERSION`) ;
+  - **signalements** envoyés avec `/report` sur Discord (`POST /bot/report`),
+    à marquer comme traités ;
   - journal de toutes les actions d'administration (table `admin_log`).
 - **Commandes `/dev` du bot** (`POST /bot/admin`, clé du bot + identifiant
   Discord de l'auteur, vérifié par le serveur) : `status`, `signups`, `games`,
-  `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`.
+  `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`, `end-game`,
+  `min-version`.
 
 Le panel et le bot passent par la même fonction (`ServerApp::admin_action`,
 `server/admin.cpp`). Il n'y a pas de mot de passe à réinitialiser : la

@@ -546,6 +546,29 @@ int main()
         alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaa10");
         admin({{"action", "delete"}, {"username", "Alicia"}}, 400);   // confirmation manquante
 
+        // Partie bloquée terminée par un administrateur : plus de partie, pas d'Elo
+        std::string code = post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}})["code"];
+        post(client, "/lobbies/" + code + "/join", bob, json::object());
+        int stuck = post(client, "/lobbies/" + code + "/start", alice, json::object())["game_id"];
+        int elo_before = get(client, "/me", alice)["elo"];
+        admin({{"action", "end_game"}, {"game", std::to_string(stuck)}});
+        get(client, "/games/" + std::to_string(stuck), alice, 404);
+        assert(get(client, "/me", alice)["elo"] == elo_before);
+        admin({{"action", "end_game"}, {"game", std::to_string(stuck)}}, 400);
+
+        // Version minimale changée sans redémarrer
+        admin({{"action", "min_version"}, {"value", "99.0.0"}});
+        assert(client.Get("/config")->status == 426);
+        admin({{"action", "min_version"}, {"value", "4.x"}}, 400);
+        admin({{"action", "min_version"}, {"value", ""}});
+        assert(client.Get("/config")->status == 200);
+
+        // Signalement venu du bot, visible et traité dans le panel
+        assert(client.Post("/bot/report", bot, json({{"reporter", "Témoin (42)"}, {"pseudo", "Bébert"},
+                                                     {"reason", "Triche <i>évidente</i>"}}).dump(),
+                           "application/json")->status == 200);
+        assert(client.Post("/bot/report", json({{"pseudo", "x"}, {"reason", "y"}}).dump(), "application/json")->status == 403);
+
         // Panel web : connexion de test (SPLENDOR_DEV_LOGIN), cookie, jeton anti-CSRF
         httplib::Client web("127.0.0.1", PORT);
         auto entry = web.Get("/panel-admin");
@@ -562,6 +585,9 @@ int main()
         assert(dashboard && dashboard->status == 200 && dashboard->body.find("Admin log") != std::string::npos);
         assert(dashboard->body.find("<b>") == std::string::npos);   // texte échappé
         assert(dashboard->body.find("Maintenance à 20h &lt;b&gt;") != std::string::npos);
+        assert(dashboard->body.find("Games per day") != std::string::npos);
+        assert(dashboard->body.find("Triche &lt;i&gt;évidente&lt;/i&gt;") != std::string::npos);
+        assert(dashboard->body.find("Mark handled") != std::string::npos);
         auto search = web.Get("/panel-admin?q=alic", with_cookie);
         assert(search && search->body.find("Alicia") != std::string::npos);
         std::string csrf_key = "name=\"csrf\" value=\"";
@@ -580,6 +606,9 @@ int main()
         assert(web.Get("/panel-admin/account/" + alicia, with_cookie)->body.find("Done: Elo of Alicia") != std::string::npos);
         httplib::Params evil = {{"csrf", csrf}, {"action", "status"}, {"back", "https://evil.example/"}};
         assert(web.Post("/panel-admin/action", with_cookie, evil)->get_header_value("Location") == "/panel-admin");
+        httplib::Params handled = {{"csrf", csrf}, {"action", "handle_report"}, {"report", "1"}, {"back", "/panel-admin"}};
+        web.Post("/panel-admin/action", with_cookie, handled);
+        assert(web.Get("/panel-admin", with_cookie)->body.find("Mark handled") == std::string::npos);
         // Les actions sont dans le journal
         assert(web.Get("/panel-admin", with_cookie)->body.find("Elo of Alicia: 1234 -&gt; 1500") != std::string::npos);
         web.Post("/panel-admin/logout", with_cookie, httplib::Params{{"csrf", csrf}});

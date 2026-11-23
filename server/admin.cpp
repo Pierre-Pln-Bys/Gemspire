@@ -6,6 +6,7 @@
 // SameSite=Strict, et chaque formulaire renvoie un jeton anti-CSRF.
 #include "app.hpp"
 
+#include <algorithm>
 #include <ctime>
 #include <iostream>
 #include <sstream>
@@ -90,6 +91,30 @@ bool ServerApp::signups_closed()
     return store_.setting("signups_closed") == "1";
 }
 
+std::string ServerApp::min_version()
+{
+    std::string stored = store_.setting("min_version");
+    return stored.empty() ? config_.min_version : stored;
+}
+
+// « 4.0.0 » : trois nombres séparés par des points
+static bool valid_version(const std::string& text)
+{
+    int dots = 0;
+    bool digit_before = false;
+    for (char c : text) {
+        if (c == '.' && digit_before) {
+            dots++;
+            digit_before = false;
+        } else if (c >= '0' && c <= '9') {
+            digit_before = true;
+        } else {
+            return false;
+        }
+    }
+    return dots == 2 && digit_before && text.size() <= 14;
+}
+
 bool ServerApp::games_paused()
 {
     return store_.setting("games_paused") == "1";
@@ -100,7 +125,7 @@ json ServerApp::admin_status()
     StoreStats stored = store_.stats();
     RoomsStats live = rooms_.stats();
     return {{"version", SPLENDOR_VERSION},
-            {"min_version", config_.min_version},
+            {"min_version", min_version()},
             {"uptime", static_cast<long long>(std::time(nullptr)) - started_at_},
             {"accounts", stored.accounts},
             {"banned", stored.banned},
@@ -151,6 +176,29 @@ std::string ServerApp::admin_action(const std::string& actor, const AdminParams&
             rooms_.notify_online({{"type", "announcement"}, {"text", text}});
         }
         done = text.empty() ? "Announcement removed" : "Announcement: " + text;
+    } else if (action == "min_version") {
+        std::string value = param(params, "value");
+        if (!value.empty() && !valid_version(value)) {
+            return "Write the version as 4.0.0 (empty: back to the server setting).";
+        }
+        store_.set_setting("min_version", value);
+        done = "Minimum game version: " + min_version();
+    } else if (action == "end_game") {
+        int game = 0;
+        if (!parse_int(param(params, "game"), 1, 999999999, game)) {
+            return "Invalid game number.";
+        }
+        std::string error = rooms_.end_game(game);
+        if (!error.empty()) {
+            return error;
+        }
+        done = "Game in progress " + std::to_string(game) + " ended (no Elo)";
+    } else if (action == "handle_report") {
+        int report = 0;
+        if (!parse_int(param(params, "report"), 1, 999999999, report) || !store_.handle_report(report)) {
+            return "Report not found.";
+        }
+        done = "Report " + std::to_string(report) + " handled";
     } else if (action == "cancel_game") {
         int game = 0;
         if (!parse_int(param(params, "game"), 1, 999999999, game)) {
@@ -384,7 +432,7 @@ void ServerApp::setup_admin_routes(httplib::Server& server)
         out << header_html(session, "Gemspire admin");
         long long uptime = status["uptime"].get<long long>();
         out << "<h2>Server</h2><div class=\"grid\">"
-            << stat_box("version (min. " + config_.min_version + ")", SPLENDOR_VERSION)
+            << stat_box("version (min. " + min_version() + ")", SPLENDOR_VERSION)
             << stat_box("uptime", std::to_string(uptime / 3600) + " h " + std::to_string(uptime % 3600 / 60) + " min")
             << stat_box("players online", std::to_string(status["online"].get<int>()))
             << stat_box("games in progress", std::to_string(status["games_live"].get<int>()))
@@ -395,6 +443,59 @@ void ServerApp::setup_admin_routes(httplib::Server& server)
                                                 + std::to_string(status["games_today"].get<int>()) + ")")
             << stat_box("banned accounts", std::to_string(status["banned"].get<int>()))
             << stat_box("season", std::to_string(status["season"].get<int>())) << "</div>";
+
+        // Parties par jour (30 jours) : barres en SVG, sans script
+        std::vector<int> days = store_.games_per_day(30);
+        int highest = 1;
+        for (int count : days) {
+            highest = std::max(highest, count);
+        }
+        out << "<h2>Games per day (30 days, UTC)</h2><div class=\"box\"><svg viewBox=\"0 0 600 150\" width=\"100%\" height=\"170\" preserveAspectRatio=\"xMinYMid meet\" "
+               "role=\"img\" aria-label=\"Games per day\"><line x1=\"0\" y1=\"130\" x2=\"600\" y2=\"130\" "
+               "stroke=\"#2d5e45\"/>";
+        for (int i = 0; i < static_cast<int>(days.size()); i++) {
+            int height = days[i] * 110 / highest;
+            out << "<rect x=\"" << i * 20 + 3 << "\" y=\"" << 130 - height << "\" width=\"14\" height=\"" << height
+                << "\" rx=\"2\" fill=\"" << (i + 1 == static_cast<int>(days.size()) ? "#ffd140" : "#8be0a4")
+                << "\"><title>" << days[i] << "</title></rect>";
+            if (days[i] > 0) {
+                out << "<text x=\"" << i * 20 + 10 << "\" y=\"" << 125 - height << "\" fill=\"#9fb8aa\" font-size=\"10\" "
+                       "text-anchor=\"middle\">" << days[i] << "</text>";
+            }
+        }
+        out << "<text x=\"0\" y=\"146\" fill=\"#9fb8aa\" font-size=\"10\">-29 d</text><text x=\"600\" y=\"146\" "
+               "fill=\"#9fb8aa\" font-size=\"10\" text-anchor=\"end\">today</text></svg></div>";
+
+        out << "<h2>Minimum game version</h2><p class=\"soft\">Older games get the « Update required » screen. "
+               "Empty: back to SPLENDOR_MIN_VERSION (" << html_escape(config_.min_version) << ").</p>"
+            << action_form(session, "min_version", "/panel-admin",
+                           "<input name=\"value\" size=\"10\" placeholder=\"4.0.0\" value=\""
+                               + html_escape(store_.setting("min_version")) + "\">",
+                           "Set");
+
+        // Signalements /report (non traités d'abord)
+        out << "<h2>Reports</h2>";
+        std::vector<Report> reports = store_.reports(30);
+        if (reports.empty()) {
+            out << "<p class=\"soft\">No report.</p>";
+        } else {
+            out << "<table><tr><th>Date</th><th>By</th><th>Player</th><th>Reason</th><th></th></tr>";
+            for (const Report& report : reports) {
+                int target = store_.find_by_pseudo(report.pseudo);
+                std::string player = html_escape(report.pseudo);
+                if (target != 0) {
+                    player = "<a href=\"/panel-admin/account/" + std::to_string(target) + "\">" + player + "</a>";
+                }
+                out << "<tr><td>" << date_text(report.at) << "</td><td>" << html_escape(report.reporter) << "</td><td>"
+                    << player << "</td><td>" << html_escape(report.reason) << "</td><td>"
+                    << (report.handled ? "<span class=\"soft\">handled</span>"
+                                       : action_form(session, "handle_report", "/panel-admin", "", "Mark handled", "grey",
+                                                     "<input type=\"hidden\" name=\"report\" value=\""
+                                                         + std::to_string(report.id) + "\">"))
+                    << "</td></tr>";
+            }
+            out << "</table>";
+        }
 
         bool closed = status["signups_closed"].get<bool>();
         bool paused = status["games_paused"].get<bool>();
@@ -443,7 +544,7 @@ void ServerApp::setup_admin_routes(httplib::Server& server)
         if (live.empty()) {
             out << "<p class=\"soft\">None.</p>";
         } else {
-            out << "<table><tr><th>#</th><th>Mode</th><th>Round</th><th>Players</th></tr>";
+            out << "<table><tr><th>#</th><th>Mode</th><th>Round</th><th>Players</th><th></th></tr>";
             for (const json& game : live) {
                 std::string players;
                 for (const json& player : game["players"]) {
@@ -451,7 +552,10 @@ void ServerApp::setup_admin_routes(httplib::Server& server)
                                + std::to_string(player["score"].get<int>()) + " pts)";
                 }
                 out << "<tr><td>" << game["id"].get<int>() << "</td><td>" << html_escape(game["mode"].get<std::string>())
-                    << "</td><td>" << game["round"].get<int>() << "</td><td>" << html_escape(players) << "</td></tr>";
+                    << "</td><td>" << game["round"].get<int>() << "</td><td>" << html_escape(players) << "</td><td>"
+                    << action_form(session, "end_game", "/panel-admin", "", "End (no Elo)", "red",
+                                   "<input type=\"hidden\" name=\"game\" value=\"" + std::to_string(game["id"].get<int>()) + "\">")
+                    << "</td></tr>";
             }
             out << "</table>";
         }

@@ -77,6 +77,16 @@ struct AdminLogEntry {
     std::string action;   // ex. « elo Pierre 1200 »
 };
 
+// Un signalement envoyé avec /report sur Discord
+struct Report {
+    int id;
+    long long at;
+    std::string reporter;   // membre Discord qui signale (« nom (identifiant) »)
+    std::string pseudo;     // joueur signalé (tel qu'écrit)
+    std::string reason;
+    bool handled;
+};
+
 // Chiffres du tableau de bord d'administration
 struct StoreStats {
     int accounts = 0;
@@ -165,6 +175,12 @@ public:
     // Comptes dont le pseudo contient `text`, ou de numéro / identifiant Discord `text`
     std::vector<Account> search_accounts(const std::string& text, int limit);
     StoreStats stats();
+    // Parties terminées (non annulées) chacun des `days` derniers jours (UTC), du plus ancien à aujourd'hui
+    std::vector<int> games_per_day(int days);
+    // Signalements (/report du bot)
+    void add_report(const std::string& reporter, const std::string& pseudo, const std::string& reason);
+    std::vector<Report> reports(int limit);       // non traités d'abord, puis les plus récents
+    bool handle_report(int id);                    // marque comme traité (false s'il n'existe pas)
 
     // Supprime le compte (RGPD) : pseudo et identité effacés, sessions fermées ;
     // ses anciennes parties restent, au nom d'un joueur supprimé

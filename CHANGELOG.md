@@ -18,9 +18,11 @@ All notable changes to the project. Format based on
 - **Admin panel** at `/panel-admin` (Discord sign-in, administrators only):
   server state, close sign-ups, pause new games, in-game announcement, account
   search and management (rename, Elo, season badges, sign out everywhere,
-  ban, delete, cancel a game), admin log.
+  ban, delete, cancel a game), games-per-day chart, end a stuck game,
+  minimum game version without restarting, `/report` reports, admin log.
 - Bot **`/dev`** commands for the administrators: `status`, `signups`,
-  `games`, `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`.
+  `games`, `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`,
+  `end-game`, `min-version`.
 
 ## [3.9.0] - 2026-11-23
 

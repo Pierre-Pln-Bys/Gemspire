@@ -229,6 +229,12 @@ COMMAND_FR = {
     "Remove a season badge from a player": "Retirer un badge de saison à un joueur",
     "logout": "deconnecter",
     "Sign a player out everywhere": "Déconnecter un joueur partout",
+    "end-game": "terminer-partie",
+    "End a stuck game in progress (no Elo)": "Terminer une partie en cours bloquée (sans Elo)",
+    "Game number (panel or /dev status)": "Numéro de la partie (panel ou /dev etat)",
+    "min-version": "version-min",
+    "Minimum game version (empty = server setting)": "Version minimale du jeu (vide = réglage du serveur)",
+    "version": "version",
 }
 
 

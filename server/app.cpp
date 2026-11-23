@@ -440,12 +440,13 @@ void ServerApp::setup_routes(httplib::Server& server)
             return httplib::Server::HandlerResponse::Unhandled;
         }
         std::string version = request.get_header_value("X-Splendor-Version");
-        if (version_allowed(version, config_.min_version)) {
+        std::string minimum = min_version();
+        if (version_allowed(version, minimum)) {
             return httplib::Server::HandlerResponse::Unhandled;
         }
         reply(response, 426, {{"error", "This version of Gemspire is too old: download version "
-                                        + config_.min_version + " or newer."},
-                              {"min_version", config_.min_version},
+                                        + minimum + " or newer."},
+                              {"min_version", minimum},
                               {"download", "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest"}});
         return httplib::Server::HandlerResponse::Handled;
     });
@@ -688,7 +689,7 @@ void ServerApp::setup_routes(httplib::Server& server)
     // Réglages publics utiles au jeu (identifiant public de l'application Discord)
     server.Get("/config", [this](const httplib::Request&, httplib::Response& response) {
         reply(response, 200, {{"discord_app_id", config_.discord_client_id},
-                              {"min_version", config_.min_version},
+                              {"min_version", min_version()},
                               {"announcement", store_.setting("announcement")}});
     });
 
@@ -1185,6 +1186,22 @@ void ServerApp::setup_routes(httplib::Server& server)
         rooms_.remove_account(id);
         store_.delete_account(id);
         std::cout << "Compte " << id << " supprimé à la demande" << std::endl;
+        reply(response, 200, {{"status", "ok"}});
+    });
+
+    // /report du bot : le signalement est gardé pour le panel d'administration
+    server.Post("/bot/report", [this, json_text](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        if (!bot_allowed(request)) {
+            reply_error(response, 403, "Invalid bot key.");
+            return;
+        }
+        if (!parse_body(request, body) || json_text(body, "pseudo").empty() || json_text(body, "reason").empty()) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        store_.add_report(json_text(body, "reporter").substr(0, 100), json_text(body, "pseudo").substr(0, 64),
+                          json_text(body, "reason").substr(0, 500));
         reply(response, 200, {{"status", "ok"}});
     });
 

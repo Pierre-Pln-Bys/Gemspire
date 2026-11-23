@@ -383,6 +383,12 @@ async def report(interaction: discord.Interaction, username: str, reason: app_co
                                         pseudo=discord.utils.escape_markdown(username),
                                         reason=discord.utils.escape_markdown(reason)))
     await answer(interaction, tr("report_ok", user_lang(interaction)), private=True)
+    # Gardé aussi sur le serveur (panel d'administration) ; un échec ne gêne pas le joueur
+    reporter = "{} ({})".format(interaction.user.name, interaction.user.id)
+    try:
+        await asyncio.to_thread(api.report, reporter, username, reason)
+    except Exception as error:
+        log.warning("Signalement non enregistré sur le serveur : %s", error)
 
 
 # ---------------------------------------------------------------- Commandes des modérateurs
@@ -585,6 +591,19 @@ async def dev_unbadge(interaction: discord.Interaction, username: str, season: a
 @app_commands.rename(username=_("username"))
 async def dev_logout(interaction: discord.Interaction, username: str):
     await dev_action(interaction, "logout", username=username)
+
+
+@developer.command(name=_("end-game"), description=_("End a stuck game in progress (no Elo)"))
+@app_commands.rename(number=_("number"))
+@app_commands.describe(number=_("Game number (panel or /dev status)"))
+async def dev_end_game(interaction: discord.Interaction, number: app_commands.Range[int, 1]):
+    await dev_action(interaction, "end_game", game=number)
+
+
+@developer.command(name=_("min-version"), description=_("Minimum game version (empty = server setting)"))
+@app_commands.rename(version=_("version"))
+async def dev_min_version(interaction: discord.Interaction, version: app_commands.Range[str, 0, 14] = ""):
+    await dev_action(interaction, "min_version", value=version)
 
 
 tree.add_command(developer)

@@ -155,6 +155,13 @@ Store::Store(const std::string& path)
          " SELECT provider, provider_id, id, created_at FROM accounts WHERE provider <> 'supprime';");
     // v4 : réglages d'administration (inscriptions, parties, annonce) et journal
     exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);");
+    exec("CREATE TABLE IF NOT EXISTS reports ("
+         " id INTEGER PRIMARY KEY,"
+         " at INTEGER NOT NULL,"
+         " reporter TEXT NOT NULL,"
+         " pseudo TEXT NOT NULL,"
+         " reason TEXT NOT NULL,"
+         " handled INTEGER NOT NULL DEFAULT 0);");
     exec("CREATE TABLE IF NOT EXISTS admin_log ("
          " id INTEGER PRIMARY KEY,"
          " at INTEGER NOT NULL,"
@@ -805,4 +812,53 @@ StoreStats Store::stats()
     banned.bind(1, now);
     stats.banned = banned.row() ? banned.integer(0) : 0;
     return stats;
+}
+
+std::vector<int> Store::games_per_day(int days)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    long long today = static_cast<long long>(std::time(nullptr)) / 86400;
+    std::vector<int> counts(days, 0);
+    Statement list(db_, "SELECT finished_at / 86400, COUNT(*) FROM games WHERE cancelled = 0 AND finished_at >= ?"
+                        " GROUP BY finished_at / 86400");
+    list.bind(1, (today - days + 1) * 86400);
+    while (list.row()) {
+        long long index = list.big(0) - (today - days + 1);
+        if (index >= 0 && index < days) {
+            counts[index] = list.integer(1);
+        }
+    }
+    return counts;
+}
+
+void Store::add_report(const std::string& reporter, const std::string& pseudo, const std::string& reason)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement insert(db_, "INSERT INTO reports (at, reporter, pseudo, reason) VALUES (?, ?, ?, ?)");
+    insert.bind(1, static_cast<long long>(std::time(nullptr)));
+    insert.bind(2, reporter);
+    insert.bind(3, pseudo);
+    insert.bind(4, reason);
+    insert.done();
+}
+
+std::vector<Report> Store::reports(int limit)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement list(db_, "SELECT id, at, reporter, pseudo, reason, handled FROM reports ORDER BY handled, id DESC LIMIT ?");
+    list.bind(1, static_cast<long long>(limit));
+    std::vector<Report> result;
+    while (list.row()) {
+        result.push_back({list.integer(0), list.big(1), list.text(2), list.text(3), list.text(4), list.integer(5) != 0});
+    }
+    return result;
+}
+
+bool Store::handle_report(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement update(db_, "UPDATE reports SET handled = 1 WHERE id = ?");
+    update.bind(1, static_cast<long long>(id));
+    update.done();
+    return sqlite3_changes(db_) > 0;
 }

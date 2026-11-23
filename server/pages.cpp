@@ -332,6 +332,11 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
                     "</strong> you unlocked.",
               "<strong>Votre liste d'amis</strong> (demandes envoyées ou acceptées) et les <strong>succès</strong> "
               "que vous avez débloqués.")
+         << "</li><li>"
+         << T(lang, "<strong>Reports</strong> sent with <code>/report</code> on Discord (who reported, the username "
+                    "and the reason), kept for moderation.",
+              "<strong>Les signalements</strong> envoyés avec <code>/report</code> sur Discord (qui signale, le pseudo "
+              "et le motif), gardés pour la modération.")
          << "</li></ul><h2>" << T(lang, "What we don't store", "Ce que nous n'enregistrons pas") << "</h2><p>"
          << T(lang, "No email address, password or picture, and no chat message in the database. The game shows no "
                     "ads and sells no data.",

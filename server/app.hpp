@@ -96,6 +96,8 @@ private:
     std::string admin_action(const std::string& actor, const AdminParams& params, nlohmann::json& result);
     nlohmann::json admin_status();
     bool signups_closed();
+    // Version minimale du jeu : réglage du panel, sinon SPLENDOR_MIN_VERSION
+    std::string min_version();
     bool games_paused();
 };
 

@@ -808,6 +808,20 @@ void Rooms::notify_online(const nlohmann::json& notification)
     }
 }
 
+std::string Rooms::end_game(int game_id)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto found = games_.find(game_id);
+        if (found == games_.end() || found->second.game->is_over()) {
+            return "No game in progress with this number.";
+        }
+        games_.erase(found);
+    }
+    changed_.notify_all();  // les attentes longues sur cette partie répondent « introuvable »
+    return "";
+}
+
 RoomsStats Rooms::stats()
 {
     std::lock_guard<std::mutex> lock(mutex_);

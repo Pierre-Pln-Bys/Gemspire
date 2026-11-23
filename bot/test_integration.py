@@ -151,6 +151,13 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.call("/config")["announcement"], "Bientôt la v4")
         with self.assertRaises(ApiError):
             api.admin(405, "elo", username="Personne", value=1000)
+        self.assertIn("9.0.0", api.admin(405, "min_version", value="9.0.0")["message"])
+        self.assertEqual(api.admin(405, "status")["min_version"], "9.0.0")
+        with self.assertRaises(ApiError):
+            api.admin(405, "min_version", value="neuf")
+        with self.assertRaises(ApiError):
+            api.admin(405, "end_game", game=4242)
+        self.assertEqual(api.report("Témoin (1)", "Championne", "Insultes dans le chat")["status"], "ok")
 
 
 if __name__ == "__main__":

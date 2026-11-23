@@ -145,6 +145,9 @@ public:
     // La même notification à tous les joueurs dont le jeu est ouvert (annonce)
     void notify_online(const nlohmann::json& notification);
     RoomsStats stats();
+    // Administration : retire une partie en cours bloquée, sans Elo ni
+    // enregistrement (les jeux des joueurs reviennent au menu en ligne)
+    std::string end_game(int game_id);
     void notifications_json(int account, long since, nlohmann::json& out);
 
     // --- Événements pour le bot Discord : salons liés à un salon vocal
