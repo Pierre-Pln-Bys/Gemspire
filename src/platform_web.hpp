@@ -40,4 +40,9 @@ std::string web_language();
 // "" sinon ; l'adresse est nettoyée
 std::string web_login_from_address();
 
+// Secret de connexion gardé dans le stockage de session (sessionStorage) le
+// temps de l'aller-retour vers le fournisseur : il n'apparaît jamais dans l'URL.
+void web_remember_verifier(const std::string& verifier);
+std::string web_take_verifier();  // le lit et l'efface
+
 #endif

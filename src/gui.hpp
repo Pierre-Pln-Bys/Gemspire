@@ -203,7 +203,9 @@ struct ReplayState {
 struct OnlineState {
     bool in_game = false;            // le plateau affiche une partie en ligne
     bool dev_login = false;          // bouton « connexion de test » (SPLENDOR_DEV=1)
-    std::string login_id;            // connexion en cours dans le navigateur
+    std::string login_id;            // connexion en cours dans le navigateur (identifiant public)
+    std::string login_verifier;      // secret de la connexion, jamais mis dans l'URL du navigateur
+    std::string login_provider;      // fournisseur en attente (le temps d'appeler /auth/begin)
     double next_login_poll = 0;
     std::string pseudo;              // compte connecté
     int account = 0;

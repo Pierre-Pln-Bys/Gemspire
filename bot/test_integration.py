@@ -63,8 +63,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_offer_reaches_the_game(self):
         login = "z" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=4242&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=4242&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Pierre"})
         last = self.call("/me/notifications", token)["last"]  # le jeu est « ouvert »
 
@@ -85,8 +85,8 @@ class IntegrationTests(unittest.TestCase):
         tokens = {}
         for discord_id, name in ((901, "Defieur"), (902, "Defie")):
             login = str(discord_id) * 8
-            urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name={}&as=discord".format(login, discord_id)).close()
-            tokens[discord_id] = self.call("/auth/poll?login=" + login)["token"]
+            urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name={1}&as=discord&verifier=v{0}".format(login, discord_id)).close()
+            tokens[discord_id] = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
             self.call("/me/pseudo", tokens[discord_id], {"pseudo": name})
         last = self.call("/me/notifications", tokens[902])["last"]
         api = SplendorApi(self.url, "cle-integration")
@@ -104,30 +104,34 @@ class IntegrationTests(unittest.TestCase):
 
     def test_moderation(self):
         login = "y" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=777&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=777&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Tricheur"})
         api = SplendorApi(self.url, "cle-integration")
         self.assertEqual(api.profile(discord_id=777)["pseudo"], "Tricheur")
         self.assertEqual(api.history(pseudo="tricheur")["games_list"], [])
         self.assertEqual(api.leaderboard(), [])
-        banned = api.ban("Tricheur", 3, "multi-comptes")
+        # Une action de modération sans identité du modérateur est refusée (M1)
+        with self.assertRaises(ApiError) as missing:
+            api.ban("Tricheur", 1, actor="")
+        self.assertIn("moderator", str(missing.exception))
+        banned = api.ban("Tricheur", 3, "multi-comptes", actor=777)
         self.assertTrue(banned["banned"])
         with self.assertRaises(urllib.error.HTTPError):
             self.call("/me", token)  # session fermée
-        self.assertFalse(api.unban("Tricheur")["banned"])
+        self.assertFalse(api.unban("Tricheur", actor=777)["banned"])
         with self.assertRaises(ApiError) as caught:
-            api.ban("Personne", 1)
+            api.ban("Personne", 1, actor=777)
         self.assertEqual(str(caught.exception), "Player not found.")
         with self.assertRaises(ApiError):
-            api.cancel_game(12345)
-        api.delete_account(pseudo="Tricheur")
+            api.cancel_game(12345, actor=777)
+        api.delete_account(pseudo="Tricheur", actor=777)
         self.assertFalse(api.profile(pseudo="Tricheur")["found"])
 
     def test_dev_commands(self):
         login = "d" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=900&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=900&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Joueuse"})
         api = SplendorApi(self.url, "cle-integration")
         with self.assertRaises(ApiError) as caught:

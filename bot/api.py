@@ -78,23 +78,26 @@ class SplendorApi:
         body = {"discord_id": str(discord_id), "target_discord_id": str(target_discord_id), "mode": mode}
         return self._request("POST", "/bot/challenge", body)
 
-    # --- Modération
-    def ban(self, pseudo, days, reason=""):
+    # --- Modération (actor : identifiant Discord du modérateur, tracé côté serveur)
+    def ban(self, pseudo, days, reason="", actor=""):
         """Suspend le compte `days` jours (0 : définitif)."""
-        return self._request("POST", "/bot/ban", {"pseudo": pseudo, "days": int(days), "reason": reason})
+        return self._request("POST", "/bot/ban",
+                             {"pseudo": pseudo, "days": int(days), "reason": reason, "actor": str(actor)})
 
-    def unban(self, pseudo):
-        return self._request("POST", "/bot/unban", {"pseudo": pseudo})
+    def unban(self, pseudo, actor=""):
+        return self._request("POST", "/bot/unban", {"pseudo": pseudo, "actor": str(actor)})
 
     def end_season(self):
         """Termine la saison : {"ended", "season", "top": [{"pseudo", "elo"}, ...]}"""
         return self._request("POST", "/bot/season/end", {})
 
-    def cancel_game(self, game_id):
-        return self._request("POST", "/bot/cancel-game", {"game_id": int(game_id)})
+    def cancel_game(self, game_id, actor=""):
+        return self._request("POST", "/bot/cancel-game", {"game_id": int(game_id), "actor": str(actor)})
 
-    def delete_account(self, pseudo=None, discord_id=None):
-        return self._request("POST", "/bot/delete-account", self._who(pseudo, discord_id))
+    def delete_account(self, pseudo=None, discord_id=None, actor=""):
+        body = self._who(pseudo, discord_id)
+        body["actor"] = str(actor)
+        return self._request("POST", "/bot/delete-account", body)
 
     def report(self, reporter, pseudo, reason):
         """Garde un signalement /report pour le panel d'administration."""

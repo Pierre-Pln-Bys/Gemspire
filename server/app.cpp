@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -9,6 +10,7 @@
 
 #include "../src/move_json.hpp"
 #include "../src/version.hpp"
+#include "favicon.hpp"
 #include "pages.hpp"
 
 using nlohmann::json;
@@ -53,6 +55,10 @@ ServerConfig config_from_environment()
     config.turn_seconds = std::atoi(env("SPLENDOR_TURN_SECONDS", "120").c_str());
     if (config.turn_seconds < 5) {
         config.turn_seconds = 120;
+    }
+    config.rate_limit = std::atoi(env("SPLENDOR_RATE_LIMIT", "120").c_str());
+    if (config.rate_limit < 0) {
+        config.rate_limit = 0;  // valeur négative : pas de limite
     }
     return config;
 }
@@ -173,6 +179,8 @@ static void reply_site(httplib::Response& response, const std::string& html, int
     response.set_header("X-Content-Type-Options", "nosniff");
     response.set_header("Referrer-Policy", "no-referrer");
     response.set_header("Cache-Control", "public, max-age=60");
+    // HSTS : le navigateur reste en HTTPS (ignoré sur une connexion en clair)
+    response.set_header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     response.set_content(html, "text/html; charset=utf-8");
 }
 
@@ -217,6 +225,40 @@ static bool valid_login_id(const std::string& login)
     return true;
 }
 
+// Le secret de connexion (verifier) : mêmes règles que l'identifiant.
+static bool valid_verifier(const std::string& verifier)
+{
+    return valid_login_id(verifier);
+}
+
+// Comparaison en temps constant (évite de révéler le secret par la durée)
+static bool constant_time_equal(const std::string& a, const std::string& b)
+{
+    if (a.size() != b.size() || a.empty()) {
+        return false;
+    }
+    unsigned char difference = 0;
+    for (size_t i = 0; i < a.size(); i++) {
+        difference |= static_cast<unsigned char>(a[i] ^ b[i]);
+    }
+    return difference == 0;
+}
+
+// Identité de l'acteur d'une action de modération (identifiant Discord, chiffres
+// seulement) : le bot doit la fournir, pour tracer côté serveur qui a agi.
+static bool valid_actor(const std::string& actor)
+{
+    if (actor.empty() || actor.size() > 32) {
+        return false;
+    }
+    for (unsigned char c : actor) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool parse_body(const httplib::Request& request, json& body)
 {
     body = json::parse(request.body, nullptr, false);
@@ -239,7 +281,9 @@ static std::string authorize_url(const ServerConfig& config, const std::string& 
 {
     std::string redirect = url_encode(redirect_uri(config, provider));
     if (provider == "discord") {
-        return "https://discord.com/oauth2/authorize?response_type=code&scope=identify&prompt=none&client_id="
+        // Pas de prompt=none : la connexion ne peut pas se faire en silence dans
+        // le dos d'une victime (voir le secret `verifier` exigé par /auth/poll).
+        return "https://discord.com/oauth2/authorize?response_type=code&scope=identify&client_id="
                + url_encode(config.discord_client_id) + "&redirect_uri=" + redirect + "&state=" + state;
     }
     return "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&scope=openid&prompt=select_account"
@@ -348,6 +392,32 @@ bool ServerApp::bot_allowed(const httplib::Request& request) const
         difference |= static_cast<unsigned char>(given[i] ^ expected[i]);
     }
     return difference == 0;
+}
+
+// Limitation de débit par IP (fenêtre fixe d'une minute). Derrière Cloudflare,
+// l'IP réelle du client est dans CF-Connecting-IP (le serveur n'écoute qu'en local).
+bool ServerApp::rate_ok(const httplib::Request& request)
+{
+    if (config_.rate_limit <= 0) {
+        return true;  // limitation désactivée
+    }
+    std::string ip = request.get_header_value("CF-Connecting-IP");
+    if (ip.empty()) {
+        ip = request.remote_addr;
+    }
+    long long now = std::time(nullptr);
+    std::lock_guard<std::mutex> lock(rate_mutex_);
+    // Oublie les compteurs dont la fenêtre est passée (évite une croissance sans fin)
+    for (auto it = rate_hits_.begin(); it != rate_hits_.end();) {
+        it = now - it->second.first >= 60 ? rate_hits_.erase(it) : std::next(it);
+    }
+    std::pair<long long, int>& hit = rate_hits_[ip];
+    if (now - hit.first >= 60) {
+        hit.first = now;  // nouvelle fenêtre d'une minute
+        hit.second = 0;
+    }
+    hit.second++;
+    return hit.second <= config_.rate_limit;
 }
 
 bool ServerApp::ok() const
@@ -461,28 +531,65 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"status", "ok"}});
     });
 
-    // --- Connexion : le jeu ouvre /auth/<fournisseur>/start?login=ID dans le
-    //     navigateur, puis interroge /auth/poll?login=ID jusqu'à la fin.
+    // --- Connexion : le jeu enregistre d'abord un secret (POST /auth/begin, sur
+    //     son propre canal), puis ouvre /auth/<fournisseur>/start?login=ID dans le
+    //     navigateur, et interroge /auth/poll?login=ID&verifier=SECRET jusqu'à la fin.
+    //     Le secret ne passe jamais par l'URL du navigateur : connaître l'ID seul
+    //     (lien, Referer, historique, journaux) ne suffit plus à voler le jeton.
+    server.Post("/auth/begin", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!rate_ok(request)) {
+            reply_error(response, 429, "Too many requests. Slow down.");
+            return;
+        }
+        json body;
+        bool parsed = parse_body(request, body);
+        std::string provider = parsed ? body.value("provider", std::string()) : "";
+        std::string login = parsed ? body.value("login", std::string()) : "";
+        std::string verifier = parsed ? body.value("verifier", std::string()) : "";
+        bool configured = provider == "discord" ? !config_.discord_client_id.empty()
+                          : provider == "google" ? !config_.google_client_id.empty()
+                                                  : false;
+        if (!configured || !valid_login_id(login) || !valid_verifier(verifier)) {
+            reply_error(response, 400, "This sign-in method isn't available.");
+            return;
+        }
+        std::lock_guard<std::mutex> lock(logins_mutex_);
+        long long now = std::time(nullptr);
+        // Les connexions de plus de 10 minutes sont oubliées
+        for (auto it = logins_.begin(); it != logins_.end();) {
+            it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
+        }
+        // Une connexion déjà commencée garde son secret : sinon, quelqu'un qui
+        // connaît l'identifiant pourrait y mettre le sien et voler le jeton.
+        if (logins_.count(login) != 0) {
+            reply_error(response, 409, "This sign-in has already started. Try again from the game.");
+            return;
+        }
+        // Plafond anti-saturation : trop de connexions en attente = on refuse
+        if (static_cast<int>(logins_.size()) >= config_.max_pending_logins) {
+            reply_error(response, 429, "Too many sign-ins in progress. Try again later.");
+            return;
+        }
+        PendingLogin& pending = logins_[login];
+        pending.provider = provider;
+        pending.verifier = verifier;
+        pending.created = now;
+        pending.status = "pending";
+        reply(response, 200, {{"login", login}});
+    });
+
     server.Get(R"(/auth/(discord|google)/start)", [this](const httplib::Request& request, httplib::Response& response) {
         std::string provider = request.matches[1];
         std::string login = request.get_param_value("login");
-        bool configured = provider == "discord" ? !config_.discord_client_id.empty() : !config_.google_client_id.empty();
-        if (!valid_login_id(login) || !configured) {
-            reply_page(request, response, "Sign-in failed", "This sign-in method isn't available.");
+        std::lock_guard<std::mutex> lock(logins_mutex_);
+        auto found = logins_.find(login);
+        // La connexion doit avoir été préparée par /auth/begin (secret enregistré)
+        if (found == logins_.end() || found->second.provider != provider
+            || found->second.verifier.empty() || found->second.status != "pending") {
+            reply_page(request, response, "Sign-in failed", "Start again from the game.");
             return;
         }
-        {
-            std::lock_guard<std::mutex> lock(logins_mutex_);
-            // Les connexions de plus de 10 minutes sont oubliées
-            long long now = std::time(nullptr);
-            for (auto it = logins_.begin(); it != logins_.end();) {
-                it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
-            }
-            PendingLogin& pending = logins_[login];
-            pending.provider = provider;
-            pending.created = now;
-            pending.back_to_play = request.get_param_value("from") == "play";
-        }
+        found->second.back_to_play = request.get_param_value("from") == "play";
         response.set_redirect(authorize_url(config_, provider, login));
     });
 
@@ -566,9 +673,12 @@ void ServerApp::setup_routes(httplib::Server& server)
         // as=discord / as=google : simule ce fournisseur (tests), toujours en mode test
         std::string as = request.get_param_value("as");
         std::string provider = as == "discord" || as == "google" ? as : "dev";
+        // Connexion de test (locale) : le secret peut passer par l'URL ici.
+        std::string verifier = request.get_param_value("verifier");
         {
             std::lock_guard<std::mutex> lock(logins_mutex_);
             logins_[login].provider = provider;
+            logins_[login].verifier = verifier;
             logins_[login].created = std::time(nullptr);
         }
         finish_login(login, provider, name, "");
@@ -604,22 +714,35 @@ void ServerApp::setup_routes(httplib::Server& server)
     });
 
     server.Get("/auth/poll", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!rate_ok(request)) {
+            reply_error(response, 429, "Too many requests. Slow down.");
+            return;
+        }
         std::string login = request.get_param_value("login");
+        std::string verifier = request.get_param_value("verifier");
         std::lock_guard<std::mutex> lock(logins_mutex_);
         auto found = logins_.find(login);
         if (found == logins_.end()) {
             reply(response, 200, {{"status", "pending"}});
             return;
         }
-        json body = {{"status", found->second.status}};
-        if (found->second.status == "done" && found->second.link_account != 0) {
-            body["linked"] = found->second.provider;  // connexion ajoutée au compte, pas de nouveau jeton
-        } else if (found->second.status == "done") {
-            body["token"] = found->second.token;
-        } else if (found->second.status == "error") {
-            body["error"] = found->second.error;
+        PendingLogin& pending = found->second;
+        // Remettre le jeton exige le bon secret : sans lui on reste « pending »
+        // (pas d'oracle, et le vrai jeu peut toujours réessayer).
+        if (pending.status == "done" && pending.link_account == 0
+            && !constant_time_equal(verifier, pending.verifier)) {
+            reply(response, 200, {{"status", "pending"}});
+            return;
         }
-        if (found->second.status != "pending") {
+        json body = {{"status", pending.status}};
+        if (pending.status == "done" && pending.link_account != 0) {
+            body["linked"] = pending.provider;  // connexion ajoutée au compte, pas de nouveau jeton
+        } else if (pending.status == "done") {
+            body["token"] = pending.token;
+        } else if (pending.status == "error") {
+            body["error"] = pending.error;
+        }
+        if (pending.status != "pending") {
             logins_.erase(found);  // le jeton n'est donné qu'une fois
         }
         reply(response, 200, body);
@@ -671,6 +794,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             std::lock_guard<std::mutex> lock(logins_mutex_);
             PendingLogin& pending = logins_[login];
             pending.provider = provider;
+            // Préparé sur ce canal authentifié : un secret non vide marque la
+            // connexion comme « commencée par le jeu » (exigé par /auth/start).
+            // L'ajout d'une connexion ne renvoie pas de jeton, donc ce secret
+            // n'a pas à être présenté à /auth/poll.
+            pending.verifier = random_hex(16);
             pending.created = std::time(nullptr);
             pending.link_account = id;
         }
@@ -1116,6 +1244,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         int days = body["days"].get<int>();
         std::string reason = json_text(body, "reason").substr(0, 200);
@@ -1126,9 +1259,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         long long until = days == 0 ? BAN_FOREVER : static_cast<long long>(std::time(nullptr)) + days * 86400LL;
         store_.ban(id, until, reason);
         rooms_.remove_account(id);
-        std::cout << "Modération : compte " << id << " suspendu (" << (days == 0 ? std::string("définitif")
-                                                                                 : std::to_string(days) + " j")
-                  << ")" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " suspendu ("
+                  << (days == 0 ? std::string("définitif") : std::to_string(days) + " j") << ")" << std::endl;
         reply(response, 200, account_json(store_, id));
     });
 
@@ -1142,13 +1274,18 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         if (id == 0) {
             reply_error(response, 400, "Joueur introuvable.");
             return;
         }
         store_.unban(id);
-        std::cout << "Modération : compte " << id << " réactivé" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " réactivé" << std::endl;
         reply(response, 200, account_json(store_, id));
     });
 
@@ -1162,12 +1299,18 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         std::string error = store_.cancel_game(body["game_id"].get<int>());
         if (!error.empty()) {
             reply_error(response, 400, error);
             return;
         }
-        std::cout << "Modération : partie " << body["game_id"].get<int>() << " annulée" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : partie " << body["game_id"].get<int>()
+                  << " annulée" << std::endl;
         reply(response, 200, {{"status", "ok"}});
     });
 
@@ -1182,6 +1325,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         if (id == 0) {
             reply_error(response, 400, "Joueur introuvable.");
@@ -1189,7 +1337,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         rooms_.remove_account(id);
         store_.delete_account(id);
-        std::cout << "Compte " << id << " supprimé à la demande" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " supprimé à la demande"
+                  << std::endl;
         reply(response, 200, {{"status", "ok"}});
     });
 
@@ -1316,8 +1465,26 @@ void ServerApp::setup_routes(httplib::Server& server)
     // Jeu dans le navigateur : fichiers de `make web` (index.html, .js, .wasm)
     if (server.set_mount_point("/play/", config_.web_dir)) {
         site.web_game = true;
-        server.Get("/play", [](const httplib::Request&, httplib::Response& response) {
-            response.set_redirect("/play/");
+        // /play sans barre finale. Dans l'Activité Discord, le proxy fait
+        // correspondre « / » à « /play » : une redirection vers /play/ y
+        // deviendrait /play/play/ (page blanche) et perdrait frame_id. On sert
+        // donc la page directement (ses fichiers relatifs restent bons via le
+        // proxy) ; ailleurs, redirection vers /play/ en gardant les paramètres.
+        std::string web_dir = config_.web_dir;
+        server.Get("/play", [web_dir](const httplib::Request& request, httplib::Response& response) {
+            if (request.has_param("frame_id")) {
+                std::ifstream file(web_dir + "/index.html", std::ios::binary);
+                std::ostringstream page;
+                page << file.rdbuf();
+                response.set_content(page.str(), "text/html; charset=utf-8");
+                return;
+            }
+            std::string query;
+            size_t mark = request.target.find('?');
+            if (mark != std::string::npos) {
+                query = request.target.substr(mark);
+            }
+            response.set_redirect("/play/" + query);
         });
     }
     auto lang_of = [](const httplib::Request& request, Lang fallback) {
@@ -1361,6 +1528,16 @@ void ServerApp::setup_routes(httplib::Server& server)
     };
     server.Get("/privacy", privacy_page(Lang::English));
     server.Get("/confidentialite", privacy_page(Lang::French));
+    // Icônes du site (onglets, favoris, écran d'accueil des téléphones), intégrées au serveur
+    server.Get("/favicon.ico", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content(reinterpret_cast<const char*>(FAVICON_ICO), sizeof(FAVICON_ICO), "image/x-icon");
+        response.set_header("Cache-Control", "public, max-age=604800");
+    });
+    server.Get("/apple-touch-icon.png", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content(reinterpret_cast<const char*>(APPLE_TOUCH_ICON_PNG), sizeof(APPLE_TOUCH_ICON_PNG),
+                             "image/png");
+        response.set_header("Cache-Control", "public, max-age=604800");
+    });
     server.Get("/robots.txt", [](const httplib::Request&, httplib::Response& response) {
         response.set_content("User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\n",
                              "text/plain");

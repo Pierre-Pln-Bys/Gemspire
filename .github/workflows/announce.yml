@@ -17,4 +17,5 @@ jobs:
       - name: Changelog sur Discord
         env:
           DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-        run: python3 tools/discord_release.py "${{ inputs.tag }}"
+          TAG: ${{ inputs.tag }}
+        run: python3 tools/discord_release.py "$TAG"

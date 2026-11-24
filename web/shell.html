@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f3d28">
 <title>Gemspire — Play</title>
@@ -48,17 +50,42 @@
   var gemspireActivity = (function () {
     var params = new URLSearchParams(window.location.search);
     var frameId = params.get("frame_id");
-    var inActivity = !!frameId && !!params.get("instance_id");
+    // Origine venant de Discord (discord.com, ptb/canary, ou le proxy discordsays.com)
+    function isDiscordOrigin(origin) {
+      try {
+        var url = new URL(origin);
+        var host = url.hostname;
+        return url.protocol === "https:"
+            && (host === "discord.com" || host.endsWith(".discord.com")
+                || host === "discordsays.com" || host.endsWith(".discordsays.com"));
+      } catch (e) {
+        return false;
+      }
+    }
+    // Origine du parent : seulement si c'est Discord. Une page tierce qui
+    // intègre /play dans une iframe n'active pas le mode Activité ; sans
+    // Referer, on vise discord.com (une autre page ne recevrait rien).
+    var referrerOrigin = document.referrer ? new URL(document.referrer).origin : "";
+    var parentOrigin = referrerOrigin === "" ? "https://discord.com" : referrerOrigin;
+    var inActivity = !!frameId && !!params.get("instance_id") && isDiscordOrigin(parentOrigin);
     var state = { code: "", error: "" };
-    var parentOrigin = document.referrer ? new URL(document.referrer).origin : "*";
     var clientId = "";
     var authorizeNonce = "";
+
+    // N'accepte que les messages venant de Discord : un cadre parent
+    // malveillant ne peut rien injecter.
+    function originAllowed(origin) {
+      return isDiscordOrigin(origin);
+    }
 
     function send(opcode, payload) {
       window.parent.postMessage([opcode, payload], parentOrigin);
     }
 
     function onMessage(event) {
+      if (!originAllowed(event.origin)) {
+        return;  // message d'une origine inattendue : ignoré
+      }
       if (!Array.isArray(event.data) || event.data[0] !== 1) {
         return;  // seulement les messages FRAME (opcode 1)
       }

@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -45,16 +47,19 @@ static json post(httplib::Client& client, const std::string& path, const std::st
     return json::parse(response->body, nullptr, false);
 }
 
-// Connexion de test : comme le jeu, on ouvre /auth/dev/start puis on interroge /auth/poll
+// Connexion de test : comme le jeu, on ouvre /auth/dev/start (avec un secret),
+// puis on interroge /auth/poll en présentant ce même secret.
 static std::string login(httplib::Client& client, const std::string& name, const std::string& login_id,
                          const std::string& as = "")
 {
-    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name + (as.empty() ? "" : "&as=" + as));
+    std::string verifier = "v" + login_id;  // secret quelconque (alphanumérique)
+    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name
+                           + "&verifier=" + verifier + (as.empty() ? "" : "&as=" + as));
     assert(page && page->status == 200);
-    json poll = get(client, "/auth/poll?login=" + login_id, "");
+    json poll = get(client, "/auth/poll?login=" + login_id + "&verifier=" + verifier, "");
     assert(poll["status"] == "done");
     // Le jeton n'est donné qu'une fois
-    assert(get(client, "/auth/poll?login=" + login_id, "")["status"] == "pending");
+    assert(get(client, "/auth/poll?login=" + login_id + "&verifier=" + verifier, "")["status"] == "pending");
     return poll["token"];
 }
 
@@ -70,6 +75,11 @@ int main()
     config.min_version = SPLENDOR_VERSION;
     config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
     config.admin_discord_ids = {"777"};
+    config.rate_limit = 0;  // pas de limite de débit : le test enchaîne beaucoup de requêtes
+    // Faux jeu navigateur pour /play
+    std::filesystem::create_directories("tests/web_test");
+    std::ofstream("tests/web_test/index.html") << "<title>jeu web</title>";
+    config.web_dir = "tests/web_test";
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -93,6 +103,20 @@ int main()
         assert(old_game.Get("/leaderboard")->status == 200);
         assert(old_game.Get("/")->status == 200);
         assert(old_game.Get("/health")->status == 200);
+        // Icônes du site, accessibles sans en-tête de version (navigateurs)
+        auto icon = old_game.Get("/favicon.ico");
+        assert(icon && icon->status == 200 && icon->get_header_value("Content-Type") == "image/x-icon");
+        auto touch_icon = old_game.Get("/apple-touch-icon.png");
+        assert(touch_icon && touch_icon->status == 200 && touch_icon->body.substr(1, 3) == "PNG");
+        assert(old_game.Get("/")->body.find("/favicon.ico") != std::string::npos);
+        // /play : redirection vers /play/ (paramètres gardés) ; dans l'Activité
+        // Discord (frame_id), la page est servie directement, sans redirection
+        old_game.set_follow_location(false);
+        auto play = old_game.Get("/play?lang=fr");
+        assert(play && play->status == 302 && play->get_header_value("Location") == "/play/?lang=fr");
+        auto activity = old_game.Get("/play?frame_id=f&instance_id=i");
+        assert(activity && activity->status == 200 && activity->body.find("jeu web") != std::string::npos);
+        assert(old_game.Get("/play/")->body.find("jeu web") != std::string::npos);
     }
 
     httplib::Client client("127.0.0.1", PORT);
@@ -102,6 +126,115 @@ int main()
     // --- Comptes et pseudos
     std::string alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaaaa");
     std::string bob = login(client, "bob", "bbbbbbbbbbbbbbbbbbbbbbbb");
+
+    // --- H1 : prise de compte. /auth/poll ne remet le jeton qu'avec le bon secret ;
+    //     connaître l'identifiant de connexion seul (lien, Referer, journaux) ne suffit plus.
+    {
+        std::string lid = "hhhhhhhhhhhhhhhhhhhhhhhh";
+        std::string secret = "topsecrettopsecret123456";
+        assert(client.Get("/auth/dev/start?login=" + lid + "&name=mallory&verifier=" + secret)->status == 200);
+        // Sans secret, ou avec un mauvais secret : le jeton n'est pas donné (reste « pending »)
+        assert(get(client, "/auth/poll?login=" + lid, "")["status"] == "pending");
+        assert(get(client, "/auth/poll?login=" + lid + "&verifier=mauvaismauvaismauvais1", "")["status"] == "pending");
+        // Avec le bon secret : jeton remis et utilisable
+        json done = get(client, "/auth/poll?login=" + lid + "&verifier=" + secret, "");
+        assert(done["status"] == "done" && done.contains("token"));
+        assert(get(client, "/me", done["token"].get<std::string>())["id"] != 0);
+        // Jeton donné une seule fois (l'entrée est ensuite effacée)
+        assert(get(client, "/auth/poll?login=" + lid + "&verifier=" + secret, "")["status"] == "pending");
+        // Un /auth/<fournisseur>/start non préparé par /auth/begin ne redirige pas vers l'OAuth
+        auto not_begun = client.Get("/auth/discord/start?login=zzzzzzzzzzzzzzzzzzzzzzzz");
+        assert(not_begun && not_begun->status != 302);
+    }
+
+    // --- H1 (suite) : /auth/begin prépare le secret ; /auth/start redirige alors vers
+    //     l'OAuth, sans prompt=none. Serveur isolé (client Discord factice) : begin et
+    //     start ne font aucun appel réseau (seul le callback en ferait).
+    {
+        std::remove("tests/test_server_oauth.db");
+        ServerConfig oauth_config;
+        oauth_config.port = PORT + 1;
+        oauth_config.database = "tests/test_server_oauth.db";
+        oauth_config.discord_client_id = "fake-discord-client";
+        oauth_config.public_url = "http://127.0.0.1";
+        oauth_config.min_version = SPLENDOR_VERSION;
+        ServerApp oauth_app(oauth_config);
+        assert(oauth_app.ok());
+        httplib::Server oauth_server;
+        oauth_app.setup_routes(oauth_server);
+        std::thread oauth_thread([&]() { oauth_server.listen("127.0.0.1", PORT + 1); });
+        oauth_server.wait_until_ready();
+        httplib::Client oauth("127.0.0.1", PORT + 1);
+        oauth.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
+        oauth.set_follow_location(false);
+
+        std::string lid = "oauthoauthoauthoauth1234";
+        std::string secret = "secretsecretsecret567890";
+        // start avant begin : refusé (pas de redirection)
+        assert(oauth.Get("/auth/discord/start?login=" + lid)->status != 302);
+        // begin enregistre le secret et renvoie l'identifiant
+        auto begin_json = json({{"provider", "discord"}, {"login", lid}, {"verifier", secret}}).dump();
+        auto begun = oauth.Post("/auth/begin", begin_json, "application/json");
+        assert(begun && begun->status == 200 && json::parse(begun->body)["login"] == lid);
+        // start après begin : redirige vers Discord, avec le state, et SANS prompt=none
+        auto redirect = oauth.Get("/auth/discord/start?login=" + lid);
+        assert(redirect && redirect->status == 302);
+        std::string location = redirect->get_header_value("Location");
+        assert(location.find("discord.com") != std::string::npos);
+        assert(location.find("state=" + lid) != std::string::npos);
+        assert(location.find("prompt=none") == std::string::npos);
+        // Un second begin sur le même identifiant ne remplace pas le secret (vol de jeton)
+        auto hijack = json({{"provider", "discord"}, {"login", lid}, {"verifier", "attackerattackerattacker"}}).dump();
+        assert(oauth.Post("/auth/begin", hijack, "application/json")->status == 409);
+        // begin refuse un identifiant invalide (trop court)
+        auto bad = json({{"provider", "discord"}, {"login", "court"}, {"verifier", secret}}).dump();
+        assert(oauth.Post("/auth/begin", bad, "application/json")->status == 400);
+
+        oauth_server.stop();
+        oauth_thread.join();
+    }
+
+    // --- L5 : limitation de débit par IP et plafond de connexions en attente.
+    //     Serveur isolé avec des limites basses (le serveur principal ne limite pas).
+    {
+        std::remove("tests/test_server_rate.db");
+        ServerConfig rate_config;
+        rate_config.port = PORT + 2;
+        rate_config.database = "tests/test_server_rate.db";
+        rate_config.dev_login = true;
+        rate_config.discord_client_id = "fake-discord-client";
+        rate_config.min_version = SPLENDOR_VERSION;
+        rate_config.rate_limit = 5;        // 5 requêtes/minute par IP
+        rate_config.max_pending_logins = 2;  // au plus 2 connexions en attente
+        ServerApp rate_app(rate_config);
+        assert(rate_app.ok());
+        httplib::Server rate_server;
+        rate_app.setup_routes(rate_server);
+        std::thread rate_thread([&]() { rate_server.listen("127.0.0.1", PORT + 2); });
+        rate_server.wait_until_ready();
+        httplib::Client rc("127.0.0.1", PORT + 2);
+        rc.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
+
+        auto begin = [&](const std::string& id) {
+            auto body = json({{"provider", "discord"}, {"login", id}, {"verifier", "verifierverifier1234"}}).dump();
+            return rc.Post("/auth/begin", body, "application/json");
+        };
+        // Plafond : 2 connexions en attente acceptées, la 3e est refusée (429)
+        assert(begin("rate0000000000000000")->status == 200);
+        assert(begin("rate1111111111111111")->status == 200);
+        auto capped = begin("rate2222222222222222");
+        assert(capped && capped->status == 429
+               && json::parse(capped->body)["error"].get<std::string>().find("in progress") != std::string::npos);
+        // Débit : 5 requêtes/minute par IP (3 begin déjà faits) ; la 6e requête est refusée
+        assert(rc.Get("/auth/poll?login=rate0000000000000000")->status == 200);  // 4e
+        assert(rc.Get("/auth/poll?login=rate0000000000000000")->status == 200);  // 5e
+        auto throttled = rc.Get("/auth/poll?login=rate0000000000000000");        // 6e
+        assert(throttled && throttled->status == 429
+               && json::parse(throttled->body)["error"].get<std::string>().find("Slow down") != std::string::npos);
+
+        rate_server.stop();
+        rate_thread.join();
+    }
     get(client, "/me", "faux-jeton", 401);
     assert(get(client, "/me", alice)["pseudo"] == "");
     post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}}, 403);  // pas encore de pseudo
@@ -424,15 +557,19 @@ int main()
         int change = last_game["elo_change"];
         int last_id = last_game["id"];
 
+        // M1 : une action de modération sans identité du modérateur (actor) est refusée
+        assert(bot_post("/bot/cancel-game", {{"game_id", last_id}}, 400)
+                   .value("error", std::string())
+                   .find("moderator") != std::string::npos);
         // Annuler la dernière partie rend l'Elo ; une seconde fois : refusé
-        bot_post("/bot/cancel-game", {{"game_id", last_id}});
+        bot_post("/bot/cancel-game", {{"game_id", last_id}, {"actor", "777"}});
         assert(bot_get("/bot/profile?pseudo=Alice")["elo"] == elo_before_cancel - change);
         assert(bot_get("/bot/history?pseudo=Alice")["games_list"][0]["cancelled"] == true);
-        bot_post("/bot/cancel-game", {{"game_id", last_id}}, 400);
-        bot_post("/bot/cancel-game", {{"game_id", 999999}}, 400);
+        bot_post("/bot/cancel-game", {{"game_id", last_id}, {"actor", "777"}}, 400);
+        bot_post("/bot/cancel-game", {{"game_id", 999999}, {"actor", "777"}}, 400);
 
         // Suspension : sessions fermées, reconnexion refusée, absent du classement
-        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"reason", "multi-comptes"}, {"days", 7}});
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"reason", "multi-comptes"}, {"days", 7}, {"actor", "777"}});
         get(client, "/me", bob, 401);
         auto page = client.Get("/auth/dev/start?login=bbbbbbbbbbbbbbbbbbbbbbb2&name=bob");
         assert(page && page->status == 200);
@@ -443,15 +580,15 @@ int main()
             assert(player["pseudo"] != "Bébert");
         }
         assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == true);
-        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"days", -1}}, 400);
-        bot_post("/bot/ban", {{"pseudo", "personne"}, {"days", 1}}, 400);
-        bot_post("/bot/unban", {{"pseudo", "Bébert"}});
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"days", -1}, {"actor", "777"}}, 400);
+        bot_post("/bot/ban", {{"pseudo", "personne"}, {"days", 1}, {"actor", "777"}}, 400);
+        bot_post("/bot/unban", {{"pseudo", "Bébert"}, {"actor", "777"}});
         assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == false);
         bob = login(client, "bob", "bbbbbbbbbbbbbbbbbbbbbbb3");
         assert(get(client, "/me", bob)["pseudo"] == "Bébert");
 
         // Suppression du compte : le pseudo est libéré, l'historique reste
-        bot_post("/bot/delete-account", {{"discord_id", "123456"}});
+        bot_post("/bot/delete-account", {{"discord_id", "123456"}, {"actor", "777"}});
         get(client, "/me", carol, 401);
         assert(bot_get("/bot/profile?pseudo=Carole")["found"] == false);
         assert(bot_get("/bot/profile?discord_id=123456")["found"] == false);
@@ -626,6 +763,7 @@ int main()
     std::remove("tests/test_server.db");
     std::remove("tests/test_server.db-wal");
     std::remove("tests/test_server.db-shm");
+    std::filesystem::remove_all("tests/web_test");
     std::cout << "Serveur : tous les tests passent (" << moves << " coups joués en ligne).\n";
     return 0;
 }
