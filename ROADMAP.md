@@ -187,15 +187,17 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [ ] Google : écran de consentement complété (accueil, confidentialité,
   e-mail d'assistance) et application **publiée** (plus seulement des
   utilisateurs test).
-- [ ] Discord : application rattachée à une Team, liens Conditions et
-  Confidentialité, **vérification** de l'application et du bot.
+- [x] Discord : bot **vérifié**.
 - [ ] Test d'intrusion autorisé du serveur, du Raspberry Pi, du tunnel et de
   l'application (extension de pentest), rapport.
 - [ ] Corrections des failles trouvées, nouveau test.
-- [ ] Signature des exécutables Windows (plus d'avertissement SmartScreen) et
-  empreintes SHA-256 publiées avec chaque release.
+- [ ] Empreintes SHA-256 publiées avec chaque release.
 
 ## Plus tard
+
+- Signature des exécutables Windows (plus d'avertissement SmartScreen) :
+  reportée (SignPath Foundation demande un projet open source qu'on souhaite
+  garder ouvert, à revoir).
 
 - **Revendiquer le jeu sur Discord** (*Claim Your Game*) : possible seulement
   quand Discord détecte Gemspire comme jeu publié (assez de joueurs, ou

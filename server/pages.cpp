@@ -186,6 +186,26 @@ std::string page_home(const SiteInfo& site, Lang lang)
          << T(lang, "Download for Linux", "Télécharger pour Linux") << "</a>"
          << "<a class=\"button ghost\" href=\"" << href("/leaderboard", lang) << "\">"
          << T(lang, "See the leaderboard", "Voir le classement") << "</a></section>";
+    body << "<section class=\"card\"><h2>" << T(lang, "What Gemspire is", "Qu'est-ce que Gemspire ?") << "</h2><p>"
+         << T(lang, "Gemspire is a free strategy board game for 2 to 4 players, made as a student project. You can play "
+                    "it <strong>without any account</strong>: download it or open it in your browser and play against "
+                    "the computer or with friends on the same screen.",
+              "Gemspire est un jeu de plateau de stratégie gratuit, de 2 à 4 joueurs, réalisé dans le cadre d'un projet "
+              "étudiant. On peut y jouer <strong>sans aucun compte</strong> : téléchargez-le ou ouvrez-le dans le "
+              "navigateur, et jouez contre l'ordinateur ou entre amis sur le même écran.")
+         << "</p><p>"
+         << T(lang, "An account is only needed to <strong>play online</strong> (games against other players, Elo "
+                    "leaderboard, friends). You create it with <strong>Sign in with Google</strong> or with Discord: "
+                    "Gemspire only receives an anonymous account identifier from Google (no name, email, photo or "
+                    "other Google data), used solely to recognize your account the next time you sign in. Details in "
+                    "the ",
+              "Un compte n'est utile que pour <strong>jouer en ligne</strong> (parties contre d'autres joueurs, "
+              "classement Elo, amis). Il se crée avec <strong>Se connecter avec Google</strong> ou avec Discord : "
+              "Gemspire ne reçoit de Google qu'un identifiant de compte anonyme (ni nom, ni e-mail, ni photo, ni "
+              "aucune autre donnée Google), utilisé uniquement pour reconnaître votre compte à la connexion "
+              "suivante. Détails dans la ")
+         << "<a href=\"" << href("/privacy", lang) << "\">" << T(lang, "privacy policy", "politique de confidentialité")
+         << "</a>.</p></section>";
     body << "<div class=\"grid\"><div class=\"card\"><h3>" << T(lang, "Two modes", "Deux modes") << "</h3><p>"
          << T(lang, "<strong>Quick</strong>: no gold, no reservations. <strong>Classic</strong>: with gold tokens "
                     "(wild) and card reservations.",
@@ -309,81 +329,195 @@ std::string page_terms(const SiteInfo& site, Lang lang)
 std::string page_privacy(const SiteInfo& site, Lang lang)
 {
     std::ostringstream body;
-    body << "<h1>" << T(lang, "Privacy", "Confidentialité") << "</h1><p class=\"soft\">"
-         << T(lang, "Last updated: November 22, 2026", "Dernière mise à jour : 22 novembre 2026")
-         << "</p><div class=\"card\"><h2>" << T(lang, "What we store", "Ce que nous enregistrons") << "</h2><ul><li>"
-         << T(lang, "<strong>Your Discord and/or Google identifier</strong> (one per linked sign-in, a number, not your name or email), to "
-                    "recognize your account. We only ask Discord for <code>identify</code> and Google for "
-                    "<code>openid</code>.",
-              "<strong>Votre identifiant Discord et/ou Google</strong> (un par connexion liée, un numéro, pas votre nom ni votre e-mail), pour "
-              "reconnaître votre compte. Nous demandons à Discord le droit <code>identify</code> et à Google "
-              "<code>openid</code> uniquement.")
+    body << "<h1>" << T(lang, "Privacy policy", "Politique de confidentialité") << "</h1><p class=\"soft\">"
+         << T(lang, "Last updated: November 24, 2026", "Dernière mise à jour : 24 novembre 2026")
+         << "</p><div class=\"card\">"
+
+         << "<h2>" << T(lang, "1. Who we are", "1. Qui sommes-nous") << "</h2><p>"
+         << T(lang, "Gemspire (the game, the website gemspire.epsilon-forge.fr, the online game server and the "
+                    "Discord bot) is a free student project developed at ENSEIRB-MATMECA (Bordeaux, France). It is "
+                    "responsible for the data described here. Contact: ",
+              "Gemspire (le jeu, le site gemspire.epsilon-forge.fr, le serveur de jeu en ligne et le bot Discord) "
+              "est un projet étudiant gratuit développé à l'ENSEIRB-MATMECA (Bordeaux, France). Il est responsable "
+              "des données décrites ici. Contact : ")
+         << contact_html(site, lang) << ".</p><p>"
+         << T(lang, "Playing offline (against the computer or on the same screen) requires no account and sends "
+                    "nothing to our server. This policy only concerns online play, the website and the Discord bot.",
+              "Jouer hors ligne (contre l'ordinateur ou sur le même écran) ne demande aucun compte et n'envoie rien "
+              "à notre serveur. Cette politique concerne seulement le jeu en ligne, le site et le bot Discord.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "2. Data we collect", "2. Données que nous collectons") << "</h2><ul><li>"
+         << T(lang, "<strong>Your Discord and/or Google account identifier</strong> (one per sign-in you link): a "
+                    "number, not your name or email address.",
+              "<strong>L'identifiant de votre compte Discord et/ou Google</strong> (un par connexion liée) : un "
+              "numéro, pas votre nom ni votre adresse e-mail.")
          << "</li><li>"
-         << T(lang, "<strong>Your username</strong>, your <strong>Elo</strong>, your number of games and wins, and "
-                    "the history of your online games (date, mode, place, score, Elo).",
-              "<strong>Votre pseudo</strong>, votre <strong>Elo</strong>, votre nombre de parties et de victoires, et "
-              "l'historique des parties en ligne (date, mode, place, score, Elo).")
+         << T(lang, "<strong>Your username</strong> (chosen by you), your <strong>Elo</strong>, number of games and "
+                    "wins, the history of your online games (date, mode, place, score, Elo change) and their replays "
+                    "(the moves played).",
+              "<strong>Votre pseudo</strong> (choisi par vous), votre <strong>Elo</strong>, nombre de parties et de "
+              "victoires, l'historique de vos parties en ligne (date, mode, place, score, variation d'Elo) et leurs "
+              "rediffusions (les coups joués).")
          << "</li><li>"
-         << T(lang, "<strong>A fingerprint of your session token</strong> (the token itself stays on your device).",
-              "<strong>Une empreinte de votre jeton de session</strong> (le jeton lui-même reste sur votre "
-              "appareil).")
+         << T(lang, "<strong>Your friend list</strong>, the <strong>achievements</strong> and season "
+                    "<strong>badges</strong> you earned.",
+              "<strong>Votre liste d'amis</strong>, vos <strong>succès</strong> et <strong>badges</strong> de "
+              "saison.")
          << "</li><li>"
-         << T(lang, "<strong>Your friend list</strong> (requests you sent or accepted) and the <strong>achievements"
-                    "</strong> you unlocked.",
-              "<strong>Votre liste d'amis</strong> (demandes envoyées ou acceptées) et les <strong>succès</strong> "
-              "que vous avez débloqués.")
+         << T(lang, "<strong>A fingerprint (SHA-256) of your session token</strong>; the token itself stays on your "
+                    "device.",
+              "<strong>Une empreinte (SHA-256) de votre jeton de session</strong> ; le jeton lui-même reste sur "
+              "votre appareil.")
          << "</li><li>"
-         << T(lang, "<strong>Reports</strong> sent with <code>/report</code> on Discord (who reported, the username "
-                    "and the reason), kept for moderation.",
-              "<strong>Les signalements</strong> envoyés avec <code>/report</code> sur Discord (qui signale, le pseudo "
-              "et le motif), gardés pour la modération.")
-         << "</li></ul><h2>" << T(lang, "What we don't store", "Ce que nous n'enregistrons pas") << "</h2><p>"
-         << T(lang, "No email address, password or picture, and no chat message in the database. The game shows no "
-                    "ads and sells no data.",
-              "Ni adresse e-mail, ni mot de passe, ni photo, et aucun message du chat dans la base. Le jeu n'affiche "
-              "pas de publicité et ne revend aucune donnée.")
-         << "</p><h2>" << T(lang, "Temporary data", "Données temporaires") << "</h2><p>"
-         << T(lang, "While you play, the server keeps in memory the time of your last connection (to show « in "
-                    "game » to the Discord bot and to your friends), the state of ongoing games and their chat (the last 50 "
-                    "messages, forgotten at most an hour after the game ends). Discord Rich Presence goes directly "
-                    "from your game to your Discord app.",
-              "Pendant que vous jouez, le serveur garde en mémoire l'heure de votre dernière connexion (pour "
-              "afficher « en jeu » au bot Discord et à vos amis), l'état des parties en cours et leur chat (les 50 "
-              "derniers messages, oubliés au plus une heure après la fin de la partie). La Rich Presence Discord passe "
-              "directement de votre jeu à votre application Discord.")
-         << "</p><h2>" << T(lang, "Discord bot", "Bot Discord") << "</h2><p>"
-         << T(lang, "The bot sees who joins the server's voice channels to create game channels, and keeps the list "
-                    "of channels it created. It does not read messages.",
-              "Le bot voit qui rejoint les salons vocaux du serveur pour créer les salons de partie, et garde la "
-              "liste des salons qu'il a créés. Il ne lit pas les messages.")
-         << "</p><h2>" << T(lang, "Hosting", "Hébergement") << "</h2><p>"
-         << T(lang, "The server and database are hosted in France on the project's Raspberry Pi. Connections go "
+         << T(lang, "<strong>Moderation data</strong>: suspensions (date, reason) and reports sent with "
+                    "<code>/report</code> on Discord (who reported, the username and the reason).",
+              "<strong>Données de modération</strong> : suspensions (date, motif) et signalements envoyés avec "
+              "<code>/report</code> sur Discord (qui signale, le pseudo et le motif).")
+         << "</li></ul><p>"
+         << T(lang, "We do <strong>not</strong> collect your email address, real name, profile picture, contacts, "
+                    "location or password. Chat messages are never written to the database.",
+              "Nous ne collectons <strong>pas</strong> votre adresse e-mail, votre nom, votre photo, vos contacts, "
+              "votre position ni de mot de passe. Les messages du chat ne sont jamais écrits dans la base.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "3. Google user data", "3. Données utilisateur Google") << "</h2><ul><li>"
+         << T(lang, "<strong>What we access:</strong> when you choose « Sign in with Google », we only request the "
+                    "<code>openid</code> scope. Google then gives us your account's unique identifier "
+                    "(<code>sub</code>). We do not request your email, profile, contacts, Drive, Gmail or any other "
+                    "Google API.",
+              "<strong>Ce que nous obtenons :</strong> quand vous choisissez « Se connecter avec Google », nous ne "
+              "demandons que le droit <code>openid</code>. Google nous donne alors l'identifiant unique de votre "
+              "compte (<code>sub</code>). Nous ne demandons ni votre e-mail, ni votre profil, ni vos contacts, ni "
+              "Drive, Gmail ou toute autre API Google.")
+         << "</li><li>"
+         << T(lang, "<strong>How we use it:</strong> only to recognize your Gemspire account when you sign in again.",
+              "<strong>Ce que nous en faisons :</strong> uniquement reconnaître votre compte Gemspire quand vous vous "
+              "reconnectez.")
+         << "</li><li>"
+         << T(lang, "<strong>Storage and protection:</strong> the identifier is stored in our database, on our "
+                    "server, linked to your account. The temporary Google access token is used once to read the "
+                    "identifier and is never stored.",
+              "<strong>Stockage et protection :</strong> l'identifiant est stocké dans notre base de données, sur "
+              "notre serveur, lié à votre compte. Le jeton d'accès Google temporaire sert une seule fois à lire "
+              "l'identifiant et n'est jamais stocké.")
+         << "</li><li>"
+         << T(lang, "<strong>Sharing:</strong> it is never shared, sold or transferred to anyone, never used for "
+                    "advertising, and never used to train or improve artificial intelligence or machine learning "
+                    "models.",
+              "<strong>Partage :</strong> il n'est jamais partagé, vendu ni transmis à qui que ce soit, jamais "
+              "utilisé pour de la publicité, et jamais utilisé pour entraîner ou améliorer des modèles "
+              "d'intelligence artificielle ou d'apprentissage automatique.")
+         << "</li><li>"
+         << T(lang, "<strong>Deletion:</strong> it is erased when your account is deleted (see section 7). You can "
+                    "also remove Gemspire's access at any time from ",
+              "<strong>Suppression :</strong> il est effacé à la suppression de votre compte (voir section 7). Vous "
+              "pouvez aussi retirer l'accès de Gemspire à tout moment depuis ")
+         << "<a href=\"https://myaccount.google.com/permissions\">myaccount.google.com/permissions</a>.</li></ul><p>"
+         << T(lang, "Gemspire's use and transfer of information received from Google APIs adheres to the ",
+              "L'utilisation et le transfert par Gemspire des informations reçues des API Google respectent les ")
+         << "<a href=\"https://developers.google.com/terms/api-services-user-data-policy\">"
+         << T(lang, "Google API Services User Data Policy", "règles des services d'API Google relatives aux données utilisateur")
+         << "</a>" << T(lang, ", including the Limited Use requirements.", ", y compris les exigences d'utilisation limitée.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "4. Why we use your data", "4. Pourquoi nous utilisons vos données") << "</h2><ul><li>"
+         << T(lang, "Sign you in and keep you signed in.", "Vous connecter et garder votre session.")
+         << "</li><li>"
+         << T(lang, "Run online games: lobbies, matchmaking, the referee of each move, chat, spectators and replays.",
+              "Faire fonctionner les parties en ligne : salons, recherche d'adversaire, arbitrage des coups, chat, "
+              "spectateurs et rediffusions.")
+         << "</li><li>"
+         << T(lang, "Compute the Elo, the public leaderboard, seasons, achievements and friend lists.",
+              "Calculer l'Elo, le classement public, les saisons, les succès et les listes d'amis.")
+         << "</li><li>"
+         << T(lang, "Moderation: fight cheating and abuse, handle reports.",
+              "La modération : lutter contre la triche et les abus, traiter les signalements.")
+         << "</li></ul><p>"
+         << T(lang, "Legal basis (GDPR): performing the service you ask for when you create an account, and our "
+                    "legitimate interest in keeping fair play for moderation. No advertising, no profiling, no sale "
+                    "of data.",
+              "Base légale (RGPD) : l'exécution du service que vous demandez en créant un compte, et notre intérêt "
+              "légitime à garantir un jeu loyal pour la modération. Pas de publicité, pas de profilage, aucune "
+              "vente de données.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "5. What others can see", "5. Ce que les autres voient") << "</h2><p>"
+         << T(lang, "Your username, Elo, number of games, wins and badges appear on the public leaderboard and to "
+                    "players you meet. Your friends see whether you are online or in a game. A small team of "
+                    "moderators and administrators can see account data to moderate the service.",
+              "Votre pseudo, votre Elo, votre nombre de parties, de victoires et vos badges apparaissent dans le "
+              "classement public et aux joueurs que vous rencontrez. Vos amis voient si vous êtes en ligne ou en "
+              "partie. Une petite équipe de modérateurs et d'administrateurs peut voir les données des comptes pour "
+              "modérer le service.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "6. Service providers and temporary data", "6. Prestataires et données temporaires")
+         << "</h2><p>"
+         << T(lang, "The server and database are hosted in France on the project's own Raspberry Pi. Connections go "
                     "through Cloudflare (HTTPS encryption, attack protection), which sees your IP address like any "
-                    "network intermediary.",
+                    "network intermediary. Sign-in goes through Google or Discord, under their own privacy policies.",
               "Le serveur et la base de données sont hébergés en France sur un Raspberry Pi du projet. Les "
               "connexions passent par Cloudflare (chiffrement HTTPS, protection contre les attaques), qui voit votre "
-              "adresse IP comme tout intermédiaire réseau.")
-         << "</p><h2>" << T(lang, "Retention and deletion", "Durée et suppression") << "</h2><p>"
-         << T(lang, "Data is kept as long as the account exists. You can ask for your account to be deleted at any "
-                    "time: we erase your account and sessions; your past games remain as games of an anonymous "
-                    "player so as not to distort other players' rankings.",
-              "Les données sont gardées tant que le compte existe. Vous pouvez demander la suppression de votre "
-              "compte à tout moment : nous effaçons votre compte et vos sessions ; vos anciennes parties restent "
-              "comme parties d'un joueur anonyme pour ne pas fausser le classement des autres.")
-         << "</p><h2>" << T(lang, "Your rights", "Vos droits") << "</h2><p>"
-         << T(lang, "Under the GDPR, you can access your data, correct it (username) or have it deleted by "
-                    "contacting us ",
-              "Conformément au RGPD, vous pouvez accéder à vos données, les rectifier (le pseudo) ou les faire "
-              "supprimer, en nous contactant ")
+              "adresse IP comme tout intermédiaire réseau. La connexion passe par Google ou Discord, selon leurs "
+              "propres politiques de confidentialité.")
+         << "</p><p>"
+         << T(lang, "While you play, the server keeps in memory only: the time of your last request (to show « in "
+                    "game »), the state of ongoing games and their chat (the last 50 messages, forgotten at most an "
+                    "hour after the game ends). Discord Rich Presence goes directly from your game to your Discord "
+                    "app. The Discord bot sees who joins the server's voice channels to create game channels; it "
+                    "does not read messages. The website uses no tracking cookies and no analytics.",
+              "Pendant que vous jouez, le serveur ne garde en mémoire que : l'heure de votre dernière requête (pour "
+              "afficher « en jeu »), l'état des parties en cours et leur chat (les 50 derniers messages, oubliés au "
+              "plus une heure après la fin de la partie). La Rich Presence Discord passe directement de votre jeu à "
+              "votre application Discord. Le bot Discord voit qui rejoint les salons vocaux du serveur pour créer "
+              "les salons de partie ; il ne lit pas les messages. Le site n'utilise ni cookie de suivi ni outil de "
+              "mesure d'audience.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "7. Retention and deletion", "7. Durée de conservation et suppression") << "</h2><p>"
+         << T(lang, "Data is kept as long as your account exists. You can ask for your account to be deleted at any "
+                    "time by contacting us (section 1): we erase your username, your Google and Discord identifiers, "
+                    "your sessions and friend list. Your past games remain as games of an anonymous deleted player so "
+                    "as not to distort other players' results.",
+              "Les données sont gardées tant que votre compte existe. Vous pouvez demander la suppression de votre "
+              "compte à tout moment en nous contactant (section 1) : nous effaçons votre pseudo, vos identifiants "
+              "Google et Discord, vos sessions et votre liste d'amis. Vos anciennes parties restent comme parties "
+              "d'un joueur supprimé anonyme pour ne pas fausser les résultats des autres.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "8. Security", "8. Sécurité") << "</h2><p>"
+         << T(lang, "All connections are encrypted (HTTPS). Session tokens are stored only as fingerprints, OAuth "
+                    "secrets stay on the server, and the server checks every move so that no player can cheat on the "
+                    "rules.",
+              "Toutes les connexions sont chiffrées (HTTPS). Les jetons de session ne sont stockés que sous forme "
+              "d'empreinte, les secrets OAuth restent sur le serveur, et le serveur vérifie chaque coup pour "
+              "qu'aucun joueur ne puisse tricher sur les règles.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "9. Your rights", "9. Vos droits") << "</h2><p>"
+         << T(lang, "Under the GDPR, you can access your data, correct it (username), have it deleted, object to "
+                    "its use or ask for a copy, by contacting us ",
+              "Conformément au RGPD, vous pouvez accéder à vos données, les rectifier (le pseudo), les faire "
+              "supprimer, vous opposer à leur utilisation ou en demander une copie, en nous contactant ")
          << contact_html(site, lang) << T(lang, ". You can also contact the ", ". Vous pouvez aussi saisir la ")
          << "<a href=\"https://www.cnil.fr\">CNIL</a>" << T(lang, " (French data protection authority).", ".")
-         << "</p><h2>" << T(lang, "Age", "Âge") << "</h2><p>"
-         << T(lang, "The service is intended for people aged 15 or over, or younger with a parent's consent, who meet "
-                    "the minimum age of Discord or Google.",
-              "Le service s'adresse aux personnes d'au moins 15 ans, ou plus jeunes avec l'accord d'un parent, et "
-              "qui respectent l'âge minimum de Discord ou Google.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "10. Age", "10. Âge") << "</h2><p>"
+         << T(lang, "The online service is intended for people aged 15 or over, or younger with a parent's consent, "
+                    "who meet the minimum age of Discord or Google.",
+              "Le service en ligne s'adresse aux personnes d'au moins 15 ans, ou plus jeunes avec l'accord d'un "
+              "parent, et qui respectent l'âge minimum de Discord ou Google.")
+         << "</p>"
+
+         << "<h2>" << T(lang, "11. Changes", "11. Modifications") << "</h2><p>"
+         << T(lang, "If this policy changes, the new version is published on this page with its date. Important "
+                    "changes are also announced in the game and on the Discord server.",
+              "Si cette politique change, la nouvelle version est publiée sur cette page avec sa date. Les "
+              "changements importants sont aussi annoncés dans le jeu et sur le serveur Discord.")
          << "</p></div>";
-    return layout(site, lang, T(lang, "Privacy", "Confidentialité"), "/privacy", body.str());
+    return layout(site, lang, T(lang, "Privacy policy", "Politique de confidentialité"), "/privacy", body.str());
 }
 
 std::string page_not_found(const SiteInfo& site, Lang lang)
