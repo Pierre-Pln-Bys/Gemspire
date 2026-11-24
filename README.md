@@ -230,9 +230,12 @@ Documentation complète : [wiki](https://github.com/Pierre-Pln-Bys/Gemspire/wiki
 
 ## Licence
 
-Gemspire est distribué sous licence **GPL-3.0** (fichier [LICENSE](LICENSE)) :
-chacun peut l'utiliser, l'étudier, le modifier et le redistribuer, à
-condition que les versions modifiées restent sous GPL-3.0 et publient leur
-code. Les bibliothèques de `third_party/` gardent leur propre licence
-(raylib : zlib ; cpp-httplib, nlohmann/json : MIT ; SQLite : domaine public),
-toutes compatibles.
+© 2026 Gemspire. **Tous droits réservés** (fichier [LICENSE](LICENSE)). Le
+jeu se télécharge et se joue gratuitement pour un usage personnel ; toute
+copie, redistribution, modification ou revente du code ou des graphismes est
+interdite sans autorisation écrite. Les versions publiées avant la 4.0
+restent sous la licence GPL-3.0 avec laquelle elles ont été distribuées.
+
+Les bibliothèques de `third_party/` gardent leur propre licence, jointe dans
+leur dossier (raylib : zlib ; cpp-httplib, nlohmann/json : MIT ; SQLite :
+domaine public ; polices DejaVu : licence Bitstream Vera).

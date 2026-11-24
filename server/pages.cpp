@@ -4,7 +4,6 @@
 
 static const char* const RELEASES = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 static const char* const DOWNLOAD = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest/download/";
-static const char* const REPOSITORY = "https://github.com/Pierre-Pln-Bys/Gemspire";
 
 // Le même texte en anglais ou en français
 static std::string T(Lang lang, const std::string& english, const std::string& french)
@@ -133,11 +132,12 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
     out << "<a class=\"lang\" href=\"" << href(current.empty() ? "/" : current, other) << "\" hreflang=\""
         << T(other, "en", "fr") << "\">" << T(lang, "Français", "English") << "</a>";
     out << "</nav></header><main>" << body << "</main><footer>"
-        << T(lang, "Student project (ENSEIRB-MATMECA), free and open source (GPL-3.0). Independent game, not "
-                   "affiliated with any board game publisher. ",
-             "Projet étudiant (ENSEIRB-MATMECA), libre et gratuit (GPL-3.0). Jeu indépendant, sans lien avec un "
-             "éditeur de jeux de société. ")
-        << "<a href=\"" << REPOSITORY << "\">" << T(lang, "Source code", "Code source") << "</a>";
+        << T(lang, "© 2026 Gemspire. All rights reserved. Student project (ENSEIRB-MATMECA), independent game, not "
+                   "affiliated with any board game publisher.",
+             "© 2026 Gemspire. Tous droits réservés. Projet étudiant (ENSEIRB-MATMECA), jeu indépendant, sans lien "
+             "avec un éditeur de jeux de société.")
+        << " · <a href=\"" << href("/terms", lang) << "\">" << T(lang, "Terms", "Conditions") << "</a> · <a href=\""
+        << href("/privacy", lang) << "\">" << T(lang, "Privacy", "Confidentialité") << "</a>";
     if (!site.discord_invite.empty()) {
         out << " · <a href=\"" << html_escape(site.discord_invite) << "\">Discord</a>";
     }
@@ -145,7 +145,7 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
     return out.str();
 }
 
-// Comment nous contacter (adresse si configurée, Discord, sinon GitHub)
+// Comment nous contacter (adresse e-mail, serveur Discord)
 static std::string contact_html(const SiteInfo& site, Lang lang)
 {
     std::string out;
@@ -154,11 +154,13 @@ static std::string contact_html(const SiteInfo& site, Lang lang)
         out += T(lang, "by email at ", "par e-mail à ") + "<a href=\"mailto:" + email + "\">" + email + "</a>, ";
     }
     if (!site.discord_invite.empty()) {
-        out += T(lang, "on ", "sur ") + "<a href=\"" + html_escape(site.discord_invite) + "\">"
-               + T(lang, "the Discord server", "le serveur Discord") + "</a>, ";
+        out += T(lang, "or on ", "ou sur ") + "<a href=\"" + html_escape(site.discord_invite) + "\">"
+               + T(lang, "the Discord server", "le serveur Discord") + "</a>";
     }
-    out += T(lang, "or by opening an issue on ", "ou en ouvrant une demande sur ") + "<a href=\"" +
-           std::string(REPOSITORY) + "/issues\">GitHub</a>";
+    // Sans serveur Discord : pas de virgule finale après l'adresse
+    if (out.size() >= 2 && out.compare(out.size() - 2, 2, ", ") == 0) {
+        out.erase(out.size() - 2);
+    }
     return out;
 }
 
@@ -279,14 +281,27 @@ std::string page_terms(const SiteInfo& site, Lang lang)
 {
     std::ostringstream body;
     body << "<h1>" << T(lang, "Terms of use", "Conditions d'utilisation") << "</h1><p class=\"soft\">"
-         << T(lang, "Last updated: November 23, 2026", "Dernière mise à jour : 23 novembre 2026")
+         << T(lang, "Last updated: November 25, 2026", "Dernière mise à jour : 25 novembre 2026")
          << "</p><div class=\"card\"><h2>" << T(lang, "1. The service", "1. Le service") << "</h2><p>"
-         << T(lang, "Gemspire is a free, open-source student project: a game (Windows, Linux, browser), an online "
-                    "game server, this website and a Discord bot. It is an independent project, not affiliated with "
-                    "any board game author or publisher.",
-              "Gemspire est un projet étudiant, gratuit et libre : un jeu (Windows, Linux, navigateur), un serveur "
-              "de parties en ligne, ce site et un bot Discord. C'est un projet indépendant, sans lien avec un auteur "
-              "ou un éditeur de jeux de société.")
+         << T(lang, "Gemspire is a free-to-play student project: a game (Windows, Linux, browser), an online game "
+                    "server, this website and a Discord bot. It is an independent project, not affiliated with any "
+                    "board game author or publisher.",
+              "Gemspire est un projet étudiant gratuit : un jeu (Windows, Linux, navigateur), un serveur de parties "
+              "en ligne, ce site et un bot Discord. C'est un projet indépendant, sans lien avec un auteur ou un "
+              "éditeur de jeux de société.")
+         << "</p><p>"
+         << T(lang, "<strong>Intellectual property.</strong> The game, its source code, graphics, texts and this "
+                    "website are protected by copyright: © 2026 Gemspire, all rights reserved. You may download "
+                    "and play Gemspire for free for your personal use. Copying, redistributing, modifying, "
+                    "decompiling or reselling it, in whole or in part, is forbidden without written permission. "
+                    "Third-party components keep their own licenses (raylib: zlib; cpp-httplib, nlohmann/json: MIT; "
+                    "SQLite: public domain; DejaVu fonts: free font license).",
+              "<strong>Propriété intellectuelle.</strong> Le jeu, son code source, ses graphismes, ses textes et ce "
+              "site sont protégés par le droit d'auteur : © 2026 Gemspire, tous droits réservés. Vous pouvez "
+              "télécharger Gemspire et y jouer gratuitement pour votre usage personnel. Le copier, le redistribuer, "
+              "le modifier, le décompiler ou le revendre, en tout ou partie, est interdit sans autorisation écrite. "
+              "Les composants tiers gardent leur propre licence (raylib : zlib ; cpp-httplib, nlohmann/json : MIT ; "
+              "SQLite : domaine public ; polices DejaVu : licence de police libre).")
          << "</p><h2>" << T(lang, "2. Account", "2. Compte") << "</h2><p>"
          << T(lang, "You sign in with a Discord or Google account; no password is created or stored. You choose a "
                     "username visible to other players and on the leaderboard. It must not be insulting, "

@@ -6,6 +6,10 @@ All notable changes to the project. Format based on
 
 ## [Unreleased]
 
+### Changed
+- **License**: Gemspire is now proprietary (© 2026 Gemspire, all rights
+  reserved), free to download and play. Versions before 4.0 stay under GPL-3.0.
+
 ### Added
 - **Rules** button on the home screen: the rules in short, in two columns.
 - **Board themes**: Green felt, Night, Wood, High contrast and Light (Theme
