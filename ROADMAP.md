@@ -196,8 +196,8 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 ## Plus tard
 
 - Signature des exécutables Windows (plus d'avertissement SmartScreen) :
-  reportée (SignPath Foundation demande un projet open source qu'on souhaite
-  garder ouvert, à revoir).
+  reportée (l'offre gratuite de SignPath Foundation exige un code source
+  public, ce qui n'est pas souhaité pour l'instant).
 
 - **Revendiquer le jeu sur Discord** (*Claim Your Game*) : possible seulement
   quand Discord détecte Gemspire comme jeu publié (assez de joueurs, ou
