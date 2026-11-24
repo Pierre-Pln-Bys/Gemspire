@@ -497,15 +497,19 @@ int main()
         int change = last_game["elo_change"];
         int last_id = last_game["id"];
 
+        // M1 : une action de modération sans identité du modérateur (actor) est refusée
+        assert(bot_post("/bot/cancel-game", {{"game_id", last_id}}, 400)
+                   .value("error", std::string())
+                   .find("moderator") != std::string::npos);
         // Annuler la dernière partie rend l'Elo ; une seconde fois : refusé
-        bot_post("/bot/cancel-game", {{"game_id", last_id}});
+        bot_post("/bot/cancel-game", {{"game_id", last_id}, {"actor", "777"}});
         assert(bot_get("/bot/profile?pseudo=Alice")["elo"] == elo_before_cancel - change);
         assert(bot_get("/bot/history?pseudo=Alice")["games_list"][0]["cancelled"] == true);
-        bot_post("/bot/cancel-game", {{"game_id", last_id}}, 400);
-        bot_post("/bot/cancel-game", {{"game_id", 999999}}, 400);
+        bot_post("/bot/cancel-game", {{"game_id", last_id}, {"actor", "777"}}, 400);
+        bot_post("/bot/cancel-game", {{"game_id", 999999}, {"actor", "777"}}, 400);
 
         // Suspension : sessions fermées, reconnexion refusée, absent du classement
-        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"reason", "multi-comptes"}, {"days", 7}});
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"reason", "multi-comptes"}, {"days", 7}, {"actor", "777"}});
         get(client, "/me", bob, 401);
         auto page = client.Get("/auth/dev/start?login=bbbbbbbbbbbbbbbbbbbbbbb2&name=bob");
         assert(page && page->status == 200);
@@ -516,15 +520,15 @@ int main()
             assert(player["pseudo"] != "Bébert");
         }
         assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == true);
-        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"days", -1}}, 400);
-        bot_post("/bot/ban", {{"pseudo", "personne"}, {"days", 1}}, 400);
-        bot_post("/bot/unban", {{"pseudo", "Bébert"}});
+        bot_post("/bot/ban", {{"pseudo", "Bébert"}, {"days", -1}, {"actor", "777"}}, 400);
+        bot_post("/bot/ban", {{"pseudo", "personne"}, {"days", 1}, {"actor", "777"}}, 400);
+        bot_post("/bot/unban", {{"pseudo", "Bébert"}, {"actor", "777"}});
         assert(bot_get("/bot/profile?pseudo=Bébert")["banned"] == false);
         bob = login(client, "bob", "bbbbbbbbbbbbbbbbbbbbbbb3");
         assert(get(client, "/me", bob)["pseudo"] == "Bébert");
 
         // Suppression du compte : le pseudo est libéré, l'historique reste
-        bot_post("/bot/delete-account", {{"discord_id", "123456"}});
+        bot_post("/bot/delete-account", {{"discord_id", "123456"}, {"actor", "777"}});
         get(client, "/me", carol, 401);
         assert(bot_get("/bot/profile?pseudo=Carole")["found"] == false);
         assert(bot_get("/bot/profile?discord_id=123456")["found"] == false);

@@ -420,7 +420,7 @@ async def mod_ban(interaction: discord.Interaction, username: str, days: app_com
                   reason: app_commands.Range[str, 3, 200]):
     if await refuse_if_not_moderator(interaction):
         return
-    result = await call_api(interaction, api.ban, username, days, reason)
+    result = await call_api(interaction, api.ban, username, days, reason, actor=interaction.user.id)
     if result is None:
         return
     pseudo = result.get("pseudo", username)
@@ -437,7 +437,7 @@ async def mod_ban(interaction: discord.Interaction, username: str, days: app_com
 async def mod_unban(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
-    result = await call_api(interaction, api.unban, username)
+    result = await call_api(interaction, api.unban, username, actor=interaction.user.id)
     if result is None:
         return
     pseudo = result.get("pseudo", username)
@@ -463,7 +463,7 @@ async def mod_history(interaction: discord.Interaction, username: str):
 async def mod_cancel(interaction: discord.Interaction, number: app_commands.Range[int, 1]):
     if await refuse_if_not_moderator(interaction):
         return
-    if await call_api(interaction, api.cancel_game, number) is None:
+    if await call_api(interaction, api.cancel_game, number, actor=interaction.user.id) is None:
         return
     await answer(interaction, tr("cancel_ok", user_lang(interaction), number=number), private=True)
     await mod_log(interaction.guild, tr("cancel_log", guild_lang(interaction.guild), user=interaction.user.mention,
@@ -504,7 +504,7 @@ async def mod_new_season(interaction: discord.Interaction, confirm: bool = False
 async def mod_delete(interaction: discord.Interaction, username: str):
     if await refuse_if_not_moderator(interaction):
         return
-    if await call_api(interaction, api.delete_account, pseudo=username) is None:
+    if await call_api(interaction, api.delete_account, pseudo=username, actor=interaction.user.id) is None:
         return
     await answer(interaction, tr("delete_ok", user_lang(interaction), pseudo=username), private=True)
     await mod_log(interaction.guild, tr("delete_log", guild_lang(interaction.guild), user=interaction.user.mention,

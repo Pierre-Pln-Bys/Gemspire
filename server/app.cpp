@@ -237,6 +237,21 @@ static bool constant_time_equal(const std::string& a, const std::string& b)
     return difference == 0;
 }
 
+// Identité de l'acteur d'une action de modération (identifiant Discord, chiffres
+// seulement) : le bot doit la fournir, pour tracer côté serveur qui a agi.
+static bool valid_actor(const std::string& actor)
+{
+    if (actor.empty() || actor.size() > 32) {
+        return false;
+    }
+    for (unsigned char c : actor) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool parse_body(const httplib::Request& request, json& body)
 {
     body = json::parse(request.body, nullptr, false);
@@ -1177,6 +1192,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         int days = body["days"].get<int>();
         std::string reason = json_text(body, "reason").substr(0, 200);
@@ -1187,9 +1207,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         long long until = days == 0 ? BAN_FOREVER : static_cast<long long>(std::time(nullptr)) + days * 86400LL;
         store_.ban(id, until, reason);
         rooms_.remove_account(id);
-        std::cout << "Modération : compte " << id << " suspendu (" << (days == 0 ? std::string("définitif")
-                                                                                 : std::to_string(days) + " j")
-                  << ")" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " suspendu ("
+                  << (days == 0 ? std::string("définitif") : std::to_string(days) + " j") << ")" << std::endl;
         reply(response, 200, account_json(store_, id));
     });
 
@@ -1203,13 +1222,18 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         if (id == 0) {
             reply_error(response, 400, "Joueur introuvable.");
             return;
         }
         store_.unban(id);
-        std::cout << "Modération : compte " << id << " réactivé" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " réactivé" << std::endl;
         reply(response, 200, account_json(store_, id));
     });
 
@@ -1223,12 +1247,18 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         std::string error = store_.cancel_game(body["game_id"].get<int>());
         if (!error.empty()) {
             reply_error(response, 400, error);
             return;
         }
-        std::cout << "Modération : partie " << body["game_id"].get<int>() << " annulée" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : partie " << body["game_id"].get<int>()
+                  << " annulée" << std::endl;
         reply(response, 200, {{"status", "ok"}});
     });
 
@@ -1243,6 +1273,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             reply_error(response, 400, "Malformed request.");
             return;
         }
+        std::string actor = body.value("actor", std::string());
+        if (!valid_actor(actor)) {
+            reply_error(response, 400, "Missing moderator identity.");
+            return;
+        }
         int id = target(json_text(body, "pseudo"), json_text(body, "discord_id"));
         if (id == 0) {
             reply_error(response, 400, "Joueur introuvable.");
@@ -1250,7 +1285,8 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         rooms_.remove_account(id);
         store_.delete_account(id);
-        std::cout << "Compte " << id << " supprimé à la demande" << std::endl;
+        std::cout << "Modération (par discord:" << actor << ") : compte " << id << " supprimé à la demande"
+                  << std::endl;
         reply(response, 200, {{"status", "ok"}});
     });
 
