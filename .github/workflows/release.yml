@@ -10,6 +10,8 @@
 #   - gemspire-linux                jeu graphique pour Linux x86_64 (autonome)
 #   - gemspire-console-windows.exe  version console pour Windows
 #   - gemspire-console-linux        version console pour Linux
+#   - gemspire-web.tar.gz           jeu dans le navigateur (installé sur le serveur)
+#   - SHA256SUMS                    empreintes SHA-256 de tous ces fichiers
 name: Release majeure
 
 on:
@@ -136,6 +138,14 @@ jobs:
       - name: Rendre les binaires Linux exécutables
         run: chmod +x gemspire-linux gemspire-console-linux
 
+      # Empreintes SHA-256 : chacun peut vérifier que son téléchargement est intact
+      # (Linux : sha256sum -c SHA256SUMS ; Windows : Get-FileHash fichier.exe)
+      - name: Empreintes SHA-256
+        run: |
+          sha256sum gemspire-windows.exe gemspire-linux gemspire-console-windows.exe \
+                    gemspire-console-linux gemspire-web.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
       # Notes de version : la section du CHANGELOG (en anglais).
       # Le tag passe par une variable d'environnement (jamais ${{ }} inline dans
       # une commande shell : cela permettrait une injection de commande).
@@ -157,6 +167,7 @@ jobs:
             gemspire-console-windows.exe
             gemspire-console-linux
             gemspire-web.tar.gz
+            SHA256SUMS
 
       # Annonce dans le salon Discord des nouveautés (secret DISCORD_RELEASE_WEBHOOK) ;
       # sans le secret, rien n'est envoyé. Un échec ne bloque pas la release.

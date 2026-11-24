@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -74,6 +76,10 @@ int main()
     config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
     config.admin_discord_ids = {"777"};
     config.rate_limit = 0;  // pas de limite de débit : le test enchaîne beaucoup de requêtes
+    // Faux jeu navigateur pour /play
+    std::filesystem::create_directories("tests/web_test");
+    std::ofstream("tests/web_test/index.html") << "<title>jeu web</title>";
+    config.web_dir = "tests/web_test";
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -103,6 +109,14 @@ int main()
         auto touch_icon = old_game.Get("/apple-touch-icon.png");
         assert(touch_icon && touch_icon->status == 200 && touch_icon->body.substr(1, 3) == "PNG");
         assert(old_game.Get("/")->body.find("/favicon.ico") != std::string::npos);
+        // /play : redirection vers /play/ (paramètres gardés) ; dans l'Activité
+        // Discord (frame_id), la page est servie directement, sans redirection
+        old_game.set_follow_location(false);
+        auto play = old_game.Get("/play?lang=fr");
+        assert(play && play->status == 302 && play->get_header_value("Location") == "/play/?lang=fr");
+        auto activity = old_game.Get("/play?frame_id=f&instance_id=i");
+        assert(activity && activity->status == 200 && activity->body.find("jeu web") != std::string::npos);
+        assert(old_game.Get("/play/")->body.find("jeu web") != std::string::npos);
     }
 
     httplib::Client client("127.0.0.1", PORT);
@@ -749,6 +763,7 @@ int main()
     std::remove("tests/test_server.db");
     std::remove("tests/test_server.db-wal");
     std::remove("tests/test_server.db-shm");
+    std::filesystem::remove_all("tests/web_test");
     std::cout << "Serveur : tous les tests passent (" << moves << " coups joués en ligne).\n";
     return 0;
 }

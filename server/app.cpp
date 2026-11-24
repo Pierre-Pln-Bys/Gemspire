@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -1464,8 +1465,26 @@ void ServerApp::setup_routes(httplib::Server& server)
     // Jeu dans le navigateur : fichiers de `make web` (index.html, .js, .wasm)
     if (server.set_mount_point("/play/", config_.web_dir)) {
         site.web_game = true;
-        server.Get("/play", [](const httplib::Request&, httplib::Response& response) {
-            response.set_redirect("/play/");
+        // /play sans barre finale. Dans l'Activité Discord, le proxy fait
+        // correspondre « / » à « /play » : une redirection vers /play/ y
+        // deviendrait /play/play/ (page blanche) et perdrait frame_id. On sert
+        // donc la page directement (ses fichiers relatifs restent bons via le
+        // proxy) ; ailleurs, redirection vers /play/ en gardant les paramètres.
+        std::string web_dir = config_.web_dir;
+        server.Get("/play", [web_dir](const httplib::Request& request, httplib::Response& response) {
+            if (request.has_param("frame_id")) {
+                std::ifstream file(web_dir + "/index.html", std::ios::binary);
+                std::ostringstream page;
+                page << file.rdbuf();
+                response.set_content(page.str(), "text/html; charset=utf-8");
+                return;
+            }
+            std::string query;
+            size_t mark = request.target.find('?');
+            if (mark != std::string::npos) {
+                query = request.target.substr(mark);
+            }
+            response.set_redirect("/play/" + query);
         });
     }
     auto lang_of = [](const httplib::Request& request, Lang fallback) {
