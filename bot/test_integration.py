@@ -63,8 +63,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_offer_reaches_the_game(self):
         login = "z" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=4242&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=4242&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Pierre"})
         last = self.call("/me/notifications", token)["last"]  # le jeu est « ouvert »
 
@@ -85,8 +85,8 @@ class IntegrationTests(unittest.TestCase):
         tokens = {}
         for discord_id, name in ((901, "Defieur"), (902, "Defie")):
             login = str(discord_id) * 8
-            urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name={}&as=discord".format(login, discord_id)).close()
-            tokens[discord_id] = self.call("/auth/poll?login=" + login)["token"]
+            urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name={1}&as=discord&verifier=v{0}".format(login, discord_id)).close()
+            tokens[discord_id] = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
             self.call("/me/pseudo", tokens[discord_id], {"pseudo": name})
         last = self.call("/me/notifications", tokens[902])["last"]
         api = SplendorApi(self.url, "cle-integration")
@@ -104,8 +104,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_moderation(self):
         login = "y" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=777&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=777&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Tricheur"})
         api = SplendorApi(self.url, "cle-integration")
         self.assertEqual(api.profile(discord_id=777)["pseudo"], "Tricheur")
@@ -126,8 +126,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_dev_commands(self):
         login = "d" * 24
-        urllib.request.urlopen(self.url + "/auth/dev/start?login={}&name=900&as=discord".format(login)).close()
-        token = self.call("/auth/poll?login=" + login)["token"]
+        urllib.request.urlopen(self.url + "/auth/dev/start?login={0}&name=900&as=discord&verifier=v{0}".format(login)).close()
+        token = self.call("/auth/poll?login={0}&verifier=v{0}".format(login))["token"]
         self.call("/me/pseudo", token, {"pseudo": "Joueuse"})
         api = SplendorApi(self.url, "cle-integration")
         with self.assertRaises(ApiError) as caught:

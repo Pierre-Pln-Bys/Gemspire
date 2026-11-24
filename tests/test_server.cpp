@@ -45,16 +45,19 @@ static json post(httplib::Client& client, const std::string& path, const std::st
     return json::parse(response->body, nullptr, false);
 }
 
-// Connexion de test : comme le jeu, on ouvre /auth/dev/start puis on interroge /auth/poll
+// Connexion de test : comme le jeu, on ouvre /auth/dev/start (avec un secret),
+// puis on interroge /auth/poll en présentant ce même secret.
 static std::string login(httplib::Client& client, const std::string& name, const std::string& login_id,
                          const std::string& as = "")
 {
-    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name + (as.empty() ? "" : "&as=" + as));
+    std::string verifier = "v" + login_id;  // secret quelconque (alphanumérique)
+    auto page = client.Get("/auth/dev/start?login=" + login_id + "&name=" + name
+                           + "&verifier=" + verifier + (as.empty() ? "" : "&as=" + as));
     assert(page && page->status == 200);
-    json poll = get(client, "/auth/poll?login=" + login_id, "");
+    json poll = get(client, "/auth/poll?login=" + login_id + "&verifier=" + verifier, "");
     assert(poll["status"] == "done");
     // Le jeton n'est donné qu'une fois
-    assert(get(client, "/auth/poll?login=" + login_id, "")["status"] == "pending");
+    assert(get(client, "/auth/poll?login=" + login_id + "&verifier=" + verifier, "")["status"] == "pending");
     return poll["token"];
 }
 
@@ -108,6 +111,70 @@ int main()
     // --- Comptes et pseudos
     std::string alice = login(client, "alice", "aaaaaaaaaaaaaaaaaaaaaaaa");
     std::string bob = login(client, "bob", "bbbbbbbbbbbbbbbbbbbbbbbb");
+
+    // --- H1 : prise de compte. /auth/poll ne remet le jeton qu'avec le bon secret ;
+    //     connaître l'identifiant de connexion seul (lien, Referer, journaux) ne suffit plus.
+    {
+        std::string lid = "hhhhhhhhhhhhhhhhhhhhhhhh";
+        std::string secret = "topsecrettopsecret123456";
+        assert(client.Get("/auth/dev/start?login=" + lid + "&name=mallory&verifier=" + secret)->status == 200);
+        // Sans secret, ou avec un mauvais secret : le jeton n'est pas donné (reste « pending »)
+        assert(get(client, "/auth/poll?login=" + lid, "")["status"] == "pending");
+        assert(get(client, "/auth/poll?login=" + lid + "&verifier=mauvaismauvaismauvais1", "")["status"] == "pending");
+        // Avec le bon secret : jeton remis et utilisable
+        json done = get(client, "/auth/poll?login=" + lid + "&verifier=" + secret, "");
+        assert(done["status"] == "done" && done.contains("token"));
+        assert(get(client, "/me", done["token"].get<std::string>())["id"] != 0);
+        // Jeton donné une seule fois (l'entrée est ensuite effacée)
+        assert(get(client, "/auth/poll?login=" + lid + "&verifier=" + secret, "")["status"] == "pending");
+        // Un /auth/<fournisseur>/start non préparé par /auth/begin ne redirige pas vers l'OAuth
+        auto not_begun = client.Get("/auth/discord/start?login=zzzzzzzzzzzzzzzzzzzzzzzz");
+        assert(not_begun && not_begun->status != 302);
+    }
+
+    // --- H1 (suite) : /auth/begin prépare le secret ; /auth/start redirige alors vers
+    //     l'OAuth, sans prompt=none. Serveur isolé (client Discord factice) : begin et
+    //     start ne font aucun appel réseau (seul le callback en ferait).
+    {
+        std::remove("tests/test_server_oauth.db");
+        ServerConfig oauth_config;
+        oauth_config.port = PORT + 1;
+        oauth_config.database = "tests/test_server_oauth.db";
+        oauth_config.discord_client_id = "fake-discord-client";
+        oauth_config.public_url = "http://127.0.0.1";
+        oauth_config.min_version = SPLENDOR_VERSION;
+        ServerApp oauth_app(oauth_config);
+        assert(oauth_app.ok());
+        httplib::Server oauth_server;
+        oauth_app.setup_routes(oauth_server);
+        std::thread oauth_thread([&]() { oauth_server.listen("127.0.0.1", PORT + 1); });
+        oauth_server.wait_until_ready();
+        httplib::Client oauth("127.0.0.1", PORT + 1);
+        oauth.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
+        oauth.set_follow_location(false);
+
+        std::string lid = "oauthoauthoauthoauth1234";
+        std::string secret = "secretsecretsecret567890";
+        // start avant begin : refusé (pas de redirection)
+        assert(oauth.Get("/auth/discord/start?login=" + lid)->status != 302);
+        // begin enregistre le secret et renvoie l'identifiant
+        auto begin_json = json({{"provider", "discord"}, {"login", lid}, {"verifier", secret}}).dump();
+        auto begun = oauth.Post("/auth/begin", begin_json, "application/json");
+        assert(begun && begun->status == 200 && json::parse(begun->body)["login"] == lid);
+        // start après begin : redirige vers Discord, avec le state, et SANS prompt=none
+        auto redirect = oauth.Get("/auth/discord/start?login=" + lid);
+        assert(redirect && redirect->status == 302);
+        std::string location = redirect->get_header_value("Location");
+        assert(location.find("discord.com") != std::string::npos);
+        assert(location.find("state=" + lid) != std::string::npos);
+        assert(location.find("prompt=none") == std::string::npos);
+        // begin refuse un identifiant invalide (trop court)
+        auto bad = json({{"provider", "discord"}, {"login", "court"}, {"verifier", secret}}).dump();
+        assert(oauth.Post("/auth/begin", bad, "application/json")->status == 400);
+
+        oauth_server.stop();
+        oauth_thread.join();
+    }
     get(client, "/me", "faux-jeton", 401);
     assert(get(client, "/me", alice)["pseudo"] == "");
     post(client, "/lobbies", alice, {{"mode", "rapide"}, {"seats", 2}}, 403);  // pas encore de pseudo

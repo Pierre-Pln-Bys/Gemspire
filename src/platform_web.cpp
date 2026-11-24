@@ -81,6 +81,24 @@ EM_JS(char*, take_login_parameter, (), {
     return copy;
 });
 
+// Le secret de connexion est gardé dans le stockage de session (pas dans l'URL)
+// pour survivre à l'aller-retour vers Discord / Google dans le même onglet.
+EM_JS(void, store_verifier, (const char* value), {
+    try { window.sessionStorage.setItem("gemspire_verifier", UTF8ToString(value)); } catch (e) {}
+});
+
+EM_JS(char*, take_verifier, (), {
+    var value = "";
+    try {
+        value = window.sessionStorage.getItem("gemspire_verifier") || "";
+        window.sessionStorage.removeItem("gemspire_verifier");
+    } catch (e) {}
+    var size = lengthBytesUTF8(value) + 1;
+    var copy = _malloc(size);
+    stringToUTF8(value, copy, size);
+    return copy;
+});
+
 static std::string take_string(char* text)
 {
     std::string result = text != nullptr ? text : "";
@@ -126,6 +144,16 @@ std::string web_language()
 std::string web_login_from_address()
 {
     return take_string(take_login_parameter());
+}
+
+void web_remember_verifier(const std::string& verifier)
+{
+    store_verifier(verifier.c_str());
+}
+
+std::string web_take_verifier()
+{
+    return take_string(take_verifier());
 }
 
 bool web_prompt(const std::string& question, std::string& value)

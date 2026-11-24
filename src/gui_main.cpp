@@ -245,7 +245,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave, TagLink };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave, TagLink, TagBegin };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
@@ -512,21 +512,26 @@ static void go_online(App& app)
 static void start_login(App& app, const std::string& provider)
 {
     app.online.login_id = random_login_id();
+    app.online.login_verifier = random_login_id();  // secret : il faudra le présenter à /auth/poll
     app.online.next_login_poll = GetTime() + 2;
     app.message.clear();
     if (provider == "dev") {
+        // Connexion de test (locale) : le secret peut passer par l'URL ici.
         std::string name = "test-" + app.online.login_id.substr(0, 6);
-        app.net.send(TagDevStart, "GET", "/auth/dev/start?login=" + app.online.login_id + "&name=" + name);
+        app.net.send(TagDevStart, "GET", "/auth/dev/start?login=" + app.online.login_id + "&name=" + name
+                                             + "&verifier=" + app.online.login_verifier);
         app.online.next_login_poll = GetTime() + 0.5;
         return;
     }
-    std::string url = app.net.server() + "/auth/" + provider + "/start?login=" + app.online.login_id;
-#ifdef __EMSCRIPTEN__
-    // Navigateur : même onglet ; le serveur ramène ensuite au jeu avec ?login=
-    web_go_to(url + "&from=play");
-#else
-    OpenURL(url.c_str());
-#endif
+    // On enregistre d'abord le secret sur notre propre canal (POST /auth/begin) ;
+    // le navigateur n'est ouvert qu'au retour de cette requête (TagBegin), pour
+    // que le secret ne transite jamais par une URL de navigateur.
+    app.online.login_provider = provider;
+    app.net.send(TagBegin, "POST", "/auth/begin",
+                 nlohmann::json({{"provider", provider},
+                                 {"login", app.online.login_id},
+                                 {"verifier", app.online.login_verifier}})
+                     .dump());
 }
 
 static void poll_lobby(App& app)
@@ -854,9 +859,29 @@ static void handle_responses(App& app)
                 set_message(app, error_of(response, body, app), true);
             }
             break;
+        case TagBegin:
+            // Secret enregistré : on peut ouvrir le navigateur pour l'OAuth
+            if (ok && !body.value("login", std::string()).empty()) {
+                std::string url = app.net.server() + "/auth/" + online.login_provider
+                                  + "/start?login=" + online.login_id;
+                set_message(app, "Finish signing in in your browser…", false);
+                online.next_login_poll = GetTime() + 2;
+#ifdef __EMSCRIPTEN__
+                web_remember_verifier(online.login_verifier);  // survit à l'aller-retour
+                web_go_to(url + "&from=play");
+#else
+                OpenURL(url.c_str());
+#endif
+            } else {
+                online.login_id.clear();
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
         case TagLink:
             if (ok && !body.value("login", std::string()).empty()) {
                 online.login_id = body.value("login", std::string());
+                // L'ajout d'une connexion ne renvoie pas de jeton : pas de secret à présenter.
+                online.login_verifier.clear();
                 online.next_login_poll = GetTime() + 2;
                 std::string provider = online.link_provider;
                 std::string url = app.net.server() + "/auth/" + provider + "/start?login=" + online.login_id;
@@ -1829,7 +1854,7 @@ static void update(App& app, Vector2 mouse)
     // Connexion en cours : on demande au serveur si le navigateur a fini
     if (!online.login_id.empty() && GetTime() >= online.next_login_poll) {
         online.next_login_poll = GetTime() + 1.5;
-        app.net.send(TagAuthPoll, "GET", "/auth/poll?login=" + online.login_id);
+        app.net.send(TagAuthPoll, "GET", "/auth/poll?login=" + online.login_id + "&verifier=" + online.login_verifier);
     }
     if (app.screen == Screen::Lobby) {
         poll_lobby(app);
@@ -2030,6 +2055,7 @@ int main()
     std::string returning_login = web_login_from_address();
     if (!returning_login.empty()) {
         app.online.login_id = returning_login;
+        app.online.login_verifier = web_take_verifier();  // secret gardé pendant l'aller-retour
         app.online.next_login_poll = 0;
         app.screen = Screen::Login;
     }

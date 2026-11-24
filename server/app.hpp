@@ -44,6 +44,9 @@ struct PendingLogin {
     std::string status = "pending";  // pending, done, error
     std::string token;
     std::string error;
+    // Secret détenu par le jeu, jamais transmis dans l'URL du navigateur : il
+    // faut le présenter à /auth/poll pour récupérer le jeton (schéma type PKCE).
+    std::string verifier;
     long long created = 0;
     bool back_to_play = false;       // commencée depuis le jeu dans le navigateur : y revenir après
     int link_account = 0;            // v4 : ajoute cette connexion à ce compte au lieu de se connecter

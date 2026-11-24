@@ -218,6 +218,25 @@ static bool valid_login_id(const std::string& login)
     return true;
 }
 
+// Le secret de connexion (verifier) : mêmes règles que l'identifiant.
+static bool valid_verifier(const std::string& verifier)
+{
+    return valid_login_id(verifier);
+}
+
+// Comparaison en temps constant (évite de révéler le secret par la durée)
+static bool constant_time_equal(const std::string& a, const std::string& b)
+{
+    if (a.size() != b.size() || a.empty()) {
+        return false;
+    }
+    unsigned char difference = 0;
+    for (size_t i = 0; i < a.size(); i++) {
+        difference |= static_cast<unsigned char>(a[i] ^ b[i]);
+    }
+    return difference == 0;
+}
+
 static bool parse_body(const httplib::Request& request, json& body)
 {
     body = json::parse(request.body, nullptr, false);
@@ -240,7 +259,9 @@ static std::string authorize_url(const ServerConfig& config, const std::string& 
 {
     std::string redirect = url_encode(redirect_uri(config, provider));
     if (provider == "discord") {
-        return "https://discord.com/oauth2/authorize?response_type=code&scope=identify&prompt=none&client_id="
+        // Pas de prompt=none : la connexion ne peut pas se faire en silence dans
+        // le dos d'une victime (voir le secret `verifier` exigé par /auth/poll).
+        return "https://discord.com/oauth2/authorize?response_type=code&scope=identify&client_id="
                + url_encode(config.discord_client_id) + "&redirect_uri=" + redirect + "&state=" + state;
     }
     return "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&scope=openid&prompt=select_account"
@@ -462,28 +483,50 @@ void ServerApp::setup_routes(httplib::Server& server)
         reply(response, 200, {{"status", "ok"}});
     });
 
-    // --- Connexion : le jeu ouvre /auth/<fournisseur>/start?login=ID dans le
-    //     navigateur, puis interroge /auth/poll?login=ID jusqu'à la fin.
+    // --- Connexion : le jeu enregistre d'abord un secret (POST /auth/begin, sur
+    //     son propre canal), puis ouvre /auth/<fournisseur>/start?login=ID dans le
+    //     navigateur, et interroge /auth/poll?login=ID&verifier=SECRET jusqu'à la fin.
+    //     Le secret ne passe jamais par l'URL du navigateur : connaître l'ID seul
+    //     (lien, Referer, historique, journaux) ne suffit plus à voler le jeton.
+    server.Post("/auth/begin", [this](const httplib::Request& request, httplib::Response& response) {
+        json body;
+        bool parsed = parse_body(request, body);
+        std::string provider = parsed ? body.value("provider", std::string()) : "";
+        std::string login = parsed ? body.value("login", std::string()) : "";
+        std::string verifier = parsed ? body.value("verifier", std::string()) : "";
+        bool configured = provider == "discord" ? !config_.discord_client_id.empty()
+                          : provider == "google" ? !config_.google_client_id.empty()
+                                                  : false;
+        if (!configured || !valid_login_id(login) || !valid_verifier(verifier)) {
+            reply_error(response, 400, "This sign-in method isn't available.");
+            return;
+        }
+        std::lock_guard<std::mutex> lock(logins_mutex_);
+        long long now = std::time(nullptr);
+        // Les connexions de plus de 10 minutes sont oubliées
+        for (auto it = logins_.begin(); it != logins_.end();) {
+            it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
+        }
+        PendingLogin& pending = logins_[login];
+        pending.provider = provider;
+        pending.verifier = verifier;
+        pending.created = now;
+        pending.status = "pending";
+        reply(response, 200, {{"login", login}});
+    });
+
     server.Get(R"(/auth/(discord|google)/start)", [this](const httplib::Request& request, httplib::Response& response) {
         std::string provider = request.matches[1];
         std::string login = request.get_param_value("login");
-        bool configured = provider == "discord" ? !config_.discord_client_id.empty() : !config_.google_client_id.empty();
-        if (!valid_login_id(login) || !configured) {
-            reply_page(request, response, "Sign-in failed", "This sign-in method isn't available.");
+        std::lock_guard<std::mutex> lock(logins_mutex_);
+        auto found = logins_.find(login);
+        // La connexion doit avoir été préparée par /auth/begin (secret enregistré)
+        if (found == logins_.end() || found->second.provider != provider
+            || found->second.verifier.empty() || found->second.status != "pending") {
+            reply_page(request, response, "Sign-in failed", "Start again from the game.");
             return;
         }
-        {
-            std::lock_guard<std::mutex> lock(logins_mutex_);
-            // Les connexions de plus de 10 minutes sont oubliées
-            long long now = std::time(nullptr);
-            for (auto it = logins_.begin(); it != logins_.end();) {
-                it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
-            }
-            PendingLogin& pending = logins_[login];
-            pending.provider = provider;
-            pending.created = now;
-            pending.back_to_play = request.get_param_value("from") == "play";
-        }
+        found->second.back_to_play = request.get_param_value("from") == "play";
         response.set_redirect(authorize_url(config_, provider, login));
     });
 
@@ -567,9 +610,12 @@ void ServerApp::setup_routes(httplib::Server& server)
         // as=discord / as=google : simule ce fournisseur (tests), toujours en mode test
         std::string as = request.get_param_value("as");
         std::string provider = as == "discord" || as == "google" ? as : "dev";
+        // Connexion de test (locale) : le secret peut passer par l'URL ici.
+        std::string verifier = request.get_param_value("verifier");
         {
             std::lock_guard<std::mutex> lock(logins_mutex_);
             logins_[login].provider = provider;
+            logins_[login].verifier = verifier;
             logins_[login].created = std::time(nullptr);
         }
         finish_login(login, provider, name, "");
@@ -606,21 +652,30 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     server.Get("/auth/poll", [this](const httplib::Request& request, httplib::Response& response) {
         std::string login = request.get_param_value("login");
+        std::string verifier = request.get_param_value("verifier");
         std::lock_guard<std::mutex> lock(logins_mutex_);
         auto found = logins_.find(login);
         if (found == logins_.end()) {
             reply(response, 200, {{"status", "pending"}});
             return;
         }
-        json body = {{"status", found->second.status}};
-        if (found->second.status == "done" && found->second.link_account != 0) {
-            body["linked"] = found->second.provider;  // connexion ajoutée au compte, pas de nouveau jeton
-        } else if (found->second.status == "done") {
-            body["token"] = found->second.token;
-        } else if (found->second.status == "error") {
-            body["error"] = found->second.error;
+        PendingLogin& pending = found->second;
+        // Remettre le jeton exige le bon secret : sans lui on reste « pending »
+        // (pas d'oracle, et le vrai jeu peut toujours réessayer).
+        if (pending.status == "done" && pending.link_account == 0
+            && !constant_time_equal(verifier, pending.verifier)) {
+            reply(response, 200, {{"status", "pending"}});
+            return;
         }
-        if (found->second.status != "pending") {
+        json body = {{"status", pending.status}};
+        if (pending.status == "done" && pending.link_account != 0) {
+            body["linked"] = pending.provider;  // connexion ajoutée au compte, pas de nouveau jeton
+        } else if (pending.status == "done") {
+            body["token"] = pending.token;
+        } else if (pending.status == "error") {
+            body["error"] = pending.error;
+        }
+        if (pending.status != "pending") {
             logins_.erase(found);  // le jeton n'est donné qu'une fois
         }
         reply(response, 200, body);
@@ -672,6 +727,11 @@ void ServerApp::setup_routes(httplib::Server& server)
             std::lock_guard<std::mutex> lock(logins_mutex_);
             PendingLogin& pending = logins_[login];
             pending.provider = provider;
+            // Préparé sur ce canal authentifié : un secret non vide marque la
+            // connexion comme « commencée par le jeu » (exigé par /auth/start).
+            // L'ajout d'une connexion ne renvoie pas de jeton, donc ce secret
+            // n'a pas à être présenté à /auth/poll.
+            pending.verifier = random_hex(16);
             pending.created = std::time(nullptr);
             pending.link_account = id;
         }

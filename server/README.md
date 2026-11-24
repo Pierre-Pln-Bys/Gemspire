@@ -57,15 +57,20 @@ d'e-mail).
 
 ## Comment se passe une connexion
 
-1. Le jeu tire un identifiant de connexion aléatoire et ouvre
-   `/auth/<discord|google>/start?login=ID` dans le navigateur.
-2. Le serveur redirige vers Discord/Google, qui renvoie vers
+1. Le jeu tire un identifiant de connexion `ID` (public) **et un secret**
+   `verifier` (gardé en mémoire, en `sessionStorage` sur le web), puis enregistre
+   les deux avec `POST /auth/begin` (`{"provider", "login", "verifier"}`) sur son
+   propre canal — le secret ne passe jamais par l'URL du navigateur.
+2. Le jeu ouvre alors `/auth/<discord|google>/start?login=ID` dans le navigateur
+   (refusé si la connexion n'a pas été préparée par `/auth/begin`).
+3. Le serveur redirige vers Discord/Google, qui renvoie vers
    `/auth/<...>/callback` avec un code.
-3. Le serveur échange ce code contre l'identifiant du compte (le secret reste
-   sur le serveur), crée le compte au besoin et une session.
-4. Le jeu interroge `/auth/poll?login=ID` et reçoit le jeton de session (une
-   seule fois). Il l'enregistre dans `session.txt`.
-5. Au premier login, le joueur choisit son pseudo (unique).
+4. Le serveur échange ce code contre l'identifiant du compte (le secret OAuth
+   reste sur le serveur), crée le compte au besoin et une session.
+5. Le jeu interroge `/auth/poll?login=ID&verifier=SECRET` et reçoit le jeton de
+   session (une seule fois) : connaître `ID` seul ne suffit pas. Il l'enregistre
+   dans `session.txt`.
+6. Au premier login, le joueur choisit son pseudo (unique).
 
 Les jetons de session ne sont stockés qu'en empreinte SHA-256 dans la base.
 
@@ -102,8 +107,9 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | Méthode | Chemin | Rôle |
 |---|---|---|
 | GET | `/health` | état du serveur |
-| GET | `/auth/<discord\|google>/start?login=ID` | début de connexion (navigateur) |
-| GET | `/auth/poll?login=ID` | `pending`, `done` (+ `token`) ou `error` |
+| POST | `/auth/begin` | `{"provider", "login", "verifier"}` : enregistre le secret avant d'ouvrir le navigateur |
+| GET | `/auth/<discord\|google>/start?login=ID` | début de connexion (navigateur ; préparé par `/auth/begin`) |
+| GET | `/auth/poll?login=ID&verifier=SECRET` | `pending`, `done` (+ `token`) ou `error` ; le jeton exige le bon `verifier` |
 | POST | `/auth/logout` | supprime la session |
 | GET | `/me` | compte : pseudo, Elo, parties, victoires, succès |
 | POST | `/me/pseudo` | `{"pseudo": "..."}` |
