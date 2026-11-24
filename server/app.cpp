@@ -37,7 +37,11 @@ ServerConfig config_from_environment()
     config.dev_login = env("SPLENDOR_DEV_LOGIN") == "1";
     config.min_version = env("SPLENDOR_MIN_VERSION", SPLENDOR_VERSION);
     config.web_dir = env("SPLENDOR_WEB_DIR", config.web_dir);
+    // Adresse de contact affichée sur le site (confidentialité, conditions)
     config.contact_email = env("SPLENDOR_CONTACT_EMAIL");
+    if (config.contact_email.empty()) {
+        config.contact_email = "contact@epsilon-forge.fr";
+    }
     config.discord_invite = env("SPLENDOR_DISCORD_INVITE");
     std::istringstream admins(env("SPLENDOR_ADMIN_DISCORD_IDS"));
     std::string admin;
