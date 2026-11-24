@@ -70,6 +70,8 @@ build/sqlite3.o: third_party/sqlite/sqlite3.c
 font: $(RAYLIB_LIB)
 	$(CC) -std=c99 tools/make_font.c -isystem $(RAYLIB_DIR) $(GUI_LIBS) -o build/make_font
 	./build/make_font third_party/fonts/DejaVuSans.ttf third_party/fonts/DejaVuSans-Bold.ttf
+	# Le code exporté par raylib 5.5 teste une variable interne : la fenêtre est toujours ouverte ici
+	sed -i 's/if (isGpuReady) font.texture/font.texture/' src/font_regular.h src/font_bold.h
 
 tests/test_rules: tests/test_rules.o $(LOGIC_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -121,7 +123,7 @@ $(WEB_RAYLIB):
 	rm -f build/raylib-web-src/*.o
 	$(MAKE) -C build/raylib-web-src PLATFORM=PLATFORM_WEB RAYLIB_RELEASE_PATH=$(CURDIR)/build/raylib-web
 
-$(WEB_DIR)/index.html: $(WEB_SOURCES) src/gui_font.c src/platform_web.hpp web/shell.html $(WEB_RAYLIB)
+$(WEB_DIR)/index.html: $(WEB_SOURCES) src/gui_font.c src/font_regular.h src/font_bold.h src/platform_web.hpp web/shell.html $(WEB_RAYLIB)
 	mkdir -p $(WEB_DIR)
 	emcc -std=c99 -O2 -isystem $(RAYLIB_DIR) -c src/gui_font.c -o build/gui_font_web.o
 	em++ $(WEB_FLAGS) $(WEB_SOURCES) build/gui_font_web.o $(WEB_RAYLIB) -o $@ $(WEB_LINK)

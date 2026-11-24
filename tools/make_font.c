@@ -32,8 +32,8 @@ int main(int argc, char* argv[])
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(64, 64, "make_font");
     int count = build_codepoints();
-    Font regular = LoadFontEx(argv[1], 48, codepoints, count);
-    Font bold = LoadFontEx(argv[2], 48, codepoints, count);
+    Font regular = LoadFontEx(argv[1], 128, codepoints, count);
+    Font bold = LoadFontEx(argv[2], 128, codepoints, count);
     ExportFontAsCode(regular, "src/font_regular.h");
     ExportFontAsCode(bold, "src/font_bold.h");
     UnloadFont(regular);
