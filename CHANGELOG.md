@@ -4,7 +4,7 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
-## [Unreleased]
+## [4.0.0] - 2026-11-25
 
 ### Changed
 - **License**: Gemspire is now proprietary (© 2026 Gemspire, all rights
@@ -27,6 +27,24 @@ All notable changes to the project. Format based on
 - Bot **`/dev`** commands for the administrators: `status`, `signups`,
   `games`, `announce`, `rename`, `elo`, `badge`, `remove-badge`, `logout`,
   `end-game`, `min-version`.
+- **Site icon** (browser tab, bookmarks, phone home screen).
+- **SHA-256 checksums** (`SHA256SUMS`) published with every release, to check
+  that a download is intact.
+
+### Security
+- Independent security test of the server, the site and the game; every
+  finding is fixed:
+  - signing in now uses a secret kept by the game (never in a browser
+    address), so a leaked sign-in link can no longer be used to take over an
+    account;
+  - moderation actions from the bot record which moderator did them;
+  - HTTPS enforced by the browser (HSTS), request rate limits on sign-in, the
+    Discord Activity only talks to Discord, safer release workflows.
+- Games older than 4.0.0 must be updated to sign in (the game shows the update
+  screen).
+
+### Fixed
+- The Discord Activity could open on a blank page.
 
 ## [3.9.0] - 2026-11-23
 

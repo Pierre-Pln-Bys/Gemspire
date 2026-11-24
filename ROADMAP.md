@@ -182,7 +182,7 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Saisons classées (Elo remis partiellement à zéro, badges).
 - [x] Recherche de partie automatique à Elo proche.
 
-## v4 — Publication et sécurité (version majeure)
+## v4 — Publication et sécurité (version majeure) — publiée le 25/11/2026
 
 - [x] Google : écran de consentement complété (accueil, confidentialité,
   e-mail d'assistance), domaine vérifié, branding **validé** et application
@@ -191,10 +191,10 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Thèmes du plateau, écran des règles, rendu net (navigateur, HiDPI) et
   plein écran ; liaison Google + Discord sur un même compte.
 - [x] Discord : bot **vérifié**.
-- [ ] Test d'intrusion autorisé du serveur, du Raspberry Pi, du tunnel et de
+- [x] Test d'intrusion autorisé du serveur, du Raspberry Pi, du tunnel et de
   l'application (extension de pentest), rapport.
-- [ ] Corrections des failles trouvées, nouveau test.
-- [ ] Empreintes SHA-256 publiées avec chaque release.
+- [x] Corrections des failles trouvées (relues). Nouveau test complet : plus tard.
+- [x] Empreintes SHA-256 publiées avec chaque release.
 
 ## Plus tard
 
