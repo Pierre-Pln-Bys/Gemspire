@@ -169,6 +169,9 @@ int main()
         assert(location.find("discord.com") != std::string::npos);
         assert(location.find("state=" + lid) != std::string::npos);
         assert(location.find("prompt=none") == std::string::npos);
+        // Un second begin sur le même identifiant ne remplace pas le secret (vol de jeton)
+        auto hijack = json({{"provider", "discord"}, {"login", lid}, {"verifier", "attackerattackerattacker"}}).dump();
+        assert(oauth.Post("/auth/begin", hijack, "application/json")->status == 409);
         // begin refuse un identifiant invalide (trop court)
         auto bad = json({{"provider", "discord"}, {"login", "court"}, {"verifier", secret}}).dump();
         assert(oauth.Post("/auth/begin", bad, "application/json")->status == 400);

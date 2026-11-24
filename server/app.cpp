@@ -558,9 +558,14 @@ void ServerApp::setup_routes(httplib::Server& server)
         for (auto it = logins_.begin(); it != logins_.end();) {
             it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
         }
+        // Une connexion déjà commencée garde son secret : sinon, quelqu'un qui
+        // connaît l'identifiant pourrait y mettre le sien et voler le jeton.
+        if (logins_.count(login) != 0) {
+            reply_error(response, 409, "This sign-in has already started. Try again from the game.");
+            return;
+        }
         // Plafond anti-saturation : trop de connexions en attente = on refuse
-        if (logins_.find(login) == logins_.end()
-            && static_cast<int>(logins_.size()) >= config_.max_pending_logins) {
+        if (static_cast<int>(logins_.size()) >= config_.max_pending_logins) {
             reply_error(response, 429, "Too many sign-ins in progress. Try again later.");
             return;
         }

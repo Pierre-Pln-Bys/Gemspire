@@ -854,6 +854,10 @@ static void handle_responses(App& app)
             } else if (ok && body.value("status", std::string()) == "error") {
                 online.login_id.clear();
                 set_message(app, body.value("error", std::string("Sign-in failed.")), true);
+            } else if (response.status == 429) {
+                // Trop de requêtes depuis cette adresse (réseau partagé) : on
+                // garde la connexion en cours et on réessaie un peu plus tard.
+                online.next_login_poll = GetTime() + 10;
             } else if (!ok) {
                 online.login_id.clear();
                 set_message(app, error_of(response, body, app), true);

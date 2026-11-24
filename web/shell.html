@@ -50,26 +50,32 @@
   var gemspireActivity = (function () {
     var params = new URLSearchParams(window.location.search);
     var frameId = params.get("frame_id");
-    var inActivity = !!frameId && !!params.get("instance_id");
-    var state = { code: "", error: "" };
-    // Origine du parent (Discord) : jamais "*", pour ne pas diffuser à n'importe qui
-    var parentOrigin = document.referrer ? new URL(document.referrer).origin : "https://discord.com";
-    var clientId = "";
-    var authorizeNonce = "";
-
-    // N'accepte que les messages venant de Discord (le parent attendu, ou le
-    // proxy discordsays.com) : un cadre parent malveillant ne peut rien injecter.
-    function originAllowed(origin) {
-      if (origin === parentOrigin) {
-        return true;
-      }
+    // Origine venant de Discord (discord.com, ptb/canary, ou le proxy discordsays.com)
+    function isDiscordOrigin(origin) {
       try {
-        var host = new URL(origin).hostname;
-        return host === "discord.com" || host.endsWith(".discord.com")
-            || host === "discordsays.com" || host.endsWith(".discordsays.com");
+        var url = new URL(origin);
+        var host = url.hostname;
+        return url.protocol === "https:"
+            && (host === "discord.com" || host.endsWith(".discord.com")
+                || host === "discordsays.com" || host.endsWith(".discordsays.com"));
       } catch (e) {
         return false;
       }
+    }
+    // Origine du parent : seulement si c'est Discord. Une page tierce qui
+    // intègre /play dans une iframe n'active pas le mode Activité ; sans
+    // Referer, on vise discord.com (une autre page ne recevrait rien).
+    var referrerOrigin = document.referrer ? new URL(document.referrer).origin : "";
+    var parentOrigin = referrerOrigin === "" ? "https://discord.com" : referrerOrigin;
+    var inActivity = !!frameId && !!params.get("instance_id") && isDiscordOrigin(parentOrigin);
+    var state = { code: "", error: "" };
+    var clientId = "";
+    var authorizeNonce = "";
+
+    // N'accepte que les messages venant de Discord : un cadre parent
+    // malveillant ne peut rien injecter.
+    function originAllowed(origin) {
+      return isDiscordOrigin(origin);
     }
 
     function send(opcode, payload) {
