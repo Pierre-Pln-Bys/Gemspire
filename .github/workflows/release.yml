@@ -136,10 +136,14 @@ jobs:
       - name: Rendre les binaires Linux exécutables
         run: chmod +x gemspire-linux gemspire-console-linux
 
-      # Notes de version : la section du CHANGELOG (en anglais)
+      # Notes de version : la section du CHANGELOG (en anglais).
+      # Le tag passe par une variable d'environnement (jamais ${{ }} inline dans
+      # une commande shell : cela permettrait une injection de commande).
       - name: Notes de version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          python3 -c "import sys; sys.path.insert(0, 'tools'); from discord_release import changelog_section; print(changelog_section(open('CHANGELOG.md').read(), sys.argv[1].lstrip('v')) or '')" "${{ inputs.tag || github.ref_name }}" > release_notes.md
+          python3 -c "import sys; sys.path.insert(0, 'tools'); from discord_release import changelog_section; print(changelog_section(open('CHANGELOG.md').read(), sys.argv[1].lstrip('v')) or '')" "$TAG" > release_notes.md
           printf '\n**Play in your browser:** https://gemspire.epsilon-forge.fr/play/\n' >> release_notes.md
 
       - uses: softprops/action-gh-release@v3
@@ -160,4 +164,5 @@ jobs:
         continue-on-error: true
         env:
           DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-        run: python3 tools/discord_release.py "${{ inputs.tag || github.ref_name }}"
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 tools/discord_release.py "$TAG"

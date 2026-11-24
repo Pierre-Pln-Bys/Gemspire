@@ -34,6 +34,10 @@ struct ServerConfig {
     // Comptes Discord administrateurs (SPLENDOR_ADMIN_DISCORD_IDS, séparés par des virgules) :
     // panel /panel-admin et commandes /dev du bot. Vide : administration fermée.
     std::vector<std::string> admin_discord_ids;
+    // Limitation de débit des routes de connexion non authentifiées (par IP,
+    // fenêtre d'une minute ; 0 = sans limite) et plafond de connexions en attente.
+    int rate_limit = 120;
+    int max_pending_logins = 5000;
 };
 
 ServerConfig config_from_environment();
@@ -80,8 +84,12 @@ private:
     std::map<std::string, PendingLogin> logins_;
     std::map<std::string, AdminSession> admin_sessions_;  // protégé par logins_mutex_
     long long started_at_ = 0;
+    // Compteur de débit par IP : {IP -> (début de fenêtre, nombre de requêtes)}
+    std::mutex rate_mutex_;
+    std::map<std::string, std::pair<long long, int>> rate_hits_;
 
     int authenticate(const httplib::Request& request);
+    bool rate_ok(const httplib::Request& request);  // false si l'IP dépasse le débit autorisé
     bool bot_allowed(const httplib::Request& request) const;
     void announce_lobby(const Lobby& lobby);
     bool seat_for(int account, Seat& seat, std::string& error);

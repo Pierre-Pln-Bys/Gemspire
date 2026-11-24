@@ -73,6 +73,7 @@ int main()
     config.min_version = SPLENDOR_VERSION;
     config.turn_seconds = 1;  // l'horloge n'avance que quand le test appelle app.tick()
     config.admin_discord_ids = {"777"};
+    config.rate_limit = 0;  // pas de limite de débit : le test enchaîne beaucoup de requêtes
     ServerApp app(config);
     assert(app.ok());
     httplib::Server server;
@@ -174,6 +175,48 @@ int main()
 
         oauth_server.stop();
         oauth_thread.join();
+    }
+
+    // --- L5 : limitation de débit par IP et plafond de connexions en attente.
+    //     Serveur isolé avec des limites basses (le serveur principal ne limite pas).
+    {
+        std::remove("tests/test_server_rate.db");
+        ServerConfig rate_config;
+        rate_config.port = PORT + 2;
+        rate_config.database = "tests/test_server_rate.db";
+        rate_config.dev_login = true;
+        rate_config.discord_client_id = "fake-discord-client";
+        rate_config.min_version = SPLENDOR_VERSION;
+        rate_config.rate_limit = 5;        // 5 requêtes/minute par IP
+        rate_config.max_pending_logins = 2;  // au plus 2 connexions en attente
+        ServerApp rate_app(rate_config);
+        assert(rate_app.ok());
+        httplib::Server rate_server;
+        rate_app.setup_routes(rate_server);
+        std::thread rate_thread([&]() { rate_server.listen("127.0.0.1", PORT + 2); });
+        rate_server.wait_until_ready();
+        httplib::Client rc("127.0.0.1", PORT + 2);
+        rc.set_default_headers({{"X-Splendor-Version", SPLENDOR_VERSION}});
+
+        auto begin = [&](const std::string& id) {
+            auto body = json({{"provider", "discord"}, {"login", id}, {"verifier", "verifierverifier1234"}}).dump();
+            return rc.Post("/auth/begin", body, "application/json");
+        };
+        // Plafond : 2 connexions en attente acceptées, la 3e est refusée (429)
+        assert(begin("rate0000000000000000")->status == 200);
+        assert(begin("rate1111111111111111")->status == 200);
+        auto capped = begin("rate2222222222222222");
+        assert(capped && capped->status == 429
+               && json::parse(capped->body)["error"].get<std::string>().find("in progress") != std::string::npos);
+        // Débit : 5 requêtes/minute par IP (3 begin déjà faits) ; la 6e requête est refusée
+        assert(rc.Get("/auth/poll?login=rate0000000000000000")->status == 200);  // 4e
+        assert(rc.Get("/auth/poll?login=rate0000000000000000")->status == 200);  // 5e
+        auto throttled = rc.Get("/auth/poll?login=rate0000000000000000");        // 6e
+        assert(throttled && throttled->status == 429
+               && json::parse(throttled->body)["error"].get<std::string>().find("Slow down") != std::string::npos);
+
+        rate_server.stop();
+        rate_thread.join();
     }
     get(client, "/me", "faux-jeton", 401);
     assert(get(client, "/me", alice)["pseudo"] == "");

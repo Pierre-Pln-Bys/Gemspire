@@ -52,15 +52,34 @@
     var frameId = params.get("frame_id");
     var inActivity = !!frameId && !!params.get("instance_id");
     var state = { code: "", error: "" };
-    var parentOrigin = document.referrer ? new URL(document.referrer).origin : "*";
+    // Origine du parent (Discord) : jamais "*", pour ne pas diffuser à n'importe qui
+    var parentOrigin = document.referrer ? new URL(document.referrer).origin : "https://discord.com";
     var clientId = "";
     var authorizeNonce = "";
+
+    // N'accepte que les messages venant de Discord (le parent attendu, ou le
+    // proxy discordsays.com) : un cadre parent malveillant ne peut rien injecter.
+    function originAllowed(origin) {
+      if (origin === parentOrigin) {
+        return true;
+      }
+      try {
+        var host = new URL(origin).hostname;
+        return host === "discord.com" || host.endsWith(".discord.com")
+            || host === "discordsays.com" || host.endsWith(".discordsays.com");
+      } catch (e) {
+        return false;
+      }
+    }
 
     function send(opcode, payload) {
       window.parent.postMessage([opcode, payload], parentOrigin);
     }
 
     function onMessage(event) {
+      if (!originAllowed(event.origin)) {
+        return;  // message d'une origine inattendue : ignoré
+      }
       if (!Array.isArray(event.data) || event.data[0] !== 1) {
         return;  // seulement les messages FRAME (opcode 1)
       }

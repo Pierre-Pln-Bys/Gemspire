@@ -55,6 +55,10 @@ ServerConfig config_from_environment()
     if (config.turn_seconds < 5) {
         config.turn_seconds = 120;
     }
+    config.rate_limit = std::atoi(env("SPLENDOR_RATE_LIMIT", "120").c_str());
+    if (config.rate_limit < 0) {
+        config.rate_limit = 0;  // valeur négative : pas de limite
+    }
     return config;
 }
 
@@ -174,6 +178,8 @@ static void reply_site(httplib::Response& response, const std::string& html, int
     response.set_header("X-Content-Type-Options", "nosniff");
     response.set_header("Referrer-Policy", "no-referrer");
     response.set_header("Cache-Control", "public, max-age=60");
+    // HSTS : le navigateur reste en HTTPS (ignoré sur une connexion en clair)
+    response.set_header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     response.set_content(html, "text/html; charset=utf-8");
 }
 
@@ -387,6 +393,32 @@ bool ServerApp::bot_allowed(const httplib::Request& request) const
     return difference == 0;
 }
 
+// Limitation de débit par IP (fenêtre fixe d'une minute). Derrière Cloudflare,
+// l'IP réelle du client est dans CF-Connecting-IP (le serveur n'écoute qu'en local).
+bool ServerApp::rate_ok(const httplib::Request& request)
+{
+    if (config_.rate_limit <= 0) {
+        return true;  // limitation désactivée
+    }
+    std::string ip = request.get_header_value("CF-Connecting-IP");
+    if (ip.empty()) {
+        ip = request.remote_addr;
+    }
+    long long now = std::time(nullptr);
+    std::lock_guard<std::mutex> lock(rate_mutex_);
+    // Oublie les compteurs dont la fenêtre est passée (évite une croissance sans fin)
+    for (auto it = rate_hits_.begin(); it != rate_hits_.end();) {
+        it = now - it->second.first >= 60 ? rate_hits_.erase(it) : std::next(it);
+    }
+    std::pair<long long, int>& hit = rate_hits_[ip];
+    if (now - hit.first >= 60) {
+        hit.first = now;  // nouvelle fenêtre d'une minute
+        hit.second = 0;
+    }
+    hit.second++;
+    return hit.second <= config_.rate_limit;
+}
+
 bool ServerApp::ok() const
 {
     return store_.ok();
@@ -504,6 +536,10 @@ void ServerApp::setup_routes(httplib::Server& server)
     //     Le secret ne passe jamais par l'URL du navigateur : connaître l'ID seul
     //     (lien, Referer, historique, journaux) ne suffit plus à voler le jeton.
     server.Post("/auth/begin", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!rate_ok(request)) {
+            reply_error(response, 429, "Too many requests. Slow down.");
+            return;
+        }
         json body;
         bool parsed = parse_body(request, body);
         std::string provider = parsed ? body.value("provider", std::string()) : "";
@@ -521,6 +557,12 @@ void ServerApp::setup_routes(httplib::Server& server)
         // Les connexions de plus de 10 minutes sont oubliées
         for (auto it = logins_.begin(); it != logins_.end();) {
             it = now - it->second.created > 600 ? logins_.erase(it) : std::next(it);
+        }
+        // Plafond anti-saturation : trop de connexions en attente = on refuse
+        if (logins_.find(login) == logins_.end()
+            && static_cast<int>(logins_.size()) >= config_.max_pending_logins) {
+            reply_error(response, 429, "Too many sign-ins in progress. Try again later.");
+            return;
         }
         PendingLogin& pending = logins_[login];
         pending.provider = provider;
@@ -666,6 +708,10 @@ void ServerApp::setup_routes(httplib::Server& server)
     });
 
     server.Get("/auth/poll", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!rate_ok(request)) {
+            reply_error(response, 429, "Too many requests. Slow down.");
+            return;
+        }
         std::string login = request.get_param_value("login");
         std::string verifier = request.get_param_value("verifier");
         std::lock_guard<std::mutex> lock(logins_mutex_);

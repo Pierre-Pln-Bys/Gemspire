@@ -334,6 +334,8 @@ static void reply_admin(httplib::Response& response, const std::string& html, in
     response.set_header("Referrer-Policy", "no-referrer");
     response.set_header("Cache-Control", "no-store");
     response.set_header("X-Robots-Tag", "noindex, nofollow");
+    // HSTS : le navigateur reste en HTTPS (ignoré sur une connexion en clair)
+    response.set_header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     response.set_content(html, "text/html; charset=utf-8");
 }
 

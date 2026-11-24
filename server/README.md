@@ -30,6 +30,7 @@ cpp-httplib, nlohmann/json et SQLite sont inclus dans `third_party/`.
 | `DISCORD_WEBHOOK_URL` | annonces de salons (v3.2) | vide |
 | `SPLENDOR_DEV_LOGIN` | `1` : connexion de test sans OAuth (**jamais en production**) | désactivé |
 | `SPLENDOR_TURN_SECONDS` | temps pour jouer un tour en ligne | `120` |
+| `SPLENDOR_RATE_LIMIT` | requêtes/minute par IP sur les routes de connexion (0 = sans limite) | `120` |
 | `SPLENDOR_MIN_VERSION` | version minimale du jeu acceptée | version du serveur |
 | `SPLENDOR_WEB_DIR` | jeu dans le navigateur (`make web`), servi sur `/play/` | `/opt/splendor/web` |
 | `SPLENDOR_CONTACT_EMAIL` | adresse de contact affichée sur le site | vide |
