@@ -9,6 +9,7 @@
 
 #include "../src/move_json.hpp"
 #include "../src/version.hpp"
+#include "favicon.hpp"
 #include "pages.hpp"
 
 using nlohmann::json;
@@ -1361,6 +1362,16 @@ void ServerApp::setup_routes(httplib::Server& server)
     };
     server.Get("/privacy", privacy_page(Lang::English));
     server.Get("/confidentialite", privacy_page(Lang::French));
+    // Icônes du site (onglets, favoris, écran d'accueil des téléphones), intégrées au serveur
+    server.Get("/favicon.ico", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content(reinterpret_cast<const char*>(FAVICON_ICO), sizeof(FAVICON_ICO), "image/x-icon");
+        response.set_header("Cache-Control", "public, max-age=604800");
+    });
+    server.Get("/apple-touch-icon.png", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content(reinterpret_cast<const char*>(APPLE_TOUCH_ICON_PNG), sizeof(APPLE_TOUCH_ICON_PNG),
+                             "image/png");
+        response.set_header("Cache-Control", "public, max-age=604800");
+    });
     server.Get("/robots.txt", [](const httplib::Request&, httplib::Response& response) {
         response.set_content("User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\n",
                              "text/plain");

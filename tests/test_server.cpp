@@ -93,6 +93,12 @@ int main()
         assert(old_game.Get("/leaderboard")->status == 200);
         assert(old_game.Get("/")->status == 200);
         assert(old_game.Get("/health")->status == 200);
+        // Icônes du site, accessibles sans en-tête de version (navigateurs)
+        auto icon = old_game.Get("/favicon.ico");
+        assert(icon && icon->status == 200 && icon->get_header_value("Content-Type") == "image/x-icon");
+        auto touch_icon = old_game.Get("/apple-touch-icon.png");
+        assert(touch_icon && touch_icon->status == 200 && touch_icon->body.substr(1, 3) == "PNG");
+        assert(old_game.Get("/")->body.find("/favicon.ico") != std::string::npos);
     }
 
     httplib::Client client("127.0.0.1", PORT);
