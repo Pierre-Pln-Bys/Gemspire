@@ -208,7 +208,7 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
   (canonical, hreflang), aperçu de partage (Open Graph), fiche `VideoGame`,
   `sitemap.xml`.
 
-## v4.2 — Passe de saison
+## v4.2 — Passe de saison — publiée le 25/11/2026
 
 - [x] Passe gratuit : 50 paliers, une récompense tous les 2 paliers, objets
   générés à chaque saison (thèmes, dos de cartes, jetons, cadres, titres,
