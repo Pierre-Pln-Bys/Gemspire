@@ -112,7 +112,7 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/auth/<discord\|google>/start?login=ID` | début de connexion (navigateur ; préparé par `/auth/begin`) |
 | GET | `/auth/poll?login=ID&verifier=SECRET` | `pending`, `done` (+ `token`) ou `error` ; le jeton exige le bon `verifier` |
 | POST | `/auth/logout` | supprime la session |
-| GET | `/me` | compte : pseudo, Elo, parties, victoires, succès |
+| GET | `/me` | compte : pseudo, Elo global (`elo`, `rank`, `ranked_games`, `ranked_wins`), Elo de saison (`season_elo`, `season_games`, `season_wins`, `season_rank`), `season`, `season_ends_at`, parties et victoires (toutes), succès |
 | POST | `/me/pseudo` | `{"pseudo": "..."}` |
 | POST | `/lobbies` | `{"mode": "classique"\|"rapide", "seats": 2..4}` → `{"code"}` |
 | POST | `/lobbies/CODE/join` · `/leave` · `/start` | rejoindre, quitter, lancer (hôte) |
@@ -121,19 +121,21 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/lobbies/CODE?since=V` | état du salon (attente longue si version ≤ V) |
 | GET | `/games/ID?since=V` | état de la partie vu par ce joueur (pioches et réservées des autres cachées) |
 | POST | `/games/ID/move` | un coup (voir `src/move_json.hpp`) |
-| POST | `/games/ID/forfeit` | abandon (classé dernier, Elo perdu) |
+| POST | `/games/ID/forfeit` | abandon (classé dernier ; Elo perdu si la partie est classée ou de saison) |
 | POST | `/games/ID/chat` | `{"text": "..."}` (1 à 120 caractères) ou `{"reaction": 0..5}` ; 1 message par seconde, 6 par 20 s |
 | GET | `/games/live` | parties en cours à regarder (20 au plus, les mieux classées d'abord) ; un non-joueur qui lit `/games/ID` est spectateur (tout caché) |
-| GET | `/me/games` | mes 15 dernières parties (`replay` : rediffusion disponible) |
+| GET | `/me/games` | mes 15 dernières parties (`kind` : `friendly`, `ranked`, `season` ; `replay` : rediffusion disponible) |
 | GET | `/replays/ID` | rediffusion : `seed`, `mode`, `names`, `actions` (`move`, `skip`, `forfeit`), rejouée par `replay_game` |
-| POST | `/matchmaking/join` · `/matchmaking/leave` | `{"mode": ...}` : file d'attente ; écart d'Elo accepté 100 + 20 par seconde d'attente |
-| GET | `/matchmaking` | `idle`, `waiting` (`waited`, `players_waiting`) ou `matched` (`game_id`) |
+| POST | `/matchmaking/join` · `/matchmaking/leave` | `{"mode": ..., "kind": "ranked"\|"season"}` : file Classé (Elo global, par défaut) ou Saison (Elo de saison) ; écart d'Elo accepté 100 + 20 par seconde d'attente |
+| GET | `/matchmaking` | `idle`, `waiting` (`waited`, `players_waiting` de la même file, `kind`) ou `matched` (`game_id`) |
 | GET | `/friends` | amis (`relation` : `friend`, `incoming`, `outgoing` ; `status` des amis : `playing`, `online`, `offline`) |
 | POST | `/friends/add` · `/friends/remove` | `{"pseudo": "..."}` : demande ou acceptation, retrait |
-| GET | `/leaderboard` | 50 meilleurs Elo |
+| POST | `/friends/challenge` | `{"pseudo", "mode"}` : défi amical à un ami (salon de 2, notification `challenge` avec le code) → `{"code"}` |
+| GET | `/leaderboard` | `players` (50 meilleurs Elo globaux), `season_players` (50 meilleurs de la saison, au moins `season_min_games` parties), `season`, `season_ends_at` |
 | POST | `/me/link` | `{"provider": "google"\|"discord"}` → `{"login"}` : ouvrir ensuite `/auth/<provider>/start?login=…` ; `/auth/poll` répond `done` + `linked` (pas de nouveau jeton) |
 
-`GET /games/ID` donne aussi `turn_seconds_left` (temps restant du tour) et
+`GET /games/ID` donne aussi `kind` (`friendly` : salon ou défi, sans Elo ;
+`ranked` : Elo global ; `season` : Elo de saison), `turn_seconds_left` (temps restant du tour) et
 `missed` (tours manqués d'affilée par place), `chat` (50 derniers messages,
 gardés en mémoire seulement) et, à la fin, `achievements` (succès débloqués
 par place, voir `src/achievements.cpp`).
@@ -142,9 +144,15 @@ Routes du bot (en-tête `X-Bot-Key`) ajoutées en v3.8 : `GET /bot/ranks`
 (Elo des joueurs liés à Discord, pour les rôles de rang) et
 `POST /bot/challenge` (`discord_id`, `target_discord_id`, `mode`) qui crée un
 salon à 2 places et prévient les deux jeux. En v3.9 : `POST /bot/season/end`
-(fin de saison : top 50 archivé, badges du top 10, Elo ramenés à mi-chemin de
-1000) ; `/me` et `/leaderboard` donnent la saison en cours (`season`), `/me`
-et `/bot/profile` les badges.
+(fin de saison anticipée) ; `/me` et `/bot/profile` donnent les badges.
+
+**Saisons (v4.1)** : une saison dure deux mois ; le serveur la change tout
+seul (dans `tick`) le 1er janvier, mars, mai, juillet, septembre et novembre à
+minuit, heure de Paris (`next_season_change`). À la fin : top 50 de la saison
+archivé (`season_results`), badges du top 10, Elo de saison remis à 1000
+(l'Elo global ne change pas), événement `{"type": "season_end", "ended",
+"season", "ends_at", "top"}` sur `/bot/events` (le bot l'annonce) et
+notification `season` aux jeux ouverts.
 
 ## Administration (v4)
 

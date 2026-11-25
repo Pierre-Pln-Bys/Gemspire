@@ -16,9 +16,14 @@ struct Account {
     int id = 0;
     std::string provider;     // "discord", "google" (ou "dev" en local)
     std::string pseudo;       // vide tant que le joueur ne l'a pas choisi
-    int elo = 1000;
-    int games = 0;
+    int elo = 1000;            // Elo global (parties « Classé »), jamais remis à zéro
+    int games = 0;             // toutes les parties en ligne (amicales comprises)
     int wins = 0;
+    int ranked_games = 0;      // parties « Classé » (classement global)
+    int ranked_wins = 0;
+    int season_elo = 1000;     // Elo de la saison en cours (parties « Saison »)
+    int season_games = 0;
+    int season_wins = 0;
     long long banned_until = 0;   // 0 : pas suspendu ; BAN_FOREVER : définitif ; sinon date de fin
     std::string ban_reason;
 
@@ -27,10 +32,18 @@ struct Account {
 
 const long long BAN_FOREVER = -1;
 
+// Type d'une partie en ligne : amicale (salons, défis : pas d'Elo), classée
+// (recherche de partie, Elo global) ou de saison (recherche de partie, Elo de saison)
+enum class GameKind { Friendly, Ranked, Season };
+
+std::string kind_name(GameKind kind);                 // "friendly", "ranked", "season"
+bool parse_kind(const std::string& text, GameKind& kind);
+
 // Une partie de l'historique d'un joueur (modération)
 struct HistoryEntry {
     int game_id;                        // numéro dans la base (pour l'annuler)
     std::string mode;
+    std::string kind;                   // "friendly", "ranked" ou "season"
     long long finished_at;
     int place;
     int score;
@@ -59,11 +72,24 @@ struct Friend {
 
 const int MAX_FRIENDS = 100;
 
-// Saisons classées : à la fin d'une saison, les SEASON_ARCHIVED premiers sont
-// archivés (badge pour les SEASON_BADGES premiers) et chaque Elo est ramené à
-// mi-chemin de 1000.
+// Saisons classées (v4.1) : une saison dure deux mois et change toute seule
+// le 1er janvier, mars, mai, juillet, septembre et novembre à minuit (heure de
+// Paris). À la fin, les SEASON_ARCHIVED premiers du classement de la saison
+// (au moins SEASON_MIN_GAMES parties) sont archivés, les SEASON_BADGES premiers
+// ont un badge, et l'Elo de saison de chacun repart à 1000. L'Elo global ne
+// change pas.
 const int SEASON_ARCHIVED = 50;
 const int SEASON_BADGES = 10;
+const int SEASON_MIN_GAMES = 10;
+
+// Prochain changement de saison strictement après `now` (secondes depuis 1970)
+long long next_season_change(long long now);
+
+struct SeasonInfo {
+    int number = 0;
+    long long started_at = 0;
+    long long ends_at = 0;     // changement automatique prévu
+};
 
 struct SeasonBadge {
     int season;
@@ -124,14 +150,19 @@ public:
     int account_for_token(const std::string& token);  // 0 si inconnu
     void delete_session(const std::string& token);
 
-    // Enregistre une partie terminée et met à jour Elo, parties et victoires ;
-    // `replay` : de quoi la rejouer (JSON : graine, noms, actions). Renvoie son numéro.
-    int record_game(Mode mode, const std::vector<GameResult>& results, const std::string& replay = "");
+    // Enregistre une partie terminée et met à jour parties, victoires et l'Elo
+    // de son type (aucun pour une amicale) ; `elo_before` / `elo_after` des
+    // résultats sont cet Elo-là. `replay` : de quoi la rejouer (JSON : graine,
+    // noms, actions). Renvoie son numéro.
+    int record_game(Mode mode, GameKind kind, const std::vector<GameResult>& results, const std::string& replay = "");
     // Rediffusion d'une partie ("" si aucune)
     std::string replay(int game_id);
-    // Classement (sans les comptes suspendus)
+    // Classement global (au moins une partie « Classé », sans les comptes suspendus)
     std::vector<Account> leaderboard(int limit);
-    int rank_of(int id);                         // place au classement (0 : pas classé)
+    int rank_of(int id);                         // place au classement global (0 : pas classé)
+    // Classement de la saison en cours (au moins SEASON_MIN_GAMES parties « Saison »)
+    std::vector<Account> season_leaderboard(int limit);
+    int season_rank_of(int id);                  // place au classement de la saison (0 : pas classé)
 
     // --- Amis : une demande devient une amitié quand l'autre l'accepte (ou
     //     demande aussi). "" ou l'erreur.
@@ -145,8 +176,10 @@ public:
 
     // --- Saisons
     int current_season();                       // numéro de la saison en cours (la 1 est créée au besoin)
-    // Termine la saison : archive le classement, rapproche les Elo de 1000,
-    // commence la suivante. Renvoie le classement archivé (les premiers).
+    SeasonInfo season_info();                   // saison en cours, avec sa date de fin prévue
+    // Termine la saison : archive son classement, remet les Elo de saison à
+    // 1000, commence la suivante (fin au prochain changement du calendrier).
+    // Renvoie le classement archivé (les premiers).
     std::vector<Account> end_season();
     std::vector<SeasonBadge> badges(int id);    // places dans le top 10 des saisons passées
 

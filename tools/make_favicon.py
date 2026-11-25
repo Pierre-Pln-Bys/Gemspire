@@ -1,8 +1,11 @@
-"""Génère server/favicon.hpp (icônes du site) à partir de assets/logo.png.
+"""Génère server/favicon.hpp (images du site) à partir de assets/.
 
 Usage : python3 tools/make_favicon.py   (demande Pillow)
-- favicon.ico : 16, 32 et 48 px (onglets, favoris, résultats de recherche) ;
-- apple-touch-icon.png : 180 px, fond plein (iPhone, iPad, raccourcis Android).
+- favicon.ico : 16, 32 et 48 px (onglets, favoris, résultats de recherche),
+  depuis assets/logo.png ;
+- apple-touch-icon.png : 180 px, fond plein (iPhone, iPad, raccourcis Android) ;
+- og-image.jpg : 1024 x 576, aperçu des liens partagés (Discord, réseaux
+  sociaux, moteurs de recherche), depuis assets/invite-cover.png.
 """
 import io
 from pathlib import Path
@@ -39,11 +42,16 @@ def main():
     touch.alpha_composite(logo)
     touch = touch.convert("RGB").resize((180, 180), Image.LANCZOS)
 
+    cover = Image.open(ROOT / "assets" / "invite-cover.png").convert("RGB")
+    og = io.BytesIO()
+    cover.save(og, format="JPEG", quality=85, optimize=True, progressive=True)
+
     header = "\n\n".join([
-        "// Fichier généré par tools/make_favicon.py à partir de assets/logo.png : ne pas modifier à la main.",
+        "// Fichier généré par tools/make_favicon.py à partir de assets/ : ne pas modifier à la main.",
         "#pragma once",
         c_array("FAVICON_ICO", ico.getvalue()),
         c_array("APPLE_TOUCH_ICON_PNG", png_bytes(touch)),
+        c_array("OG_IMAGE_JPG", og.getvalue()),
     ]) + "\n"
     (ROOT / "server" / "favicon.hpp").write_text(header)
 

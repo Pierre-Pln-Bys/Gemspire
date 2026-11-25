@@ -1,5 +1,6 @@
 #include "store.hpp"
 
+#include <algorithm>
 #include <ctime>
 
 #include <openssl/evp.h>
@@ -56,6 +57,57 @@ std::string check_pseudo(const std::string& pseudo)
         return "The username can't start or end with a space.";
     }
     return "";
+}
+
+std::string kind_name(GameKind kind)
+{
+    return kind == GameKind::Ranked ? "ranked" : kind == GameKind::Season ? "season" : "friendly";
+}
+
+bool parse_kind(const std::string& text, GameKind& kind)
+{
+    if (text == "ranked") {
+        kind = GameKind::Ranked;
+    } else if (text == "season") {
+        kind = GameKind::Season;
+    } else if (text == "friendly") {
+        kind = GameKind::Friendly;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// Nombre de jours entre le 1er janvier 1970 et une date du calendrier
+// (algorithme classique « days from civil », valable pour toute date)
+static long long days_from_civil(long long year, int month, int day)
+{
+    year -= month <= 2 ? 1 : 0;
+    long long era = (year >= 0 ? year : year - 399) / 400;
+    long long year_of_era = year - era * 400;
+    long long day_of_year = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    long long day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    return era * 146097 + day_of_era - 719468;
+}
+
+long long next_season_change(long long now)
+{
+    // Année (approchée par excès) de `now` : on essaie les changements de
+    // l'année d'avant à celle d'après et on garde le premier après `now`.
+    long long year = 1970 + now / (365LL * 86400);
+    const int months[6] = {1, 3, 5, 7, 9, 11};
+    for (long long y = year - 1; y <= year + 1; y++) {
+        for (int month : months) {
+            // Minuit à Paris : 23 h UTC la veille en hiver (CET), 22 h en été
+            // (CEST : mai, juillet et septembre)
+            long long paris_offset = (month == 5 || month == 7 || month == 9) ? 2 * 3600 : 3600;
+            long long change = days_from_civil(y, month, 1) * 86400 - paris_offset;
+            if (change > now) {
+                return change;
+            }
+        }
+    }
+    return now + 61LL * 86400;  // inatteignable : sécurité
 }
 
 // Petite aide pour les requêtes préparées
@@ -167,6 +219,20 @@ Store::Store(const std::string& path)
          " at INTEGER NOT NULL,"
          " actor TEXT NOT NULL,"
          " action TEXT NOT NULL);");
+    // v4.1 : deux Elo (global et de saison) et type de partie. Les parties
+    // d'avant étaient toutes classées : elles comptent pour le global.
+    if (exec("ALTER TABLE accounts ADD COLUMN ranked_games INTEGER NOT NULL DEFAULT 0;")) {
+        exec("UPDATE accounts SET ranked_games = games;");
+    }
+    if (exec("ALTER TABLE accounts ADD COLUMN ranked_wins INTEGER NOT NULL DEFAULT 0;")) {
+        exec("UPDATE accounts SET ranked_wins = wins;");
+    }
+    exec("ALTER TABLE accounts ADD COLUMN season_elo INTEGER NOT NULL DEFAULT 1000;");
+    exec("ALTER TABLE accounts ADD COLUMN season_games INTEGER NOT NULL DEFAULT 0;");
+    exec("ALTER TABLE accounts ADD COLUMN season_wins INTEGER NOT NULL DEFAULT 0;");
+    exec("ALTER TABLE games ADD COLUMN kind TEXT NOT NULL DEFAULT 'ranked';");
+    exec("ALTER TABLE games ADD COLUMN season INTEGER NOT NULL DEFAULT 0;");
+    exec("ALTER TABLE seasons ADD COLUMN ends_at INTEGER NOT NULL DEFAULT 0;");
 }
 
 bool Account::banned() const
@@ -284,8 +350,8 @@ std::string Store::identity(int id, const std::string& provider)
 bool Store::get_account(int id, Account& account)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement get(db_, "SELECT id, provider, IFNULL(pseudo, ''), elo, games, wins, banned_until, ban_reason"
-                       " FROM accounts WHERE id = ?");
+    Statement get(db_, "SELECT id, provider, IFNULL(pseudo, ''), elo, games, wins, banned_until, ban_reason,"
+                       " ranked_games, season_elo, season_games, season_wins, ranked_wins FROM accounts WHERE id = ?");
     get.bind(1, static_cast<long long>(id));
     if (!get.row()) {
         return false;
@@ -298,6 +364,11 @@ bool Store::get_account(int id, Account& account)
     account.wins = get.integer(5);
     account.banned_until = get.big(6);
     account.ban_reason = get.text(7);
+    account.ranked_games = get.integer(8);
+    account.season_elo = get.integer(9);
+    account.season_games = get.integer(10);
+    account.season_wins = get.integer(11);
+    account.ranked_wins = get.integer(12);
     return true;
 }
 
@@ -348,16 +419,28 @@ void Store::delete_session(const std::string& token)
     remove.done();
 }
 
-int Store::record_game(Mode mode, const std::vector<GameResult>& results, const std::string& replay)
+int Store::record_game(Mode mode, GameKind kind, const std::vector<GameResult>& results, const std::string& replay)
 {
+    int season = kind == GameKind::Season ? current_season() : 0;
     std::lock_guard<std::mutex> lock(mutex_);
     exec("BEGIN;");
-    Statement game(db_, "INSERT INTO games (mode, finished_at, replay) VALUES (?, ?, ?)");
+    Statement game(db_, "INSERT INTO games (mode, finished_at, replay, kind, season) VALUES (?, ?, ?, ?, ?)");
     game.bind(1, std::string(mode == Mode::Classic ? "classique" : "rapide"));
     game.bind(2, static_cast<long long>(std::time(nullptr)));
     game.bind(3, replay);
+    game.bind(4, kind_name(kind));
+    game.bind(5, static_cast<long long>(season));
     game.done();
     long long game_id = sqlite3_last_insert_rowid(db_);
+    // Ce qui change selon le type : l'Elo global, celui de la saison, ou rien
+    const char* update_sql =
+        kind == GameKind::Ranked
+            ? "UPDATE accounts SET elo = ?1, ranked_games = ranked_games + 1, ranked_wins = ranked_wins + ?2,"
+              " games = games + 1, wins = wins + ?2 WHERE id = ?3"
+        : kind == GameKind::Season
+            ? "UPDATE accounts SET season_elo = ?1, season_games = season_games + 1, season_wins = season_wins + ?2,"
+              " games = games + 1, wins = wins + ?2 WHERE id = ?3"
+            : "UPDATE accounts SET games = games + 1, wins = wins + ?2 WHERE id = ?3";
     for (const GameResult& result : results) {
         Statement player(db_, "INSERT INTO game_players VALUES (?, ?, ?, ?, ?, ?)");
         player.bind(1, game_id);
@@ -367,8 +450,10 @@ int Store::record_game(Mode mode, const std::vector<GameResult>& results, const 
         player.bind(5, static_cast<long long>(result.elo_before));
         player.bind(6, static_cast<long long>(result.elo_after));
         player.done();
-        Statement update(db_, "UPDATE accounts SET elo = ?, games = games + 1, wins = wins + ? WHERE id = ?");
-        update.bind(1, static_cast<long long>(result.elo_after));
+        Statement update(db_, update_sql);
+        if (kind != GameKind::Friendly) {
+            update.bind(1, static_cast<long long>(result.elo_after));
+        }
         update.bind(2, static_cast<long long>(result.place == 0 ? 1 : 0));
         update.bind(3, static_cast<long long>(result.account));
         update.done();
@@ -385,49 +470,99 @@ std::string Store::replay(int game_id)
     return find.row() ? find.text(0) : "";
 }
 
+// Lecture des colonnes communes d'un classement (id, provider, pseudo, elo,
+// games, wins, ranked_games, season_elo, season_games, season_wins, ranked_wins)
+static const char* const RANKING_COLUMNS =
+    "SELECT id, provider, pseudo, elo, games, wins, ranked_games, season_elo, season_games, season_wins, ranked_wins"
+    " FROM accounts";
+
+static Account ranking_row(Statement& list)
+{
+    Account account;
+    account.id = list.integer(0);
+    account.provider = list.text(1);
+    account.pseudo = list.text(2);
+    account.elo = list.integer(3);
+    account.games = list.integer(4);
+    account.wins = list.integer(5);
+    account.ranked_games = list.integer(6);
+    account.season_elo = list.integer(7);
+    account.season_games = list.integer(8);
+    account.season_wins = list.integer(9);
+    account.ranked_wins = list.integer(10);
+    return account;
+}
+
 std::vector<Account> Store::leaderboard(int limit)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::string sql = std::string("SELECT id, provider, pseudo, elo, games, wins FROM accounts"
-                                  " WHERE pseudo IS NOT NULL AND games > 0 AND ")
-                      + NOT_BANNED + " ORDER BY elo DESC, wins DESC LIMIT ?";
+    std::string sql = std::string(RANKING_COLUMNS) + " WHERE pseudo IS NOT NULL AND ranked_games > 0 AND "
+                      + NOT_BANNED + " ORDER BY elo DESC, ranked_wins DESC LIMIT ?";
     Statement list(db_, sql.c_str());
     list.bind(1, static_cast<long long>(std::time(nullptr)));
     list.bind(2, static_cast<long long>(limit));
     std::vector<Account> accounts;
     while (list.row()) {
-        Account account;
-        account.id = list.integer(0);
-        account.provider = list.text(1);
-        account.pseudo = list.text(2);
-        account.elo = list.integer(3);
-        account.games = list.integer(4);
-        account.wins = list.integer(5);
-        accounts.push_back(account);
+        accounts.push_back(ranking_row(list));
+    }
+    return accounts;
+}
+
+std::vector<Account> Store::season_leaderboard(int limit)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string sql = std::string(RANKING_COLUMNS) + " WHERE pseudo IS NOT NULL AND season_games >= ? AND "
+                      + NOT_BANNED + " ORDER BY season_elo DESC, season_wins DESC LIMIT ?";
+    Statement list(db_, sql.c_str());
+    list.bind(1, static_cast<long long>(SEASON_MIN_GAMES));
+    list.bind(2, static_cast<long long>(std::time(nullptr)));
+    list.bind(3, static_cast<long long>(limit));
+    std::vector<Account> accounts;
+    while (list.row()) {
+        accounts.push_back(ranking_row(list));
     }
     return accounts;
 }
 
 int Store::current_season()
 {
+    return season_info().number;
+}
+
+SeasonInfo Store::season_info()
+{
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement find(db_, "SELECT MAX(number) FROM seasons WHERE ended_at = 0");
-    if (find.row() && find.integer(0) > 0) {
-        return find.integer(0);
+    long long now = std::time(nullptr);
+    SeasonInfo info;
+    Statement find(db_, "SELECT number, started_at, ends_at FROM seasons WHERE ended_at = 0 ORDER BY number DESC LIMIT 1");
+    if (find.row()) {
+        info.number = find.integer(0);
+        info.started_at = find.big(1);
+        info.ends_at = find.big(2);
+    } else {
+        Statement last(db_, "SELECT IFNULL(MAX(number), 0) FROM seasons");
+        info.number = last.row() ? last.integer(0) + 1 : 1;
+        info.started_at = now;
+        Statement create(db_, "INSERT INTO seasons (number, started_at, ends_at) VALUES (?, ?, 0)");
+        create.bind(1, static_cast<long long>(info.number));
+        create.bind(2, now);
+        create.done();
     }
-    Statement last(db_, "SELECT IFNULL(MAX(number), 0) FROM seasons");
-    int number = last.row() ? last.integer(0) + 1 : 1;
-    Statement create(db_, "INSERT INTO seasons (number, started_at) VALUES (?, ?)");
-    create.bind(1, static_cast<long long>(number));
-    create.bind(2, static_cast<long long>(std::time(nullptr)));
-    create.done();
-    return number;
+    // Saison d'avant la v4.1 (ou toute neuve) : fin au prochain changement du calendrier
+    if (info.ends_at == 0) {
+        info.ends_at = next_season_change(std::max(now, info.started_at));
+        Statement set(db_, "UPDATE seasons SET ends_at = ? WHERE number = ?");
+        set.bind(1, info.ends_at);
+        set.bind(2, static_cast<long long>(info.number));
+        set.done();
+    }
+    return info;
 }
 
 std::vector<Account> Store::end_season()
 {
     int season = current_season();
-    std::vector<Account> top = leaderboard(SEASON_ARCHIVED);
+    std::vector<Account> top = season_leaderboard(SEASON_ARCHIVED);
     std::lock_guard<std::mutex> lock(mutex_);
     exec("BEGIN;");
     for (int i = 0; i < static_cast<int>(top.size()); i++) {
@@ -435,7 +570,7 @@ std::vector<Account> Store::end_season()
         archive.bind(1, static_cast<long long>(season));
         archive.bind(2, static_cast<long long>(top[i].id));
         archive.bind(3, static_cast<long long>(i + 1));
-        archive.bind(4, static_cast<long long>(top[i].elo));
+        archive.bind(4, static_cast<long long>(top[i].season_elo));
         archive.done();
     }
     long long now = std::time(nullptr);
@@ -443,12 +578,13 @@ std::vector<Account> Store::end_season()
     close.bind(1, now);
     close.bind(2, static_cast<long long>(season));
     close.done();
-    Statement next(db_, "INSERT INTO seasons (number, started_at) VALUES (?, ?)");
+    Statement next(db_, "INSERT INTO seasons (number, started_at, ends_at) VALUES (?, ?, ?)");
     next.bind(1, static_cast<long long>(season + 1));
     next.bind(2, now);
+    next.bind(3, next_season_change(now));
     next.done();
-    // Elo rapproché de 1000 (à mi-chemin) ; parties et victoires sont gardées
-    exec("UPDATE accounts SET elo = 1000 + (elo - 1000) / 2;");
+    // Nouvelle saison : tout le monde repart à 1000 ; l'Elo global ne change pas
+    exec("UPDATE accounts SET season_elo = 1000, season_games = 0, season_wins = 0;");
     exec("COMMIT;");
     return top;
 }
@@ -470,7 +606,7 @@ std::vector<std::pair<std::string, int>> Store::discord_ranks()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     std::string sql = std::string("SELECT i.provider_id, a.elo FROM identities i JOIN accounts a ON a.id = i.account_id"
-                                  " WHERE i.provider = 'discord' AND a.pseudo IS NOT NULL AND a.games > 0 AND ")
+                                  " WHERE i.provider = 'discord' AND a.pseudo IS NOT NULL AND a.ranked_games > 0 AND ")
                       + NOT_BANNED;
     Statement list(db_, sql.c_str());
     list.bind(1, static_cast<long long>(std::time(nullptr)));
@@ -484,17 +620,36 @@ std::vector<std::pair<std::string, int>> Store::discord_ranks()
 int Store::rank_of(int id)
 {
     Account account;
-    if (!get_account(id, account) || account.games == 0 || account.banned() || account.pseudo.empty()) {
+    if (!get_account(id, account) || account.ranked_games == 0 || account.banned() || account.pseudo.empty()) {
         return 0;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    std::string sql = std::string("SELECT COUNT(*) FROM accounts WHERE pseudo IS NOT NULL AND games > 0 AND ")
-                      + NOT_BANNED + " AND (elo > ? OR (elo = ? AND wins > ?))";
+    std::string sql = std::string("SELECT COUNT(*) FROM accounts WHERE pseudo IS NOT NULL AND ranked_games > 0 AND ")
+                      + NOT_BANNED + " AND (elo > ? OR (elo = ? AND ranked_wins > ?))";
     Statement count(db_, sql.c_str());
     count.bind(1, static_cast<long long>(std::time(nullptr)));
     count.bind(2, static_cast<long long>(account.elo));
     count.bind(3, static_cast<long long>(account.elo));
-    count.bind(4, static_cast<long long>(account.wins));
+    count.bind(4, static_cast<long long>(account.ranked_wins));
+    return count.row() ? count.integer(0) + 1 : 0;
+}
+
+int Store::season_rank_of(int id)
+{
+    Account account;
+    if (!get_account(id, account) || account.season_games < SEASON_MIN_GAMES || account.banned()
+        || account.pseudo.empty()) {
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string sql = std::string("SELECT COUNT(*) FROM accounts WHERE pseudo IS NOT NULL AND season_games >= ? AND ")
+                      + NOT_BANNED + " AND (season_elo > ? OR (season_elo = ? AND season_wins > ?))";
+    Statement count(db_, sql.c_str());
+    count.bind(1, static_cast<long long>(SEASON_MIN_GAMES));
+    count.bind(2, static_cast<long long>(std::time(nullptr)));
+    count.bind(3, static_cast<long long>(account.season_elo));
+    count.bind(4, static_cast<long long>(account.season_elo));
+    count.bind(5, static_cast<long long>(account.season_wins));
     return count.row() ? count.integer(0) + 1 : 0;
 }
 
@@ -532,7 +687,7 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<HistoryEntry> entries;
     Statement list(db_, "SELECT g.id, g.mode, g.finished_at, p.place, p.score, p.elo_after - p.elo_before,"
-                        " g.cancelled, g.replay != '' FROM game_players p JOIN games g ON g.id = p.game_id"
+                        " g.cancelled, g.replay != '', g.kind FROM game_players p JOIN games g ON g.id = p.game_id"
                         " WHERE p.account_id = ? ORDER BY g.id DESC LIMIT ?");
     list.bind(1, static_cast<long long>(id));
     list.bind(2, static_cast<long long>(limit));
@@ -546,6 +701,7 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
         entry.elo_change = list.integer(5);
         entry.cancelled = list.integer(6) != 0;
         entry.has_replay = list.integer(7) != 0;
+        entry.kind = list.text(8);
         entries.push_back(entry);
     }
     for (HistoryEntry& entry : entries) {
@@ -561,8 +717,9 @@ std::vector<HistoryEntry> Store::history(int id, int limit)
 
 std::string Store::cancel_game(int game_id)
 {
+    int current = current_season();
     std::lock_guard<std::mutex> lock(mutex_);
-    Statement find(db_, "SELECT cancelled FROM games WHERE id = ?");
+    Statement find(db_, "SELECT cancelled, kind, season FROM games WHERE id = ?");
     find.bind(1, static_cast<long long>(game_id));
     if (!find.row()) {
         return "Game not found.";
@@ -570,14 +727,24 @@ std::string Store::cancel_game(int game_id)
     if (find.integer(0) != 0) {
         return "This game is already cancelled.";
     }
+    std::string kind = find.text(1);
+    int season = find.integer(2);
     exec("BEGIN;");
-    Statement undo(db_, "UPDATE accounts SET"
-                        " elo = elo - (SELECT p.elo_after - p.elo_before FROM game_players p"
-                        "              WHERE p.game_id = ?1 AND p.account_id = accounts.id),"
-                        " games = games - 1,"
-                        " wins = wins - (SELECT CASE WHEN p.place = 0 THEN 1 ELSE 0 END FROM game_players p"
-                        "                WHERE p.game_id = ?1 AND p.account_id = accounts.id)"
-                        " WHERE id IN (SELECT account_id FROM game_players WHERE game_id = ?1)");
+    // Parties et victoires rendues ; l'Elo seulement si la partie en a changé un
+    // (classée : le global ; de saison : celui de la saison, si elle est en cours)
+    std::string elo_change = "(SELECT p.elo_after - p.elo_before FROM game_players p"
+                             " WHERE p.game_id = ?1 AND p.account_id = accounts.id)";
+    std::string win = "(SELECT CASE WHEN p.place = 0 THEN 1 ELSE 0 END FROM game_players p"
+                      " WHERE p.game_id = ?1 AND p.account_id = accounts.id)";
+    std::string sql = "UPDATE accounts SET games = games - 1, wins = wins - " + win;
+    if (kind == "ranked") {
+        sql += ", elo = elo - " + elo_change + ", ranked_games = ranked_games - 1, ranked_wins = ranked_wins - " + win;
+    } else if (kind == "season" && season == current) {
+        sql += ", season_elo = season_elo - " + elo_change + ", season_games = season_games - 1"
+               ", season_wins = season_wins - " + win;
+    }
+    sql += " WHERE id IN (SELECT account_id FROM game_players WHERE game_id = ?1)";
+    Statement undo(db_, sql.c_str());
     undo.bind(1, static_cast<long long>(game_id));
     undo.done();
     Statement mark(db_, "UPDATE games SET cancelled = 1 WHERE id = ?");
@@ -738,7 +905,7 @@ void Store::set_badge(int id, int season, int rank)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     Statement set(db_, "INSERT OR REPLACE INTO season_results (season, account_id, rank, elo)"
-                       " SELECT ?, id, ?, elo FROM accounts WHERE id = ?");
+                       " SELECT ?, id, ?, season_elo FROM accounts WHERE id = ?");
     set.bind(1, static_cast<long long>(season));
     set.bind(2, static_cast<long long>(rank));
     set.bind(3, static_cast<long long>(id));

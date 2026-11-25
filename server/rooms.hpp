@@ -38,7 +38,8 @@ struct ChatMessage {
 struct Seat {
     int account;
     std::string pseudo;
-    int elo;
+    int elo;                 // Elo global
+    int season_elo = 1000;   // Elo de la saison en cours
 };
 
 // Un joueur qui cherche un adversaire
@@ -46,6 +47,7 @@ struct QueueEntry {
     Seat seat;
     Mode mode;
     long long since;   // début de l'attente (secondes)
+    GameKind kind;     // file « Classé » (Elo global) ou « Saison » (Elo de saison)
 };
 
 // Salon d'attente : on le rejoint avec son code, l'hôte lance la partie
@@ -75,6 +77,7 @@ struct OnlineGame {
     std::vector<int> missed;           // tours manqués d'affilée, par place
     long long finished_at = 0;         // fin de la partie (pour l'oublier ensuite)
     unsigned seed = 0;                 // graine de la partie (rediffusion)
+    GameKind kind = GameKind::Friendly; // salons et défis : amicale ; recherche de partie : classée ou saison
     nlohmann::json actions = nlohmann::json::array();  // tout ce qui a changé la partie, dans l'ordre
     int record_id = 0;                 // numéro dans la base une fois enregistrée (rediffusion)
     std::vector<std::vector<std::string>> new_achievements;  // succès débloqués à la fin, par place
@@ -109,9 +112,10 @@ public:
     bool lobby_json(const std::string& code, long since, nlohmann::json& out);
 
     std::string play(int game_id, int account, const Move& move);
-    // --- Recherche de partie : deux joueurs du même mode, d'Elo proche (l'écart
+    // --- Recherche de partie : deux joueurs du même mode et de la même file
+    //     (Classé : Elo global ; Saison : Elo de saison), d'Elo proche (l'écart
     //     accepté grandit avec l'attente), partie à 2 lancée tout de suite
-    void join_queue(const Seat& me, Mode mode);
+    void join_queue(const Seat& me, Mode mode, GameKind kind);
     void leave_queue(int account);
     // {"status": "idle" | "waiting" (+ "waited", "players_waiting") | "matched" (+ "game_id")}
     void queue_json(int account, nlohmann::json& out);
@@ -150,8 +154,10 @@ public:
     std::string end_game(int game_id);
     void notifications_json(int account, long since, nlohmann::json& out);
 
-    // --- Événements pour le bot Discord : salons liés à un salon vocal
+    // --- Événements pour le bot Discord : salons liés à un salon vocal, et
+    //     autres événements (ex. {"type": "season_end", ...}) ajoutés ici
     void bot_events_json(long since, nlohmann::json& out);
+    void add_bot_event(nlohmann::json event);
 
     void set_wait_seconds(int seconds);
     void set_turn_seconds(int seconds);
@@ -180,7 +186,7 @@ private:
     std::map<int, int> matched_;        // compte -> partie trouvée (pas encore vue par le jeu)
 
     std::string new_code();
-    int new_game(const std::vector<Seat>& seats, Mode mode);  // verrou déjà pris
+    int new_game(const std::vector<Seat>& seats, Mode mode, GameKind kind);  // verrou déjà pris
     void try_match();                                          // verrou déjà pris
     void lobby_changed(const Lobby& lobby, bool closed);
     void remove_from_lobbies(int account);

@@ -444,6 +444,23 @@ static const std::map<std::string, std::string>& french_table()
 
         // --- Recherche de partie
         {"Find an opponent", "Trouver un adversaire"},
+        // v4.1 : saisons, deux Elo, parties amicales, défis
+        {"Ranked", "Classée"},
+        {"Friendly game: no Elo change", "Partie amicale : l'Elo ne change pas"},
+        {"Challenge", "Défier"},
+        {"Season", "Saison"},
+        {"Global", "Global"},
+        {"Friendly", "Amicale"},
+        {"{0} Elo ({1}/{2} games)", "{0} Elo ({1}/{2} parties)"},
+        {"Season (season Elo)", "Saison (Elo de saison)"},
+        {"Ranked (global Elo)", "Classée (Elo global)"},
+        {" Elo (season)", " Elo (saison)"},
+        {"Season games · ends in {0} day(s) · {1} games to be ranked",
+         "Parties de saison · fin dans {0} jour(s) · {1} parties pour être classé"},
+        {"Ranked games · this Elo is never reset", "Parties classées · cet Elo n'est jamais remis à zéro"},
+        {"Nobody is ranked yet this season.", "Personne n'est encore classé cette saison."},
+        {"Nobody has played a ranked game yet.", "Personne n'a encore joué de partie classée."},
+        {"Season {0} has started: season Elo back to 1000!", "La saison {0} commence : Elo de saison remis à 1000 !"},
         {"Finding an opponent…", "Recherche d'un adversaire…"},
         {"Waiting: {0} s · {1} player(s) searching", "Attente : {0} s · {1} joueur(s) en recherche"},
         {"An opponent with a close Elo; the range widens while you wait.",

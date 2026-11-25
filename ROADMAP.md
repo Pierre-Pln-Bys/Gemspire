@@ -196,21 +196,28 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Corrections des failles trouvées (relues). Nouveau test complet : plus tard.
 - [x] Empreintes SHA-256 publiées avec chaque release.
 
+## v4.1 — Saisons et visibilité
+
+- [x] Saisons automatiques (tous les deux mois, 1er janvier, mars, mai...) ;
+  Elo de saison remis à 1000, Elo global jamais remis à zéro ; classement de
+  saison (10 parties minimum) et classement global.
+- [x] Recherche de partie en deux files : Classé (Elo global) et Saison.
+- [x] Parties amicales (salons, défis) sans Elo ; défi d'un ami depuis la
+  liste d'amis.
+- [x] SEO du site : titre et description par page, adresses par langue
+  (canonical, hreflang), aperçu de partage (Open Graph), fiche `VideoGame`,
+  `sitemap.xml`.
+- [ ] Passe de saison : cadrage dans `docs/passe-de-saison.md` (piste gratuite
+  puis premium).
+
 ## Plus tard
 
 - Signature des exécutables Windows (plus d'avertissement SmartScreen) :
   reportée (l'offre gratuite de SignPath Foundation exige un code source
   public, ce qui n'est pas souhaité pour l'instant).
-- **SEO du site** : balises de titre et de description par page, données
-  structurées (`VideoGame`), `sitemap.xml`, images de partage (Open Graph),
-  liens entre les versions anglaise et française (`hreflang`).
 - **Publication sur des boutiques** : itch.io d'abord (simple, gratuit, jeu
   navigateur et téléchargements), puis Steam (frais d'inscription, page
   boutique, SDK facultatif).
-- **Saisons automatiques** (tous les deux mois) : un **Elo de saison**
-  remis à zéro à chaque saison, à côté de l'**Elo global** qui ne se remet
-  jamais à zéro ; classement de saison et classement global. La fin de saison
-  manuelle (`/mod new-season`) existe déjà.
 - **Passe de saison** (« passe de combat ») : paliers débloqués en jouant
   (défis de saison, XP par partie) donnant des récompenses cosmétiques
   (thèmes, dos de cartes, cadres de profil). À cadrer : gratuit seulement, ou

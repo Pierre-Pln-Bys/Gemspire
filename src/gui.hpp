@@ -40,11 +40,11 @@ enum class ButtonId {
     // Chat d'une partie en ligne
     Chat, ChatSend, ChatBox, ChatReaction, ChatMute,
     // Amis
-    ShowFriends, FriendBox, FriendAdd, FriendAccept, FriendRemove, ShowAchievements,
+    ShowFriends, FriendBox, FriendAdd, FriendAccept, FriendRemove, FriendChallenge, ShowAchievements,
     // Spectateurs
     ShowLive, WatchGame,
     // Mes parties et rediffusions
-    FindMatch, CancelMatch,
+    FindMatch, CancelMatch, LeaderboardTab,
     ShowHistory, ReplayGame, ReplayPrevious, ReplayNext, ReplayPlay, ReplayExit,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
@@ -177,6 +177,14 @@ struct LiveGame {
 const int FRIENDS_SHOWN = 9;
 
 // Une de mes parties en ligne terminées (écran Mes parties)
+// Une ligne d'un classement
+struct BoardLine {
+    std::string pseudo;
+    int elo;
+    int games;
+    int wins;
+};
+
 struct PastGame {
     int id;
     std::string mode;
@@ -184,6 +192,7 @@ struct PastGame {
     int place;              // 0 = premier
     int score;
     int elo_change;
+    std::string kind;       // "friendly", "ranked" ou "season"
     bool replay;            // rediffusion disponible
     std::vector<std::string> players;
 };
@@ -209,9 +218,15 @@ struct OnlineState {
     double next_login_poll = 0;
     std::string pseudo;              // compte connecté
     int account = 0;
-    int elo = 1000;
+    int elo = 1000;                  // Elo global (file Classé)
+    int rank = 0;                    // place au classement global (0 : pas classé)
     int games = 0;
     int wins = 0;
+    int season_elo = 1000;           // Elo de la saison (file Saison)
+    int season_games = 0;
+    int season_rank = 0;
+    int season_min_games = 10;       // parties de saison pour être classé
+    long long season_ends_at = 0;    // fin de la saison (secondes depuis 1970)
     std::string pseudo_input;        // champs de saisie
     std::string code_input;
     int focus = 0;                   // 1 : pseudo, 2 : code
@@ -245,6 +260,7 @@ struct OnlineState {
     double chat_toast_until = 0;
     std::vector<int> seat_elos;
     std::vector<int> elo_changes;
+    std::string game_kind;           // "friendly", "ranked" ou "season"
     int replay_id = 0;               // rediffusion de la partie finie (0 : pas encore)
     long notification_last = -1;     // dernière notification vue (-1 : pas encore demandé)
     bool notification_poll_running = false;
@@ -262,16 +278,17 @@ struct OnlineState {
     std::vector<FriendLine> friends;       // liste d'amis (écran Amis)
     std::vector<LiveGame> live_games;      // parties en cours (écran Regarder)
     std::vector<PastGame> past_games;      // mes dernières parties (écran Mes parties)
+    bool match_season = false;             // recherche de partie : file Saison (sinon Classé)
     int match_waited = 0;                  // recherche de partie : secondes d'attente
     int match_players = 0;                 // joueurs qui cherchent en ce moment
     double next_match_poll = 0;
     double next_live_poll = 0;
     std::string friend_input;
     double next_friends_poll = 0;
-    std::vector<std::string> board_names;  // classement
-    std::vector<int> board_elos;
-    std::vector<int> board_games;
-    std::vector<int> board_wins;
+    std::vector<BoardLine> board_global;   // classement global (file Classé)
+    std::vector<BoardLine> board_season;   // classement de la saison (file Saison)
+    bool board_show_season = true;         // onglet affiché
+    bool board_loaded = false;
 };
 
 // Tout l'état de l'interface

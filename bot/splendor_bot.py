@@ -32,7 +32,7 @@ from discord import app_commands
 
 from api import ApiError, SplendorApi
 from logic import (CREATE_CHANNEL_NAME, DELETE_DELAY_SECONDS, DOWNLOAD_URL, OFFER_RETRY_COUNT, OFFER_RETRY_SECONDS,
-                   RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, format_podium, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
+                   RANK_TIERS, RANKING_SECONDS, SITE_URL, TempChannel, format_season_end, rank_role_changes, apply_event, ban_duration_text, can_moderate, channel_matches,
                    format_history, format_profile, format_ranking, format_status, is_create_channel, load_state, offer_message,
                    parse_id, save_state, should_delete, site_page, temp_channel_name)
 from texts import COMMAND_FR, lang_of, tr
@@ -193,6 +193,9 @@ async def follow_events():
             continue
         since = body.get("last", since)
         for event in body.get("events", []):
+            if event.get("type") == "season_end":
+                await announce_season_end(event)
+                continue
             channel_id = int(event.get("voice_channel", "0"))
             temp = temp_channels.get(channel_id)
             channel = client.get_channel(channel_id)
@@ -205,15 +208,29 @@ async def follow_events():
                 await channel.send(message)
 
 
+async def announce_season_end(event):
+    """Fin de saison (automatique ou /mod new-season) : annonce dans le salon
+    du classement de chaque serveur."""
+    for guild in client.guilds:
+        channel = find_text_channel(guild, ranking_channel_names, ranking_channel_id)
+        if channel is None:
+            continue
+        try:
+            await channel.send(format_season_end(event, guild_lang(guild)),
+                               allowed_mentions=discord.AllowedMentions.none())
+        except discord.Forbidden:
+            log.warning("Annonce de fin de saison impossible dans %s", guild.name)
+
+
 # ---------------------------------------------------------------- Salon #classement
 
 async def update_rankings():
     """Toutes les 10 minutes : le même message du salon #classement est mis à jour."""
     while True:
         try:
-            players = await asyncio.to_thread(api.leaderboard)
+            board = await asyncio.to_thread(api.rankings)
             for guild in client.guilds:
-                text = format_ranking(players, time.time(), guild_lang(guild))
+                text = format_ranking(board.get("players", []), time.time(), guild_lang(guild), season=board)
                 channel = find_text_channel(guild, ranking_channel_names, ranking_channel_id)
                 if channel is None:
                     continue
@@ -287,11 +304,11 @@ async def call_api(interaction, function, *args, **kwargs):
     return None
 
 
-@tree.command(name=_("leaderboard"), description=_("Top 10 Gemspire online players"))
+@tree.command(name=_("leaderboard"), description=_("Season and global top 10 of Gemspire"))
 async def leaderboard(interaction: discord.Interaction):
-    players = await call_api(interaction, api.leaderboard)
-    if players is not None:
-        await answer(interaction, format_ranking(players, lang=user_lang(interaction)))
+    board = await call_api(interaction, api.rankings)
+    if board is not None:
+        await answer(interaction, format_ranking(board.get("players", []), lang=user_lang(interaction), season=board))
 
 
 @tree.command(name=_("profile"), description=_("Elo, rank and wins of a player"))
@@ -484,18 +501,10 @@ async def mod_new_season(interaction: discord.Interaction, confirm: bool = False
     result = await call_api(interaction, api.end_season)
     if result is None:
         return
-    guild_language = guild_lang(interaction.guild)
-    text = tr("season_end", guild_language, ended=result.get("ended"), season=result.get("season"),
-              podium=format_podium(result.get("top", [])))
-    channel = find_text_channel(interaction.guild, ranking_channel_names, ranking_channel_id)
-    if channel is not None:
-        try:
-            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
-        except discord.Forbidden:
-            pass
-    await mod_log(interaction.guild, tr("season_log", guild_language, user=interaction.user.mention,
+    # L'annonce passe par l'événement « season_end » (comme le changement automatique)
+    await mod_log(interaction.guild, tr("season_log", guild_lang(interaction.guild), user=interaction.user.mention,
                                         ended=result.get("ended")))
-    await answer(interaction, text)
+    await answer(interaction, tr("season_ended_ok", lang, ended=result.get("ended")), private=True)
 
 
 @moderation.command(name=_("delete-account"), description=_("Delete a Gemspire account (GDPR request)"))

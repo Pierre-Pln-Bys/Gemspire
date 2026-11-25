@@ -59,10 +59,27 @@ static std::string tokens_html()
            "<span class=\"t red\">■</span><span class=\"t black\">⬢</span></div>";
 }
 
-// Cadre commun : en-tête, menu, choix de la langue, pied de page
-static std::string layout(const SiteInfo& site, Lang lang, const std::string& title, const std::string& current,
-                          const std::string& body)
+// Description par défaut d'une page (moteurs de recherche, aperçus de partage)
+static std::string default_description(Lang lang)
 {
+    return T(lang,
+             "Gemspire, a free board game of gems and nobles: 2 to 4 players, against the computer or online with "
+             "seasons and an Elo leaderboard. In your browser, on Windows or Linux.",
+             "Gemspire, jeu de plateau gratuit de gemmes et de nobles : 2 à 4 joueurs, contre l'ordinateur ou en "
+             "ligne avec saisons et classement Elo. Dans le navigateur, sur Windows ou Linux.");
+}
+
+// Cadre commun : en-tête, menu, choix de la langue, pied de page. Dans
+// l'en-tête : titre et description, adresse officielle de la page (une par
+// langue, avec ?lang=), lien vers l'autre langue (hreflang) et aperçu de
+// partage (Open Graph). `current` vide : page d'erreur, pas indexée.
+static std::string layout(const SiteInfo& site, Lang lang, const std::string& title, const std::string& current,
+                          const std::string& body, const std::string& description = "")
+{
+    std::string full_title = title.rfind("Gemspire", 0) == 0 ? title : title + " · Gemspire";
+    std::string summary = html_escape(description.empty() ? default_description(lang) : description);
+    std::string path = current.empty() ? "/" : current;
+    std::string canonical = site.public_url + href(path, lang);
     std::ostringstream out;
     out << "<!doctype html><html lang=\"" << T(lang, "en", "fr")
         << "\"><head><meta charset=\"utf-8\">"
@@ -70,12 +87,25 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
            "<link rel=\"icon\" href=\"/favicon.ico\" sizes=\"48x48\">"
            "<link rel=\"apple-touch-icon\" href=\"/apple-touch-icon.png\">"
            "<title>"
-        << html_escape(title) << " · Gemspire</title><meta name=\"description\" content=\""
-        << T(lang, "Gemspire online: a game of gems and nobles, 2 to 4 players, against the computer or online with "
-                   "an Elo leaderboard.",
-             "Gemspire en ligne : jeu de gemmes et de nobles, 2 à 4 joueurs, contre l'ordinateur ou en ligne avec "
-             "classement Elo.")
-        << "\"><style>"
+        << html_escape(full_title) << "</title><meta name=\"description\" content=\"" << summary << "\">";
+    if (current.empty()) {
+        out << "<meta name=\"robots\" content=\"noindex\">";
+    } else {
+        out << "<link rel=\"canonical\" href=\"" << canonical << "\">"
+            << "<link rel=\"alternate\" hreflang=\"en\" href=\"" << site.public_url << href(path, Lang::English) << "\">"
+            << "<link rel=\"alternate\" hreflang=\"fr\" href=\"" << site.public_url << href(path, Lang::French) << "\">"
+            << "<link rel=\"alternate\" hreflang=\"x-default\" href=\"" << site.public_url << path << "\">";
+    }
+    out << "<meta property=\"og:type\" content=\"website\"><meta property=\"og:site_name\" content=\"Gemspire\">"
+        << "<meta property=\"og:title\" content=\"" << html_escape(full_title) << "\">"
+        << "<meta property=\"og:description\" content=\"" << summary << "\">"
+        << "<meta property=\"og:url\" content=\"" << canonical << "\">"
+        << "<meta property=\"og:image\" content=\"" << site.public_url << "/og-image.jpg\">"
+        << "<meta property=\"og:image:width\" content=\"1024\"><meta property=\"og:image:height\" content=\"576\">"
+        << "<meta property=\"og:locale\" content=\"" << T(lang, "en_US", "fr_FR") << "\">"
+        << "<meta name=\"twitter:card\" content=\"summary_large_image\">"
+        << "<meta name=\"theme-color\" content=\"#0f3d28\">"
+        << "<style>"
            ":root{--felt:#0f3d28;--felt2:#165636;--gold:#ffd140;--text:#eef3ef;--soft:#b9d2c2}"
            "*{box-sizing:border-box}"
            "body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--text);"
@@ -244,39 +274,121 @@ std::string page_home(const SiteInfo& site, Lang lang)
              << "</p><a class=\"button\" href=\"" << html_escape(site.discord_invite) << "\">"
              << T(lang, "Join the Discord", "Rejoindre le Discord") << "</a></section>";
     }
-    return layout(site, lang, T(lang, "Home", "Accueil"), "/", body.str());
+    // Données structurées : fiche « jeu vidéo » pour les moteurs de recherche
+    std::string url = site.public_url + "/";
+    body << "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"VideoGame\","
+            "\"name\":\"Gemspire\",\"url\":\"" << url << "\",\"image\":\"" << site.public_url << "/og-image.jpg\","
+         << "\"description\":\"" << default_description(lang) << "\","
+         << "\"genre\":[\"Board game\",\"Strategy\"],\"gamePlatform\":[\"Web browser\",\"Windows\",\"Linux\"],"
+            "\"operatingSystem\":\"Windows, Linux, web browser\",\"applicationCategory\":\"Game\","
+            "\"playMode\":[\"SinglePlayer\",\"MultiPlayer\"],"
+            "\"numberOfPlayers\":{\"@type\":\"QuantitativeValue\",\"minValue\":2,\"maxValue\":4},"
+            "\"inLanguage\":[\"en\",\"fr\"],"
+            "\"offers\":{\"@type\":\"Offer\",\"price\":\"0\",\"priceCurrency\":\"EUR\"}}</script>";
+    return layout(site, lang,
+                  T(lang, "Gemspire — free online board game of gems and nobles",
+                    "Gemspire — jeu de plateau gratuit en ligne : gemmes et nobles"),
+                  "/", body.str());
 }
 
-std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players, int season)
+// Date (jour, mois, année) d'un instant donné en temps UTC, sans fonction du
+// système (algorithme classique « civil from days »)
+static void civil_date(long long seconds, int& year, int& month, int& day)
+{
+    long long days = (seconds >= 0 ? seconds : seconds - 86399) / 86400 + 719468;
+    long long era = (days >= 0 ? days : days - 146096) / 146097;
+    long long day_of_era = days - era * 146097;
+    long long year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    long long day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    long long mp = (5 * day_of_year + 2) / 153;
+    day = static_cast<int>(day_of_year - (153 * mp + 2) / 5 + 1);
+    month = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+    year = static_cast<int>(year_of_era + era * 400 + (month <= 2 ? 1 : 0));
+}
+
+// Fin d'une saison en toutes lettres : « January 1, 2027 » / « 1er janvier 2027 »
+// (le changement a lieu à minuit à Paris : 22 h ou 23 h UTC la veille)
+static std::string season_end_text(Lang lang, long long ends_at)
+{
+    int year = 0;
+    int month = 1;
+    int day = 1;
+    civil_date(ends_at + 3 * 3600, year, month, day);
+    const char* months_en[12] = {"January", "February", "March",     "April",   "May",      "June",
+                                 "July",    "August",   "September", "October", "November", "December"};
+    const char* months_fr[12] = {"janvier", "février", "mars",      "avril",   "mai",      "juin",
+                                 "juillet", "août",    "septembre", "octobre", "novembre", "décembre"};
+    if (lang == Lang::French) {
+        return (day == 1 ? std::string("1er") : std::to_string(day)) + " " + months_fr[month - 1] + " "
+               + std::to_string(year);
+    }
+    return std::string(months_en[month - 1]) + " " + std::to_string(day) + ", " + std::to_string(year);
+}
+
+// Un tableau de classement ; `season` : colonnes de la saison (Elo, parties, victoires de saison)
+static void ranking_table(std::ostringstream& body, Lang lang, const std::vector<Account>& players, bool season)
+{
+    body << "<table><thead><tr><th>#</th><th>" << T(lang, "Player", "Joueur") << "</th><th class=\"num\">Elo</th>"
+         << "<th class=\"num hide-small\">" << T(lang, "Games", "Parties") << "</th><th class=\"num\">"
+         << T(lang, "Wins", "Victoires") << "</th></tr></thead><tbody>";
+    const char* medals[] = {"🥇", "🥈", "🥉"};
+    for (size_t i = 0; i < players.size(); i++) {
+        const Account& player = players[i];
+        int elo = season ? player.season_elo : player.elo;
+        int games = season ? player.season_games : player.ranked_games;
+        int wins = season ? player.season_wins : player.ranked_wins;
+        int rate = games > 0 ? wins * 100 / games : 0;
+        body << "<tr" << (i < 3 ? " class=\"top\"" : "") << "><td>" << (i < 3 ? medals[i] : std::to_string(i + 1))
+             << "</td><td>" << html_escape(player.pseudo) << "</td><td class=\"num\"><strong>" << elo
+             << "</strong></td><td class=\"num hide-small\">" << games << "</td><td class=\"num\">" << wins
+             << " <span class=\"soft\">(" << rate << T(lang, "%", " %") << ")</span></td></tr>";
+    }
+    body << "</tbody></table>";
+}
+
+std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players,
+                             const std::vector<Account>& season_players, const SeasonInfo& season)
 {
     std::ostringstream body;
-    body << "<h1>" << T(lang, "Leaderboard", "Classement") << "</h1><p class=\"soft\">"
-         << T(lang, "Season ", "Saison ") << season << " · "
-         << T(lang, "Elo ranking of online games (updated after every finished game).",
-              "Classement Elo des parties en ligne (mis à jour à chaque partie terminée).")
+    body << "<h1>" << T(lang, "Leaderboard", "Classement") << "</h1>";
+    // Saison en cours : file « Saison » de la recherche de partie
+    body << "<h2>" << T(lang, "Season ", "Saison ") << season.number << "</h2><p class=\"soft\">"
+         << T(lang, "Season games (matchmaking, Season queue). Everyone starts the season at 1000 Elo; at least ",
+              "Parties de saison (recherche de partie, file Saison). Tout le monde commence la saison à 1000 Elo ; ")
+         << SEASON_MIN_GAMES
+         << T(lang, " games to be ranked. The season ends on ", " parties minimum pour être classé. La saison se termine le ")
+         << season_end_text(lang, season.ends_at)
+         << T(lang, ": the top 10 earn a badge.", " : les 10 premiers gagnent un badge.") << "</p><div class=\"card\">";
+    if (season_players.empty()) {
+        body << "<p>"
+             << T(lang, "Nobody is ranked yet this season. Play season games to get in!",
+                  "Personne n'est encore classé cette saison. Jouez des parties de saison pour y entrer !")
+             << "</p>";
+    } else {
+        ranking_table(body, lang, season_players, true);
+    }
+    body << "</div>";
+    // Classement global : file « Classé », jamais remis à zéro
+    body << "<h2>" << T(lang, "Global ranking", "Classement global") << "</h2><p class=\"soft\">"
+         << T(lang, "Ranked games (matchmaking, Ranked queue). This Elo is never reset. Games in a private lobby are "
+                    "friendly and do not count.",
+              "Parties classées (recherche de partie, file Classé). Cet Elo n'est jamais remis à zéro. Les parties "
+              "en salon privé sont amicales et ne comptent pas.")
          << "</p><div class=\"card\">";
     if (players.empty()) {
         body << "<p>"
-             << T(lang, "Nobody has finished an online game yet. Be the first!",
-                  "Personne n'a encore terminé de partie en ligne. Soyez le premier !")
+             << T(lang, "Nobody has finished a ranked game yet. Be the first!",
+                  "Personne n'a encore terminé de partie classée. Soyez le premier !")
              << "</p>";
     } else {
-        body << "<table><thead><tr><th>#</th><th>" << T(lang, "Player", "Joueur") << "</th><th class=\"num\">Elo</th>"
-             << "<th class=\"num hide-small\">" << T(lang, "Games", "Parties") << "</th><th class=\"num\">"
-             << T(lang, "Wins", "Victoires") << "</th></tr></thead><tbody>";
-        const char* medals[] = {"🥇", "🥈", "🥉"};
-        for (size_t i = 0; i < players.size(); i++) {
-            const Account& player = players[i];
-            int rate = player.games > 0 ? player.wins * 100 / player.games : 0;
-            body << "<tr" << (i < 3 ? " class=\"top\"" : "") << "><td>" << (i < 3 ? medals[i] : std::to_string(i + 1))
-                 << "</td><td>" << html_escape(player.pseudo) << "</td><td class=\"num\"><strong>" << player.elo
-                 << "</strong></td><td class=\"num hide-small\">" << player.games << "</td><td class=\"num\">"
-                 << player.wins << " <span class=\"soft\">(" << rate << T(lang, "%", " %") << ")</span></td></tr>";
-        }
-        body << "</tbody></table>";
+        ranking_table(body, lang, players, false);
     }
     body << "</div>";
-    return layout(site, lang, T(lang, "Leaderboard", "Classement"), "/leaderboard", body.str());
+    return layout(site, lang, T(lang, "Leaderboard", "Classement"), "/leaderboard", body.str(),
+                  T(lang, "Gemspire leaderboard: the ranking of the current season and the global Elo ranking of online "
+                          "players.",
+                    "Classement Gemspire : le classement de la saison en cours et le classement Elo global des "
+                    "joueurs en ligne."));
 }
 
 std::string page_terms(const SiteInfo& site, Lang lang)
@@ -340,7 +452,9 @@ std::string page_terms(const SiteInfo& site, Lang lang)
          << T(lang, "privacy policy", "politique de confidentialité") << "</a>.</p><h2>"
          << T(lang, "8. Contact", "8. Contact") << "</h2><p>" << T(lang, "For any question: ", "Pour toute question : ")
          << contact_html(site, lang) << ".</p></div>";
-    return layout(site, lang, T(lang, "Terms of use", "Conditions d'utilisation"), "/terms", body.str());
+    return layout(site, lang, T(lang, "Terms of use", "Conditions d'utilisation"), "/terms", body.str(),
+                  T(lang, "Terms of use of Gemspire, the game, its website and its online service.",
+                    "Conditions d'utilisation de Gemspire : le jeu, son site et son service en ligne."));
 }
 
 std::string page_privacy(const SiteInfo& site, Lang lang)
@@ -534,7 +648,10 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
               "Si cette politique change, la nouvelle version est publiée sur cette page avec sa date. Les "
               "changements importants sont aussi annoncés dans le jeu et sur le serveur Discord.")
          << "</p></div>";
-    return layout(site, lang, T(lang, "Privacy policy", "Politique de confidentialité"), "/privacy", body.str());
+    return layout(site, lang, T(lang, "Privacy policy", "Politique de confidentialité"), "/privacy", body.str(),
+                  T(lang, "How Gemspire handles your data: Discord or Google sign-in, games, leaderboard, your rights.",
+                    "Comment Gemspire traite vos données : connexion Discord ou Google, parties, classement, vos "
+                    "droits."));
 }
 
 std::string page_not_found(const SiteInfo& site, Lang lang)
@@ -543,4 +660,32 @@ std::string page_not_found(const SiteInfo& site, Lang lang)
                   "<h1>" + T(lang, "Page not found", "Page introuvable") + "</h1><p>" +
                       T(lang, "This page doesn't exist. ", "Cette page n'existe pas. ") + "<a href=\"" +
                       href("/", lang) + "\">" + T(lang, "Back to home", "Retour à l'accueil") + "</a>.</p>");
+}
+
+std::string sitemap_xml(const SiteInfo& site)
+{
+    std::vector<std::string> paths = {"/", "/leaderboard", "/terms", "/privacy"};
+    if (site.web_game) {
+        paths.insert(paths.begin() + 1, "/play");
+    }
+    std::ostringstream out;
+    out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+           "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">\n";
+    for (const std::string& path : paths) {
+        // /play est le jeu lui-même (une seule page, sans langue dans l'adresse)
+        if (path == "/play") {
+            out << "<url><loc>" << site.public_url << "/play/</loc></url>\n";
+            continue;
+        }
+        for (Lang lang : {Lang::English, Lang::French}) {
+            out << "<url><loc>" << site.public_url << href(path, lang) << "</loc>";
+            for (Lang other : {Lang::English, Lang::French}) {
+                out << "<xhtml:link rel=\"alternate\" hreflang=\"" << T(other, "en", "fr") << "\" href=\""
+                    << site.public_url << href(path, other) << "\"/>";
+            }
+            out << "</url>\n";
+        }
+    }
+    out << "</urlset>\n";
+    return out.str();
 }

@@ -74,7 +74,7 @@ public:
     explicit ServerApp(const ServerConfig& config);
     bool ok() const;
     void setup_routes(httplib::Server& server);
-    void tick();  // chaque seconde : temps écoulés dans les parties
+    void tick();  // chaque seconde : temps écoulés dans les parties, changement de saison
 
 private:
     ServerConfig config_;
@@ -84,6 +84,7 @@ private:
     std::map<std::string, PendingLogin> logins_;
     std::map<std::string, AdminSession> admin_sessions_;  // protégé par logins_mutex_
     long long started_at_ = 0;
+    long long season_ends_at_ = 0;  // fin prévue de la saison en cours (0 : pas encore lue)
     // Compteur de débit par IP : {IP -> (début de fenêtre, nombre de requêtes)}
     std::mutex rate_mutex_;
     std::map<std::string, std::pair<long long, int>> rate_hits_;
@@ -91,6 +92,7 @@ private:
     int authenticate(const httplib::Request& request);
     bool rate_ok(const httplib::Request& request);  // false si l'IP dépasse le débit autorisé
     bool bot_allowed(const httplib::Request& request) const;
+    nlohmann::json end_season();  // termine la saison en cours ; {"ended", "season", "ends_at", "top"}
     void announce_lobby(const Lobby& lobby);
     bool seat_for(int account, Seat& seat, std::string& error);
     void finish_login(const std::string& login, const std::string& provider, const std::string& provider_id,
