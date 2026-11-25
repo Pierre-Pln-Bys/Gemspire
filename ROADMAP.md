@@ -207,7 +207,8 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] SEO du site : titre et description par page, adresses par langue
   (canonical, hreflang), aperçu de partage (Open Graph), fiche `VideoGame`,
   `sitemap.xml`.
-- [ ] Passe de saison : à cadrer (voir plus bas).
+- [ ] Passe de saison : cadrage dans `docs/passe-de-saison.md` (piste gratuite
+  puis premium).
 
 ## Plus tard
 
