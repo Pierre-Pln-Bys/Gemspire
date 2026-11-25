@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include "achievements.hpp"
 #include "display.hpp"
@@ -281,7 +282,9 @@ static std::vector<Button> online_buttons(const App& app)
         {760, 170, 320, 36});
     add(buttons, ButtonId::ShowLive, "Live games", {760, 214, 155, 36});
     add(buttons, ButtonId::ShowHistory, "My games", {925, 214, 155, 36});
-    add(buttons, ButtonId::FindMatch, "Find an opponent", {770, 470, 310, 50}, 0, app.net.pending() == 0);
+    // Recherche de partie : file Classé (Elo global) ou Saison (Elo de saison)
+    add(buttons, ButtonId::FindMatch, "Ranked", {770, 500, 152, 46}, 0, app.net.pending() == 0);
+    add(buttons, ButtonId::FindMatch, "Season", {928, 500, 152, 46}, 1, app.net.pending() == 0);
     // v4 : lier l'autre connexion (Discord ou Google) au compte ; pas dans l'Activité Discord
     bool has_discord = std::find(online.providers.begin(), online.providers.end(), "discord") != online.providers.end();
     bool has_google = std::find(online.providers.begin(), online.providers.end(), "google") != online.providers.end();
@@ -331,6 +334,8 @@ std::vector<Button> visible_buttons(const App& app)
     case Screen::Lobby: return lobby_buttons(app);
     case Screen::Leaderboard: {
         std::vector<Button> buttons;
+        add(buttons, ButtonId::LeaderboardTab, "Season", {440, 92, 195, 38}, 1, true, app.online.board_show_season);
+        add(buttons, ButtonId::LeaderboardTab, "Global", {645, 92, 195, 38}, 0, true, !app.online.board_show_season);
         add(buttons, ButtonId::BackOnline, "Back", {540, 700, 200, 46});
         return buttons;
     }
@@ -377,6 +382,9 @@ std::vector<Button> visible_buttons(const App& app)
                 add(buttons, ButtonId::FriendAccept, "Accept", {800, y, 125, 38}, i);
             } else if (line.game_id > 0) {
                 add(buttons, ButtonId::WatchGame, "Watch", {800, y, 125, 38}, line.game_id);
+            } else if (line.relation == "friend" && line.status == "online") {
+                // Défi amical (sans Elo) à un ami connecté
+                add(buttons, ButtonId::FriendChallenge, "Challenge", {800, y, 125, 38}, i, app.net.pending() == 0);
             }
             add(buttons, ButtonId::FriendRemove,
                 line.relation == "friend" ? "Remove" : line.relation == "incoming" ? "Decline" : "Cancel",
@@ -1282,7 +1290,11 @@ static void draw_results(const App& app, Vector2 mouse)
         text(app, std::to_string(player.score()) + " pts", 720, y, 19, true, GOLD_UI, Align::Right);
         text(app, T(app, "{0} cards", {std::to_string(player.cards.size())}), 840, y + 2, 15, false, WHITE_TEXT, Align::Right);
         // En ligne : variation d'Elo
-        if (app.online.in_game && i < static_cast<int>(app.online.elo_changes.size())) {
+        if (app.online.in_game && app.online.game_kind == "friendly") {
+            if (i == 0) {
+                text(app, "Friendly", 860, y + 2, 15, false, WHITE_TEXT);
+            }
+        } else if (app.online.in_game && i < static_cast<int>(app.online.elo_changes.size())) {
             int change = app.online.elo_changes[i];
             std::string label = (change >= 0 ? "+" : "") + std::to_string(change) + " Elo";
             text(app, label, 860, y + 2, 15, true, change >= 0 ? Color{120, 230, 140, 255} : ERROR_TEXT);
@@ -1316,8 +1328,9 @@ static void draw_matchmaking(const App& app, Vector2 mouse)
     const OnlineState& online = app.online;
     draw_felt(app);
     text_centered(app, "Finding an opponent…", 640, 250, 40, true, accent(app));
-    text_centered(app, online.create_mode == Mode::Classic ? "Classic game" : "Quick game", 640, 310, 20, false,
-                  ink(app));
+    text_centered(app, T(app, "{0} · {1}", {T(app, online.create_mode == Mode::Classic ? "Classic game" : "Quick game"),
+                                          T(app, online.match_season ? "Season (season Elo)" : "Ranked (global Elo)")}),
+                  640, 310, 20, false, ink(app));
     text_centered(app, T(app, "Waiting: {0} s · {1} player(s) searching",
                          {std::to_string(online.match_waited), std::to_string(online.match_players)}),
                   640, 360, 17, false, soft(app));
@@ -1345,9 +1358,11 @@ static void draw_history(const App& app, Vector2 mouse)
         float y = 120.0f + i * 54;
         Color place = past.place == 0 ? accent(app) : ink(app);
         text(app, "#" + std::to_string(past.place + 1), 225, y + 10, 20, true, place);
+        std::string elo = past.kind == "friendly" ? T(app, "Friendly")
+                          : (past.elo_change >= 0 ? "+" : "") + std::to_string(past.elo_change)
+                                + (past.kind == "season" ? T(app, " Elo (season)") : std::string(" Elo"));
         std::string title = T(app, past.mode == "classique" ? "Classic game" : "Quick game") + " · "
-                            + std::to_string(past.score) + " pts · " + (past.elo_change >= 0 ? "+" : "")
-                            + std::to_string(past.elo_change) + " Elo";
+                            + std::to_string(past.score) + " pts · " + elo;
         text(app, title, 280, y + 4, 16, true, ink(app));
         std::string players;
         for (const std::string& player : past.players) {
@@ -1658,17 +1673,28 @@ static void draw_online(const App& app, Vector2 mouse)
     Rectangle card = {760, 50, 320, 110};
     rounded(card, 12, panel(app, 90));
     text(app, online.pseudo, card.x + 20, card.y + 14, 24, true, ink(app));
-    text(app, "Elo " + std::to_string(online.elo), card.x + 20, card.y + 50, 20, true, accent(app));
+    text(app, "Elo " + std::to_string(online.elo) + (online.rank > 0 ? "  #" + std::to_string(online.rank) : ""),
+         card.x + 20, card.y + 50, 20, true, accent(app));
     text(app, T(app, "{0} games, {1} wins", {std::to_string(online.games), std::to_string(online.wins)}), card.x + 20,
          card.y + 80, 15, false, soft(app));
     // Saison en cours et badges des saisons passées (top 10)
+    // Saison : Elo de saison, place (ou parties qui manquent pour être classé)
     if (online.season > 0) {
         text(app, T(app, "Season {0}", {std::to_string(online.season)}), card.x + card.width - 20, card.y + 18, 14, false,
              soft(app), Align::Right);
+        std::string season_line = online.season_rank > 0
+                                      ? T(app, "{0} Elo  #{1}", {std::to_string(online.season_elo),
+                                                                std::to_string(online.season_rank)})
+                                      : T(app, "{0} Elo ({1}/{2} games)", {std::to_string(online.season_elo),
+                                                                           std::to_string(online.season_games),
+                                                                           std::to_string(online.season_min_games)});
+        float size = 14;
+        text(app, fit(app, season_line, 150, size, 10), card.x + card.width - 20, card.y + 38, size, true,
+             accent(app), Align::Right);
     }
     if (!online.badges.empty()) {
-        float size = 14;
-        text(app, fit(app, online.badges, 150, size, 10), card.x + card.width - 20, card.y + 54, size, true, accent(app),
+        float size = 13;
+        text(app, fit(app, online.badges, 150, size, 10), card.x + card.width - 20, card.y + 82, size, true, accent(app),
              Align::Right);
     }
 
@@ -1700,7 +1726,9 @@ static void draw_online(const App& app, Vector2 mouse)
         text(app, fit(app, online.announcement, 540, size, 11), 200, 210, size, true, accent(app));
     }
     text(app, "Create a game", 200, 270, 22, true, ink(app));
+    text(app, "Friendly game: no Elo change", 200, 302, 14, false, soft(app));
     text(app, "Join with a code", 770, 270, 22, true, ink(app));
+    text(app, "Find an opponent", 770, 466, 18, true, ink(app));
     draw_buttons_of(app, online_buttons(app), mouse);
     draw_message_line(app, 640);
 }
@@ -1756,28 +1784,43 @@ static void draw_leaderboard(const App& app, Vector2 mouse)
     draw_felt(app);
     text_centered(app, online.season > 0 ? T(app, "Leaderboard — Season {0}", {std::to_string(online.season)})
                                          : T(app, "Leaderboard"),
-                  640, 60, 40, true, GOLD_UI);
-    Rectangle table = {290, 110, 700, 570};
+                  640, 30, 36, true, GOLD_UI);
+    // Onglet Saison : fin de la saison et minimum de parties ; Global : jamais remis à zéro
+    std::string info;
+    if (online.board_show_season) {
+        long long left = online.season_ends_at - static_cast<long long>(std::time(nullptr));
+        int days = left > 0 ? static_cast<int>((left + 86399) / 86400) : 0;
+        info = T(app, "Season games · ends in {0} day(s) · {1} games to be ranked",
+                 {std::to_string(days), std::to_string(online.season_min_games)});
+    } else {
+        info = T(app, "Ranked games · this Elo is never reset");
+    }
+    text_centered(app, info, 640, 140, 15, false, soft(app));
+    const std::vector<BoardLine>& lines = online.board_show_season ? online.board_season : online.board_global;
+    Rectangle table = {290, 165, 700, 520};
     rounded(table, 14, panel(app, 90));
     text(app, "#", table.x + 24, table.y + 16, 15, true, soft(app));
     text(app, "Player", table.x + 70, table.y + 16, 15, true, soft(app));
     text(app, "Elo", table.x + 470, table.y + 16, 15, true, soft(app), Align::Right);
     text(app, "Games", table.x + 570, table.y + 16, 15, true, soft(app), Align::Right);
     text(app, "Wins", table.x + 676, table.y + 16, 15, true, soft(app), Align::Right);
-    int count = std::min(static_cast<int>(online.board_names.size()), 20);
+    int count = std::min(static_cast<int>(lines.size()), 18);
     for (int i = 0; i < count; i++) {
         float y = table.y + 50 + i * 25.5f;
-        bool me = online.board_names[i] == online.pseudo;
+        const BoardLine& line = lines[i];
+        bool me = line.pseudo == online.pseudo;
         Color color = me ? accent(app) : ink(app);
         text(app, std::to_string(i + 1), table.x + 24, y, 16, me, color);
-        text(app, online.board_names[i], table.x + 70, y, 16, me, color);
-        text(app, std::to_string(online.board_elos[i]), table.x + 470, y, 16, true, color, Align::Right);
-        text(app, std::to_string(online.board_games[i]), table.x + 570, y, 16, false, color, Align::Right);
-        text(app, std::to_string(online.board_wins[i]), table.x + 676, y, 16, false, color, Align::Right);
+        text(app, line.pseudo, table.x + 70, y, 16, me, color);
+        text(app, std::to_string(line.elo), table.x + 470, y, 16, true, color, Align::Right);
+        text(app, std::to_string(line.games), table.x + 570, y, 16, false, color, Align::Right);
+        text(app, std::to_string(line.wins), table.x + 676, y, 16, false, color, Align::Right);
     }
     if (count == 0) {
-        text_centered(app, app.net.pending() > 0 ? "Loading…" : "Nobody has played online yet.", 640, 380, 18,
-                      false, soft(app));
+        text_centered(app, !online.board_loaded           ? "Loading…"
+                           : online.board_show_season ? "Nobody is ranked yet this season."
+                                                      : "Nobody has played a ranked game yet.",
+                      640, 420, 18, false, soft(app));
     }
     draw_buttons_of(app, visible_buttons(app), mouse);
 }

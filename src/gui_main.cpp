@@ -606,6 +606,7 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     online.game_over = body.value("over", false);
     online.turn_deadline = GetTime() + body.value("turn_seconds_left", 0);
     online.elo_changes = body.value("elo_changes", std::vector<int>());
+    online.game_kind = body.value("kind", std::string("friendly"));
     online.replay_id = body.value("replay_id", 0);
     online.new_achievements.clear();
     if (body.contains("achievements") && body["achievements"].is_array() && online.my_seat >= 0
@@ -784,6 +785,18 @@ static void handle_responses(App& app)
                             online.chat_toast_until = GetTime() + 10;
                         }
                     }
+                    // Nouvelle saison (calendrier) : Elo de saison remis à 1000
+                    if (note.value("type", std::string()) == "season") {
+                        std::string text = tr(app.lang, "Season {0} has started: season Elo back to 1000!",
+                                              {std::to_string(note.value("season", 0))});
+                        if (app.screen == Screen::Board) {
+                            online.chat_toast = text;
+                            online.chat_toast_until = GetTime() + 10;
+                        } else {
+                            set_message(app, text, false);
+                        }
+                        app.net.send(TagMe, "GET", "/me");
+                    }
                     if (note.value("type", std::string()) == "voice_offer") {
                         online.offer_channel = note.value("voice_channel", std::string());
                         online.offer_name = note.value("channel_name", std::string("Discord"));
@@ -802,6 +815,12 @@ static void handle_responses(App& app)
                 online.elo = body.value("elo", 1000);
                 online.games = body.value("games", 0);
                 online.wins = body.value("wins", 0);
+                online.rank = body.value("rank", 0);
+                online.season_elo = body.value("season_elo", 1000);
+                online.season_games = body.value("season_games", 0);
+                online.season_rank = body.value("season_rank", 0);
+                online.season_min_games = body.value("season_min_games", 10);
+                online.season_ends_at = body.value("season_ends_at", 0LL);
                 online.achievements = body.value("achievements", std::vector<std::string>());
                 online.providers = body.value("providers", std::vector<std::string>());
                 online.announcement = body.value("announcement", online.announcement);
@@ -944,6 +963,7 @@ static void handle_responses(App& app)
             } else if (body.value("status", std::string()) == "matched") {
                 enter_online_game(app, body.value("game_id", 0));
             } else if (app.screen == Screen::Matchmaking && body.value("status", std::string()) == "waiting") {
+                online.match_season = body.value("kind", std::string()) == "season";
                 online.match_waited = body.value("waited", 0);
                 online.match_players = body.value("players_waiting", 0);
             }
@@ -958,7 +978,7 @@ static void handle_responses(App& app)
                     online.past_games.push_back({entry.value("id", 0), entry.value("mode", std::string()),
                                                  entry.value("finished_at", 0LL), entry.value("place", 0),
                                                  entry.value("score", 0), entry.value("elo_change", 0),
-                                                 entry.value("replay", false),
+                                                 entry.value("kind", std::string("ranked")), entry.value("replay", false),
                                                  entry.value("players", std::vector<std::string>())});
                 }
             } else if (!ok) {
@@ -1062,17 +1082,20 @@ static void handle_responses(App& app)
             break;
         case TagLeaderboard:
             if (ok) {
-                online.board_names.clear();
-                online.board_elos.clear();
-                online.board_games.clear();
-                online.board_wins.clear();
                 online.season = body.value("season", online.season);
-                for (const nlohmann::json& player : body["players"]) {
-                    online.board_names.push_back(player.value("pseudo", std::string()));
-                    online.board_elos.push_back(player.value("elo", 1000));
-                    online.board_games.push_back(player.value("games", 0));
-                    online.board_wins.push_back(player.value("wins", 0));
+                online.season_ends_at = body.value("season_ends_at", online.season_ends_at);
+                online.season_min_games = body.value("season_min_games", online.season_min_games);
+                online.board_global.clear();
+                online.board_season.clear();
+                for (const char* key : {"players", "season_players"}) {
+                    std::vector<BoardLine>& lines = std::string(key) == "players" ? online.board_global
+                                                                                  : online.board_season;
+                    for (const nlohmann::json& player : body.value(key, nlohmann::json::array())) {
+                        lines.push_back({player.value("pseudo", std::string()), player.value("elo", 1000),
+                                         player.value("games", 0), player.value("wins", 0)});
+                    }
                 }
+                online.board_loaded = true;
             } else {
                 set_message(app, error_of(response, body, app), true);
             }
@@ -1187,13 +1210,17 @@ static void press_online_button(App& app, const Button& button)
         }
         break;
     case ButtonId::FindMatch:
+        // value 0 : file Classé (Elo global) ; 1 : file Saison (Elo de saison)
         app.screen = Screen::Matchmaking;
         app.message.clear();
+        online.match_season = button.value == 1;
         online.match_waited = 0;
         online.match_players = 0;
         online.next_match_poll = GetTime() + 2;
         app.net.send(TagMatch, "POST", "/matchmaking/join",
-                     nlohmann::json({{"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"}}).dump());
+                     nlohmann::json({{"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"},
+                                     {"kind", online.match_season ? "season" : "ranked"}})
+                         .dump());
         break;
     case ButtonId::CancelMatch:
         app.net.send(TagMatchLeave, "POST", "/matchmaking/leave");  // réponse ignorée
@@ -1236,10 +1263,23 @@ static void press_online_button(App& app, const Button& button)
                          nlohmann::json({{"pseudo", online.friends[button.value].pseudo}}).dump());
         }
         break;
+    case ButtonId::FriendChallenge:
+        // Défi amical : salon de 2 (mode choisi sur l'écran En ligne) ; on y entre
+        // comme pour « Créer », l'ami reçoit une notification avec le code
+        if (button.value >= 0 && button.value < static_cast<int>(online.friends.size())) {
+            app.net.send(TagCreate, "POST", "/friends/challenge",
+                         nlohmann::json({{"pseudo", online.friends[button.value].pseudo},
+                                         {"mode", online.create_mode == Mode::Classic ? "classique" : "rapide"}})
+                             .dump());
+        }
+        break;
     case ButtonId::ShowLeaderboard:
-        online.board_names.clear();
+        online.board_loaded = false;
         app.screen = Screen::Leaderboard;
         app.net.send(TagLeaderboard, "GET", "/leaderboard");
+        break;
+    case ButtonId::LeaderboardTab:
+        online.board_show_season = button.value == 1;
         break;
     case ButtonId::Logout:
         app.net.send(TagLogout, "POST", "/auth/logout");

@@ -963,6 +963,7 @@ void ServerApp::setup_routes(httplib::Server& server)
         for (const HistoryEntry& entry : store_.history(id, 15)) {
             games.push_back({{"id", entry.game_id}, {"mode", entry.mode}, {"finished_at", entry.finished_at},
                              {"place", entry.place}, {"score", entry.score}, {"elo_change", entry.elo_change},
+                             {"kind", entry.kind},
                              {"cancelled", entry.cancelled}, {"replay", entry.has_replay && !entry.cancelled},
                              {"players", entry.players}});
         }
@@ -1320,6 +1321,7 @@ void ServerApp::setup_routes(httplib::Server& server)
                                           {"place", entry.place},
                                           {"score", entry.score},
                                           {"elo_change", entry.elo_change},
+                                          {"kind", entry.kind},
                                           {"cancelled", entry.cancelled},
                                           {"players", entry.players}});
         }
