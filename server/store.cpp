@@ -7,6 +7,8 @@
 #include <openssl/rand.h>
 #include <sqlite3.h>
 
+#include "../src/season_pass.hpp"
+
 // ---------------------------------------------------------------- Outils
 
 std::string random_hex(int bytes)
@@ -233,6 +235,32 @@ Store::Store(const std::string& path)
     exec("ALTER TABLE games ADD COLUMN kind TEXT NOT NULL DEFAULT 'ranked';");
     exec("ALTER TABLE games ADD COLUMN season INTEGER NOT NULL DEFAULT 0;");
     exec("ALTER TABLE seasons ADD COLUMN ends_at INTEGER NOT NULL DEFAULT 0;");
+    // v4.2 : passe de saison (XP par saison, objets, objets portés, défis, bonus du jour)
+    exec("CREATE TABLE IF NOT EXISTS pass_progress ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " season INTEGER NOT NULL,"
+         " xp INTEGER NOT NULL DEFAULT 0,"
+         " PRIMARY KEY (account_id, season));");
+    exec("CREATE TABLE IF NOT EXISTS cosmetics ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " code TEXT NOT NULL,"
+         " unlocked_at INTEGER NOT NULL,"
+         " PRIMARY KEY (account_id, code));");
+    exec("CREATE TABLE IF NOT EXISTS equipped ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " kind TEXT NOT NULL,"
+         " code TEXT NOT NULL,"
+         " PRIMARY KEY (account_id, kind));");
+    exec("CREATE TABLE IF NOT EXISTS challenge_progress ("
+         " account_id INTEGER NOT NULL REFERENCES accounts(id),"
+         " week INTEGER NOT NULL,"
+         " code TEXT NOT NULL,"
+         " progress INTEGER NOT NULL DEFAULT 0,"
+         " done INTEGER NOT NULL DEFAULT 0,"
+         " PRIMARY KEY (account_id, week, code));");
+    exec("ALTER TABLE accounts ADD COLUMN pass_day INTEGER NOT NULL DEFAULT -1;");      // jour du dernier bonus
+    exec("ALTER TABLE accounts ADD COLUMN friendly_day INTEGER NOT NULL DEFAULT -1;");  // parties amicales du jour
+    exec("ALTER TABLE accounts ADD COLUMN friendly_count INTEGER NOT NULL DEFAULT 0;");
 }
 
 bool Account::banned() const
@@ -845,6 +873,9 @@ void Store::delete_account(int id)
     Statement identities(db_, "DELETE FROM identities WHERE account_id = ?");
     identities.bind(1, static_cast<long long>(id));
     identities.done();
+    Statement looks(db_, "DELETE FROM equipped WHERE account_id = ?");  // plus de titre ni de cadre visibles
+    looks.bind(1, static_cast<long long>(id));
+    looks.done();
     Statement update(db_, "UPDATE accounts SET pseudo = NULL, provider = 'supprime',"
                           " provider_id = 'supprime-' || id WHERE id = ?");
     update.bind(1, static_cast<long long>(id));
@@ -1028,4 +1059,199 @@ bool Store::handle_report(int id)
     update.bind(1, static_cast<long long>(id));
     update.done();
     return sqlite3_changes(db_) > 0;
+}
+
+// ---------------------------------------------------------------- Passe de saison
+
+PassGain Store::add_game_to_pass(int id, int season, const std::string& kind, bool won, const Game& game, int seat,
+                                 long long now)
+{
+    PassGain gain;
+    bool forfeited = game.players()[seat].forfeited;
+    long long day = now / 86400;
+    int week = week_number(now);
+    std::lock_guard<std::mutex> lock(mutex_);
+    exec("BEGIN;");
+    Statement current(db_, "SELECT xp FROM pass_progress WHERE account_id = ? AND season = ?");
+    current.bind(1, static_cast<long long>(id));
+    current.bind(2, static_cast<long long>(season));
+    int xp_before = current.row() ? current.integer(0) : 0;
+    Statement days(db_, "SELECT pass_day, friendly_day, friendly_count FROM accounts WHERE id = ?");
+    days.bind(1, static_cast<long long>(id));
+    long long pass_day = -1;
+    long long friendly_day = -1;
+    int friendly_count = 0;
+    if (days.row()) {
+        pass_day = days.big(0);
+        friendly_day = days.big(1);
+        friendly_count = days.integer(2);
+    }
+    if (!forfeited) {
+        // Partie : les amicales ne rapportent que PASS_FRIENDLY_PER_DAY fois par jour
+        int game_part = game_xp(kind, won, forfeited);
+        if (kind == "friendly") {
+            if (friendly_day != day) {
+                friendly_count = 0;
+            }
+            if (friendly_count >= PASS_FRIENDLY_PER_DAY) {
+                game_part = 0;
+            }
+            friendly_count++;
+            Statement count(db_, "UPDATE accounts SET friendly_day = ?, friendly_count = ? WHERE id = ?");
+            count.bind(1, day);
+            count.bind(2, static_cast<long long>(friendly_count));
+            count.bind(3, static_cast<long long>(id));
+            count.done();
+        }
+        gain.xp += game_part;
+        // Bonus de la première partie du jour
+        if (pass_day != day) {
+            gain.xp += PASS_DAILY_BONUS_XP;
+            Statement bonus(db_, "UPDATE accounts SET pass_day = ? WHERE id = ?");
+            bonus.bind(1, day);
+            bonus.bind(2, static_cast<long long>(id));
+            bonus.done();
+        }
+        // Défis de la semaine
+        for (const ChallengeInfo* challenge : weekly_challenges(week)) {
+            int added = challenge_progress(*challenge, game, seat, kind, won);
+            if (added <= 0) {
+                continue;
+            }
+            Statement get(db_, "SELECT progress, done FROM challenge_progress WHERE account_id = ? AND week = ? AND code = ?");
+            get.bind(1, static_cast<long long>(id));
+            get.bind(2, static_cast<long long>(week));
+            get.bind(3, std::string(challenge->code));
+            int progress = 0;
+            bool done = false;
+            if (get.row()) {
+                progress = get.integer(0);
+                done = get.integer(1) != 0;
+            }
+            if (done) {
+                continue;
+            }
+            progress = std::min(progress + added, challenge->target);
+            done = progress >= challenge->target;
+            Statement set(db_, "INSERT OR REPLACE INTO challenge_progress (account_id, week, code, progress, done)"
+                               " VALUES (?, ?, ?, ?, ?)");
+            set.bind(1, static_cast<long long>(id));
+            set.bind(2, static_cast<long long>(week));
+            set.bind(3, std::string(challenge->code));
+            set.bind(4, static_cast<long long>(progress));
+            set.bind(5, static_cast<long long>(done ? 1 : 0));
+            set.done();
+            if (done) {
+                gain.xp += challenge->xp;
+                gain.challenges_done.push_back(challenge->code);
+            }
+        }
+    }
+    int xp_after = xp_before + gain.xp;
+    Statement save(db_, "INSERT INTO pass_progress (account_id, season, xp) VALUES (?, ?, ?)"
+                        " ON CONFLICT(account_id, season) DO UPDATE SET xp = excluded.xp");
+    save.bind(1, static_cast<long long>(id));
+    save.bind(2, static_cast<long long>(season));
+    save.bind(3, static_cast<long long>(xp_after));
+    save.done();
+    gain.tier_before = pass_tier(xp_before);
+    gain.tier_after = pass_tier(xp_after);
+    // Récompenses des paliers franchis (et rattrapage si une manquait)
+    for (int tier = 2; tier <= gain.tier_after; tier += 2) {
+        Cosmetic reward;
+        if (!pass_reward(season, tier, reward)) {
+            continue;
+        }
+        Statement unlock(db_, "INSERT OR IGNORE INTO cosmetics (account_id, code, unlocked_at) VALUES (?, ?, ?)");
+        unlock.bind(1, static_cast<long long>(id));
+        unlock.bind(2, reward.code);
+        unlock.bind(3, now);
+        unlock.done();
+        if (sqlite3_changes(db_) > 0) {
+            gain.unlocked.push_back(reward.code);
+        }
+    }
+    exec("COMMIT;");
+    return gain;
+}
+
+PassState Store::pass_state(int id, int season, long long now)
+{
+    PassState state;
+    state.season = season;
+    int week = week_number(now);
+    state.week_ends_at = week_end(week);
+    state.equipped = equipped(id);
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement xp(db_, "SELECT xp FROM pass_progress WHERE account_id = ? AND season = ?");
+    xp.bind(1, static_cast<long long>(id));
+    xp.bind(2, static_cast<long long>(season));
+    state.xp = xp.row() ? xp.integer(0) : 0;
+    Statement owned(db_, "SELECT code FROM cosmetics WHERE account_id = ? ORDER BY unlocked_at, code");
+    owned.bind(1, static_cast<long long>(id));
+    while (owned.row()) {
+        state.owned.push_back(owned.text(0));
+    }
+    for (const ChallengeInfo* challenge : weekly_challenges(week)) {
+        ChallengeState entry;
+        entry.code = challenge->code;
+        Statement get(db_, "SELECT progress, done FROM challenge_progress WHERE account_id = ? AND week = ? AND code = ?");
+        get.bind(1, static_cast<long long>(id));
+        get.bind(2, static_cast<long long>(week));
+        get.bind(3, entry.code);
+        if (get.row()) {
+            entry.progress = get.integer(0);
+            entry.done = get.integer(1) != 0;
+        }
+        state.challenges.push_back(entry);
+    }
+    return state;
+}
+
+bool Store::owns(int id, const std::string& code)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement find(db_, "SELECT 1 FROM cosmetics WHERE account_id = ? AND code = ?");
+    find.bind(1, static_cast<long long>(id));
+    find.bind(2, code);
+    return find.row();
+}
+
+std::string Store::equip(int id, const std::string& kind, const std::string& code)
+{
+    CosmeticKind parsed;
+    if (!parse_kind_code(kind, parsed) || parsed == CosmeticKind::Reaction) {
+        return "Unknown kind of item.";
+    }
+    if (!code.empty()) {
+        Cosmetic cosmetic;
+        if (!find_cosmetic(code, cosmetic) || cosmetic.kind != parsed) {
+            return "Unknown item.";
+        }
+        if (!owns(id, code)) {
+            return "You don't have this item yet.";
+        }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement set(db_, code.empty() ? "DELETE FROM equipped WHERE account_id = ?1 AND kind = ?2"
+                                    : "INSERT OR REPLACE INTO equipped (account_id, kind, code) VALUES (?1, ?2, ?3)");
+    set.bind(1, static_cast<long long>(id));
+    set.bind(2, kind);
+    if (!code.empty()) {
+        set.bind(3, code);
+    }
+    set.done();
+    return "";
+}
+
+std::map<std::string, std::string> Store::equipped(int id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::map<std::string, std::string> result;
+    Statement list(db_, "SELECT kind, code FROM equipped WHERE account_id = ?");
+    list.bind(1, static_cast<long long>(id));
+    while (list.row()) {
+        result[list.text(0)] = list.text(1);
+    }
+    return result;
 }

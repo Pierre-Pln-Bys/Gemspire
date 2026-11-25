@@ -207,8 +207,13 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] SEO du site : titre et description par page, adresses par langue
   (canonical, hreflang), aperçu de partage (Open Graph), fiche `VideoGame`,
   `sitemap.xml`.
-- [ ] Passe de saison : cadrage dans `docs/passe-de-saison.md` (piste gratuite
-  puis premium).
+
+## v4.2 — Passe de saison
+
+- [x] Passe gratuit : 50 paliers, une récompense tous les 2 paliers, objets
+  générés à chaque saison (thèmes, dos de cartes, jetons, cadres, titres,
+  avatars, réactions) ; XP des parties, bonus du jour, défis de la semaine ;
+  écrans Passe et Apparence. Pas de piste payante.
 
 ## Plus tard
 
@@ -218,10 +223,6 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - **Publication sur des boutiques** : itch.io d'abord (simple, gratuit, jeu
   navigateur et téléchargements), puis Steam (frais d'inscription, page
   boutique, SDK facultatif).
-- **Passe de saison** (« passe de combat ») : paliers débloqués en jouant
-  (défis de saison, XP par partie) donnant des récompenses cosmétiques
-  (thèmes, dos de cartes, cadres de profil). À cadrer : gratuit seulement, ou
-  payant (paiement, conditions de vente, mineurs).
 - **Revendiquer le jeu sur Discord** (*Claim Your Game*) : possible seulement
   quand Discord détecte Gemspire comme jeu publié (assez de joueurs, ou
   sortie sur une boutique comme itch.io / Steam).

@@ -21,6 +21,7 @@ const int FINISHED_GAME_SECONDS = 3600; // une partie finie reste visible 1 heur
 const int CHAT_MAX_CHARS = 120;         // longueur d'un message du chat
 const int CHAT_KEPT = 50;               // messages gardés par partie
 const int REACTION_COUNT = 6;           // réactions rapides (« gg », « bonne chance »...)
+const int PASS_REACTION = 100;          // réaction du passe de saison : le texte est le code de l'objet
 const int MATCH_BASE_GAP = 100;         // recherche de partie : écart d'Elo accepté au départ...
 const int MATCH_GAP_PER_SECOND = 20;    // ... qui s'élargit chaque seconde d'attente
 
@@ -40,6 +41,7 @@ struct Seat {
     std::string pseudo;
     int elo;                 // Elo global
     int season_elo = 1000;   // Elo de la saison en cours
+    nlohmann::json look = nlohmann::json::object();  // objets du passe portés (cadre, titre, avatar)
 };
 
 // Un joueur qui cherche un adversaire
@@ -81,6 +83,7 @@ struct OnlineGame {
     nlohmann::json actions = nlohmann::json::array();  // tout ce qui a changé la partie, dans l'ordre
     int record_id = 0;                 // numéro dans la base une fois enregistrée (rediffusion)
     std::vector<std::vector<std::string>> new_achievements;  // succès débloqués à la fin, par place
+    std::vector<nlohmann::json> pass_gains;  // passe de saison : XP et objets gagnés, par place
     std::vector<ChatMessage> chat;     // derniers messages du chat
     long next_chat = 1;
 };

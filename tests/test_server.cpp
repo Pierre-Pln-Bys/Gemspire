@@ -17,6 +17,7 @@
 #include "../src/elo.hpp"
 #include "../src/move_json.hpp"
 #include "../src/save.hpp"
+#include "../src/season_pass.hpp"
 #include "../src/version.hpp"
 
 using nlohmann::json;
@@ -82,9 +83,77 @@ static void test_season_calendar()
     }
 }
 
+// Passe de saison au niveau du stockage : XP, bonus du jour, limite des
+// amicales, défis de la semaine, objets débloqués, objets portés
+static void test_pass_store()
+{
+    std::remove("tests/test_pass.db");
+    Store store("tests/test_pass.db");
+    assert(store.ok());
+    int alice = store.find_or_create_account("dev", "alice-pass");
+    Game game({"Alice", "Bob"}, 3, Mode::Quick);
+    game.set_controller(0, Controller::AiMedium);
+    game.set_controller(1, Controller::AiMedium);
+    while (!game.is_over()) {
+        assert(ai_play(game).empty());
+    }
+    long long day = 1795392000;  // lundi 23/11/2026, 0 h UTC
+    int total = 0;                     // toute l'XP gagnée
+    std::vector<std::string> unlocked; // tous les objets débloqués
+    auto play = [&](const std::string& kind, bool won, long long at) {
+        PassGain gain = store.add_game_to_pass(alice, 1, kind, won, game, 0, at);
+        total += gain.xp;
+        unlocked.insert(unlocked.end(), gain.unlocked.begin(), gain.unlocked.end());
+        int challenges = 0;
+        for (const std::string& code : gain.challenges_done) {
+            challenges += find_challenge(code)->xp;
+        }
+        return gain.xp - challenges;  // XP sans les défis terminés
+    };
+    // Première partie du jour (classée, gagnée) : 150 + bonus du jour 150
+    assert(play("ranked", true, day + 3600) == 150 + PASS_DAILY_BONUS_XP);
+    // Deuxième partie du même jour : pas de bonus
+    assert(play("ranked", false, day + 7200) == 100);
+    // Amicales : 50 XP, seulement PASS_FRIENDLY_PER_DAY fois par jour
+    int friendly = 0;
+    for (int i = 0; i < PASS_FRIENDLY_PER_DAY + 2; i++) {
+        friendly += play("friendly", false, day + 8000 + i);
+    }
+    assert(friendly == 50 * PASS_FRIENDLY_PER_DAY);
+    PassState state = store.pass_state(alice, 1, day + 9000);
+    assert(state.xp == total);
+    assert(state.challenges.size() == PASS_CHALLENGES_PER_WEEK && state.week_ends_at == day + 7 * 86400);
+    // Le lendemain : de nouveau le bonus du jour
+    assert(play("season", true, day + 86400 + 60) == 150 + PASS_DAILY_BONUS_XP);
+    // Assez de parties pour plusieurs paliers : un objet par palier pair, une seule fois
+    for (int i = 2; i < 22; i++) {
+        play("season", true, day + 86400 * i);
+    }
+    state = store.pass_state(alice, 1, day + 86400 * 30);
+    int tier = pass_tier(state.xp);
+    assert(state.xp == total && tier >= 4 && static_cast<int>(unlocked.size()) == tier / 2 && state.owned == unlocked);
+    Cosmetic title;
+    assert(pass_reward(1, 2, title) && title.kind == CosmeticKind::Title && state.owned[0] == title.code);
+    // Objets portés : seulement les siens, de la bonne sorte
+    assert(store.equip(alice, "title", title.code).empty() && store.equipped(alice)["title"] == title.code);
+    assert(!store.equip(alice, "frame", title.code).empty());          // mauvaise sorte
+    assert(!store.equip(alice, "title", "s1.title.3").empty());        // pas encore à lui
+    assert(!store.equip(alice, "title", "s1.title.99").empty());       // n'existe pas
+    assert(!store.equip(alice, "reaction", "s1.reaction.0").empty());  // les réactions ne se portent pas
+    assert(!store.equip(alice, "hat", "").empty());
+    assert(store.equip(alice, "title", "").empty() && store.equipped(alice).count("title") == 0);
+    // Saison suivante : le passe repart de zéro, les objets restent
+    assert(store.pass_state(alice, 2, day + 86400 * 70).xp == 0);
+    assert(store.pass_state(alice, 2, day + 86400 * 70).owned.size() == unlocked.size());
+    std::remove("tests/test_pass.db");
+    std::remove("tests/test_pass.db-wal");
+    std::remove("tests/test_pass.db-shm");
+}
+
 int main()
 {
     test_season_calendar();
+    test_pass_store();
     std::remove("tests/test_server.db");
     ServerConfig config;
     config.port = PORT;
@@ -599,6 +668,34 @@ int main()
         assert(refused_season && refused_season->status == 403);
         // Une partie classée de plus (la dernière de l'historique, annulée plus bas)
         queue_game("ranked");
+    }
+
+    // --- Passe de saison par les routes : état, objets portés, réactions du chat
+    {
+        json pass = get(client, "/me/pass", alice);
+        assert(pass["tiers"] == PASS_TIERS && pass["xp_per_tier"] == PASS_XP_PER_TIER
+               && pass["challenges"].size() == PASS_CHALLENGES_PER_WEEK && pass["xp"].get<int>() > 0);
+        assert(pass["tier"] == pass_tier(pass["xp"].get<int>()));
+        get(client, "/me/pass", "", 401);
+        post(client, "/me/equip", alice, {{"kind", "title"}, {"code", "s1.title.4"}}, 400);  // pas à elle
+        post(client, "/me/equip", alice, {{"kind", "hat"}}, 400);
+        post(client, "/me/equip", alice, {{"kind", 3}}, 400);
+        post(client, "/me/equip", alice, {{"kind", "title"}});  // retour à l'apparence par défaut
+        post(client, path + "/chat", alice, {{"reaction_code", "s1.reaction.4"}}, 400);  // réaction pas à elle
+        post(client, path + "/chat", alice, {{"reaction_code", 12}}, 400);
+        // Un objet visible gagné : porté, il apparaît dans /me et chez les autres
+        for (const json& code : pass["owned"]) {
+            Cosmetic cosmetic;
+            assert(find_cosmetic(code.get<std::string>(), cosmetic));
+            if (cosmetic.kind == CosmeticKind::Title || cosmetic.kind == CosmeticKind::Frame
+                || cosmetic.kind == CosmeticKind::Avatar) {
+                std::string kind = kind_code(cosmetic.kind);
+                post(client, "/me/equip", alice, {{"kind", kind}, {"code", code}});
+                assert(get(client, "/me", alice)["look"][kind] == code);
+                assert(get(client, "/me/pass", alice)["equipped"][kind] == code);
+                break;
+            }
+        }
     }
 
     // --- Discord : présence, proposition du bot, salon lié au vocal

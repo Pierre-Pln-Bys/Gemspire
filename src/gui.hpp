@@ -11,6 +11,7 @@
 #include "game.hpp"
 #include "i18n.hpp"
 #include "net.hpp"
+#include "season_pass.hpp"
 #include "types.hpp"
 
 // Interface graphique (raylib).
@@ -24,7 +25,7 @@ const int GOLD_INDEX = COLOR_COUNT;  // indice de l'or à côté des 5 gemmes
 const char* const SAVE_FILE = "partie.splendor";
 const char* const DEFAULT_SERVER = "https://gemspire.epsilon-forge.fr";  // serveur officiel (Raspberry Pi)
 
-enum class Screen { Home, Rules, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements, Live, History, Matchmaking };
+enum class Screen { Home, Rules, Setup, Board, Login, Pseudo, Online, Lobby, Leaderboard, Update, Friends, Achievements, Live, History, Matchmaking, Pass, Appearance };
 
 // Ce que le joueur a sélectionné à la souris
 enum class Target { None, Visible, Deck, Reserved };
@@ -45,6 +46,8 @@ enum class ButtonId {
     ShowLive, WatchGame,
     // Mes parties et rediffusions
     FindMatch, CancelMatch, LeaderboardTab,
+    // Passe de saison et apparence (v4.2)
+    ShowPass, ShowAppearance, AppearanceTab, EquipItem, ChatPassReaction,
     ShowHistory, ReplayGame, ReplayPrevious, ReplayNext, ReplayPlay, ReplayExit,
     // Nouvelle partie
     Mode, Count, NameBox, Swatch, Kind, Start, Back,
@@ -154,6 +157,7 @@ struct ChatLine {
 
 // Réactions rapides du chat (même ordre que le serveur), traduites à l'affichage
 const int REACTION_COUNT = 6;
+const int PASS_REACTION = 100;  // réaction du passe de saison : `text` est le code de l'objet
 const char* const REACTIONS[REACTION_COUNT] = {"GG", "Good luck!", "Nice move!", "Oops!", "Thanks!", "Hello!"};
 const int CHAT_MAX_CHARS = 120;
 const Rectangle CHAT_PANEL = {300, 110, 680, 580};  // panneau du chat sur le plateau
@@ -177,6 +181,22 @@ struct LiveGame {
 const int FRIENDS_SHOWN = 9;
 
 // Une de mes parties en ligne terminées (écran Mes parties)
+// Objets du passe portés par un joueur, visibles par les autres (codes, "" : aucun)
+struct Look {
+    std::string frame;
+    std::string title;
+    std::string avatar;
+};
+
+// Un défi de la semaine (écran Passe de saison)
+struct ChallengeLine {
+    std::string code;
+    int progress;
+    int target;
+    int xp;
+    bool done;
+};
+
 // Une ligne d'un classement
 struct BoardLine {
     std::string pseudo;
@@ -285,6 +305,21 @@ struct OnlineState {
     double next_live_poll = 0;
     std::string friend_input;
     double next_friends_poll = 0;
+    // Passe de saison (v4.2), envoyé par GET /me/pass
+    bool pass_loaded = false;
+    int pass_season = 0;
+    int pass_xp = 0;
+    std::vector<std::string> owned;                 // objets gagnés (codes)
+    Look look;                                       // mes cadre, titre et avatar portés
+    std::vector<ChallengeLine> challenges;          // défis de la semaine
+    long long week_ends_at = 0;
+    int appearance_tab = 0;                          // sorte d'objet affichée (écran Apparence)
+    std::vector<Look> seat_looks;                    // apparence des joueurs de la partie en ligne
+    std::vector<Look> lobby_looks;                   // et des membres du salon
+    int gain_xp = -1;                                // fin de partie : XP gagnée (-1 : pas encore)
+    int gain_tier_before = 0;
+    int gain_tier_after = 0;
+    std::vector<std::string> gain_unlocked;          // objets débloqués par la partie
     std::vector<BoardLine> board_global;   // classement global (file Classé)
     std::vector<BoardLine> board_season;   // classement de la saison (file Saison)
     bool board_show_season = true;         // onglet affiché
@@ -296,6 +331,13 @@ struct App {
     Screen screen = Screen::Home;
     Lang lang = Lang::English;              // langue des textes (bouton sur l'accueil, fichier langue.txt)
     int theme = 0;                          // thème du plateau (indice dans THEMES, fichier theme.txt)
+    // Apparence (passe de saison) qui ne concerne que mon écran : codes des
+    // objets portés (thème, dos de cartes, jetons), "" : apparence normale.
+    // Gardés dans apparence.txt pour jouer hors ligne.
+    std::string look_theme;
+    std::string look_cardback;
+    std::string look_tokens;
+    Theme pass_theme = THEMES[0];           // thème calculé de look_theme
     Setup setup;
     std::unique_ptr<Game> game;
     std::vector<int> player_colors;         // couleur de chaque joueur (indice dans PLAYER_COLORS)
@@ -355,6 +397,16 @@ std::vector<Button> visible_buttons(const App& app);
 
 // Dessine l'écran courant, dans le repère virtuel
 void draw_app(const App& app, Vector2 mouse);
+// Thème en cours : celui du passe de saison s'il est porté, sinon THEMES[app.theme]
+const Theme& current_theme(const App& app);
+// Thème d'un objet « thème » du passe (couleurs tirées de sa gemme)
+Theme theme_from_cosmetic(const Cosmetic& cosmetic);
+// Mes objets de cette sorte (codes), du plus ancien au plus récent
+std::vector<std::string> owned_items(const OnlineState& online, CosmeticKind kind);
+// Code de l'objet que je porte pour cette sorte ("" : apparence normale)
+std::string worn_code(const App& app, CosmeticKind kind);
+const int APPEARANCE_TABS = 6;   // sortes qu'on peut porter (toutes sauf les réactions)
+const int APPEARANCE_SHOWN = 19; // objets affichés par sorte (plus « Normal »)
 
 // « Missing 2 Red, 1 Blue » pour une carte, ou "" si elle est achetable
 std::string missing_text(const Game& game, const Card& card, Lang lang);

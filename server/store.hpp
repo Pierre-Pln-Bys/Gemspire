@@ -1,6 +1,7 @@
 #ifndef SPLENDOR_SERVER_STORE_HPP
 #define SPLENDOR_SERVER_STORE_HPP
 
+#include <map>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -96,6 +97,32 @@ struct SeasonBadge {
     int rank;     // 1 = premier
 };
 
+// Passe de saison (v4.2) : ce qu'une partie a rapporté à un joueur
+struct PassGain {
+    int xp = 0;                               // XP gagnée (partie, bonus du jour, défis)
+    int tier_before = 0;
+    int tier_after = 0;
+    std::vector<std::string> unlocked;        // objets débloqués (codes)
+    std::vector<std::string> challenges_done; // défis terminés par cette partie
+};
+
+// Un défi de la semaine vu par un joueur
+struct ChallengeState {
+    std::string code;
+    int progress = 0;
+    bool done = false;
+};
+
+// Passe d'un joueur pour la saison en cours
+struct PassState {
+    int season = 0;
+    int xp = 0;
+    std::vector<std::string> owned;                   // tous ses objets (toutes saisons)
+    std::map<std::string, std::string> equipped;      // sorte -> code porté
+    std::vector<ChallengeState> challenges;           // défis de la semaine
+    long long week_ends_at = 0;
+};
+
 // Une action d'administration (panel admin ou commande /dev du bot)
 struct AdminLogEntry {
     long long at;
@@ -173,6 +200,18 @@ public:
     // --- Succès : true si `code` est nouveau pour ce compte (il est alors enregistré)
     bool unlock_achievement(int id, const std::string& code);
     std::vector<std::string> achievements(int id);
+
+    // --- Passe de saison (v4.2)
+    // Ajoute au passe de la saison `season` ce que rapporte une partie en ligne
+    // terminée (XP de la partie, bonus du jour, défis de la semaine) et
+    // débloque les récompenses des paliers atteints.
+    PassGain add_game_to_pass(int id, int season, const std::string& kind, bool won, const Game& game, int seat,
+                              long long now);
+    PassState pass_state(int id, int season, long long now);
+    bool owns(int id, const std::string& code);
+    // Porte un objet (code "" : retour à l'apparence par défaut pour cette sorte). "" ou l'erreur.
+    std::string equip(int id, const std::string& kind, const std::string& code);
+    std::map<std::string, std::string> equipped(int id);
 
     // --- Saisons
     int current_season();                       // numéro de la saison en cours (la 1 est créée au besoin)

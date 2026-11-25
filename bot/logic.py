@@ -218,8 +218,10 @@ def format_profile(profile, lang="en"):
     if not profile.get("found") or not profile.get("pseudo"):
         return tr("no_player", lang)
     rank = profile.get("rank", 0)
-    lines = ["**{}** — {} Elo{}".format(profile["pseudo"], profile.get("elo", 1000),
-                                       tr("profile_rank", lang, rank=rank) if rank else ""),
+    title = (profile.get("title") or {}).get(lang) or (profile.get("title") or {}).get("en")
+    name = "**{}**".format(profile["pseudo"]) + (" « {} »".format(title) if title else "")
+    lines = ["{} — {} Elo{}".format(name, profile.get("elo", 1000),
+                                   tr("profile_rank", lang, rank=rank) if rank else ""),
              tr("profile_stats", lang, games=profile.get("games", 0), wins=profile.get("wins", 0),
                 rate=win_rate(profile))]
     if profile.get("season_games"):

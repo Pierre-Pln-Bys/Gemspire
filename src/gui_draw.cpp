@@ -79,11 +79,17 @@ static void add(std::vector<Button>& buttons, ButtonId id, const std::string& la
     buttons.push_back({id, label, enabled, rect, value, selected});
 }
 
+// Case d'un palier ou d'un objet : place sur l'écran (5 colonnes)
+static Rectangle pass_tile(int index, float top, float height)
+{
+    return {150.0f + (index % 5) * 198, top + (index / 5) * (height + 6), 190, height};
+}
+
 static std::vector<Button> home_buttons(const App& app)
 {
     std::vector<Button> buttons;
     add(buttons, ButtonId::ShowRules, "Rules", {20, 20, 150, 36});
-    add(buttons, ButtonId::NextTheme, tr(app.lang, "Theme: {0}", {tr(app.lang, THEMES[app.theme].name)}),
+    add(buttons, ButtonId::NextTheme, tr(app.lang, "Theme: {0}", {tr(app.lang, current_theme(app).name)}),
         {180, 20, 270, 36});
     add(buttons, ButtonId::NewGame, "New game", {490, 390, 300, 54});
     add(buttons, ButtonId::PlayOnline, "Play online", {490, 456, 300, 54});
@@ -189,6 +195,16 @@ static std::vector<Button> board_buttons(const App& app)
         for (int i = 0; i < REACTION_COUNT; i++) {
             add(buttons, ButtonId::ChatReaction, REACTIONS[i], {r.x + 24 + i * 106.0f, r.y + 452, 100, 34}, i);
         }
+        // Réactions gagnées avec le passe de saison (les 6 plus récentes)
+        std::vector<std::string> extra = owned_items(app.online, CosmeticKind::Reaction);
+        int first = std::max(0, static_cast<int>(extra.size()) - REACTION_COUNT);
+        for (int i = first; i < static_cast<int>(extra.size()); i++) {
+            Cosmetic reaction;
+            if (find_cosmetic(extra[i], reaction)) {
+                add(buttons, ButtonId::ChatPassReaction, cosmetic_name(reaction, app.lang),
+                    {r.x + 24 + (i - first) * 106.0f, r.y + 412, 100, 34}, i);
+            }
+        }
         add(buttons, ButtonId::ChatBox, "", {r.x + 24, r.y + 500, 496, 44});
         add(buttons, ButtonId::ChatSend, "Send", {r.x + 532, r.y + 500, 124, 44}, 0, !app.online.chat_input.empty());
         return buttons;
@@ -279,7 +295,8 @@ static std::vector<Button> online_buttons(const App& app)
     }
     add(buttons, ButtonId::ShowAchievements,
         T(app, "Achievements ({0}/{1})", {std::to_string(online.achievements.size()), std::to_string(ACHIEVEMENT_COUNT)}),
-        {760, 170, 320, 36});
+        {760, 170, 155, 36});
+    add(buttons, ButtonId::ShowPass, "Season pass", {925, 170, 155, 36});
     add(buttons, ButtonId::ShowLive, "Live games", {760, 214, 155, 36});
     add(buttons, ButtonId::ShowHistory, "My games", {925, 214, 155, 36});
     // Recherche de partie : file Classé (Elo global) ou Saison (Elo de saison)
@@ -328,6 +345,32 @@ std::vector<Button> visible_buttons(const App& app)
         return buttons;
     }
     case Screen::Setup: return setup_buttons(app.setup);
+    case Screen::Pass: {
+        std::vector<Button> buttons;
+        add(buttons, ButtonId::BackOnline, "Back", {420, 734, 200, 46});
+        add(buttons, ButtonId::ShowAppearance, "Appearance", {660, 734, 200, 46}, 0, app.online.pass_loaded);
+        return buttons;
+    }
+    case Screen::Appearance: {
+        std::vector<Button> buttons;
+        for (int i = 0; i < APPEARANCE_TABS; i++) {
+            add(buttons, ButtonId::AppearanceTab, kind_name(static_cast<CosmeticKind>(i), app.lang),
+                {150.0f + i * 166, 92, 158, 38}, i, true, app.online.appearance_tab == i);
+        }
+        CosmeticKind kind = static_cast<CosmeticKind>(app.online.appearance_tab);
+        std::vector<std::string> items = owned_items(app.online, kind);
+        std::string current = worn_code(app, kind);
+        // Case 0 : apparence normale ; puis les objets gagnés
+        int count = std::min(static_cast<int>(items.size()), APPEARANCE_SHOWN);
+        for (int i = -1; i < count; i++) {
+            Rectangle tile = pass_tile(i + 1, 150, 110);
+            bool on = i < 0 ? current.empty() : current == items[i];
+            add(buttons, ButtonId::EquipItem, on ? "Equipped" : "Equip", {tile.x + 8, tile.y + 74, tile.width - 16, 30},
+                i, !on && app.net.pending() == 0, on);
+        }
+        add(buttons, ButtonId::ShowPass, "Back", {540, 734, 200, 46});
+        return buttons;
+    }
     case Screen::Login: return login_buttons(app);
     case Screen::Pseudo: return pseudo_buttons(app);
     case Screen::Online: return online_buttons(app);
@@ -451,7 +494,55 @@ static Color player_color(const App& app, int player)
 // Couleurs du thème choisi
 static const Theme& theme(const App& app)
 {
+    return current_theme(app);
+}
+
+const Theme& current_theme(const App& app)
+{
+    if (!app.look_theme.empty()) {
+        return app.pass_theme;
+    }
     return THEMES[(app.theme % THEME_COUNT + THEME_COUNT) % THEME_COUNT];
+}
+
+static Color rgb(const Rgb& color, unsigned char a = 255)
+{
+    return {color.r, color.g, color.b, a};
+}
+
+// Assombrit une couleur (facteur de 0 à 1)
+static Color darker(Color color, float factor)
+{
+    return {static_cast<unsigned char>(color.r * factor), static_cast<unsigned char>(color.g * factor),
+            static_cast<unsigned char>(color.b * factor), color.a};
+}
+
+Theme theme_from_cosmetic(const Cosmetic& cosmetic)
+{
+    Color base = rgb(cosmetic.color);
+    Theme look = THEMES[0];
+    look.name = "Season pass";
+    look.background = darker(base, 0.08f);
+    look.felt_edge = darker(base, 0.2f);
+    look.felt_center = darker(base, 0.5f);
+    look.dialog = darker(base, 0.22f);
+    look.wood = false;
+    look.light = false;
+    return look;
+}
+
+// Couleur d'un titre : celle de sa gemme, éclaircie pour rester lisible sur les panneaux
+static Color title_color(const Cosmetic& cosmetic)
+{
+    Color base = rgb(cosmetic.color);
+    return {static_cast<unsigned char>((base.r + 255) / 2), static_cast<unsigned char>((base.g + 255) / 2),
+            static_cast<unsigned char>((base.b + 255) / 2), 255};
+}
+
+// Objet porté de cette sorte (false s'il n'y en a pas ou si le code est invalide)
+static bool worn(const std::string& code, Cosmetic& cosmetic)
+{
+    return !code.empty() && find_cosmetic(code, cosmetic);
 }
 static Color ink(const App& app) { return theme(app).text; }
 static Color soft(const App& app) { return theme(app).soft; }
@@ -606,6 +697,10 @@ static void draw_token(const App& app, int gem, Vector2 center, float radius, co
     DrawCircleV(center, radius, alpha(mix(color, {0, 0, 0, 255}, 0.25f), a));
     DrawCircleV(center, radius * 0.82f, alpha(color, a));
     Color dashes = gem == 0 ? Color{170, 170, 170, 255} : Color{255, 255, 255, 150};
+    Cosmetic skin;
+    if (worn(app.look_tokens, skin)) {
+        dashes = gem == 0 ? darker(rgb(skin.color), 0.8f) : mix(rgb(skin.color), {255, 255, 255, 255}, 0.35f);
+    }
     for (int i = 0; i < 12; i++) {
         float start = i * 30.0f;
         DrawRing(center, radius * 0.86f, radius * 0.94f, start, start + 15, 4, alpha(dashes, a));
@@ -664,11 +759,44 @@ static void buyable_outline(Rectangle r, float expand)
 }
 
 // Dos de carte (pioche, ou carte qui se retourne)
+// Motif d'un dos de cartes ou d'un cadre du passe (0 : rien de plus, 1 :
+// rayures, 2 : points, 3 : losange)
+static void draw_back_pattern(int pattern, Rectangle r, Color color)
+{
+    if (pattern == 1) {
+        for (float x = r.x - r.height; x < r.x + r.width; x += 12) {
+            Vector2 a = {std::max(x, r.x), x < r.x ? r.y + (r.x - x) : r.y};
+            float end_x = std::min(x + r.height, r.x + r.width);
+            Vector2 b = {end_x, r.y + (end_x - x)};
+            DrawLineEx(a, b, 2, color);
+        }
+    } else if (pattern == 2) {
+        for (float y = r.y + 10; y < r.y + r.height - 6; y += 14) {
+            for (float x = r.x + 10; x < r.x + r.width - 6; x += 14) {
+                DrawCircleV({x, y}, 2, color);
+            }
+        }
+    } else if (pattern == 3) {
+        Vector2 c = {r.x + r.width / 2, r.y + r.height / 2};
+        float w = r.width * 0.32f;
+        float h = r.height * 0.32f;
+        DrawTriangle({c.x, c.y - h}, {c.x - w, c.y}, {c.x + w, c.y}, color);
+        DrawTriangle({c.x - w, c.y}, {c.x, c.y + h}, {c.x + w, c.y}, color);
+    }
+}
+
 static void draw_card_back(const App& app, int level, Rectangle r, bool label)
 {
     const Color backs[] = {{41, 128, 71, 255}, {204, 153, 31, 255}, {46, 82, 173, 255}};
     const char* roman[] = {"I", "II", "III"};
-    rounded(r, 8, backs[level - 1]);
+    Cosmetic back;
+    if (worn(app.look_cardback, back)) {
+        // Dos du passe de saison : sa couleur, un peu teintée par le niveau, et son motif
+        rounded(r, 8, mix(rgb(back.color), backs[level - 1], 0.2f));
+        draw_back_pattern(back.pattern, r, {255, 255, 255, 70});
+    } else {
+        rounded(r, 8, backs[level - 1]);
+    }
     if (r.width > 20) {
         outline({r.x + 7, r.y + 7, r.width - 14, r.height - 14}, 5, 1.5f, {255, 255, 255, 150}, 0);
     }
@@ -676,6 +804,116 @@ static void draw_card_back(const App& app, int level, Rectangle r, bool label)
         text_centered(app, roman[level - 1], r.x + r.width / 2, r.y + 50, 34, true, WHITE_TEXT);
     }
 }
+
+// Avatar du passe : symbole de gemme sur un disque de sa couleur, motif autour
+static void draw_avatar(const Cosmetic& avatar, Vector2 center, float radius)
+{
+    Color base = rgb(avatar.color);
+    DrawCircleV(center, radius, darker(base, 0.55f));
+    DrawCircleV(center, radius * 0.82f, base);
+    if (avatar.pattern >= 2) {
+        DrawRing(center, radius * 0.86f, radius, 0, 360, 24, {255, 209, 64, 255});
+    }
+    bool light = avatar.color.r + avatar.color.g + avatar.color.b > 520;
+    gem_symbol(avatar.symbol, center, radius * 0.38f, light ? Color{40, 40, 40, 230} : Color{255, 255, 255, 235});
+}
+
+// Cadre du passe autour d'un panneau : sa couleur, plus ou moins épais selon le motif
+static void draw_frame(const Cosmetic& frame, Rectangle r, float radius)
+{
+    Color base = rgb(frame.color);
+    outline(r, radius, 3.0f + frame.pattern, base, 2);
+    if (frame.pattern >= 2) {
+        outline(r, radius, 1.5f, mix(base, {255, 255, 255, 255}, 0.5f), 6 + frame.pattern);
+    }
+}
+
+// Aperçu d'un objet du passe dans le rectangle `r` (écrans Passe et Apparence)
+static void draw_cosmetic_preview(const App& app, const Cosmetic& cosmetic, Rectangle r)
+{
+    Vector2 c = {r.x + r.width / 2, r.y + r.height / 2};
+    Color base = rgb(cosmetic.color);
+    switch (cosmetic.kind) {
+    case CosmeticKind::Theme: {
+        Theme look = theme_from_cosmetic(cosmetic);
+        rounded(r, 6, look.felt_edge);
+        DrawCircleGradient(static_cast<int>(c.x), static_cast<int>(c.y), r.width * 0.45f, look.felt_center,
+                           alpha(look.felt_center, 0));
+        break;
+    }
+    case CosmeticKind::CardBack: {
+        Rectangle card = {c.x - r.height * 0.33f, r.y + 2, r.height * 0.66f, r.height - 4};
+        rounded(card, 5, base);
+        draw_back_pattern(cosmetic.pattern, card, {255, 255, 255, 70});
+        outline({card.x + 4, card.y + 4, card.width - 8, card.height - 8}, 4, 1.2f, {255, 255, 255, 150}, 0);
+        break;
+    }
+    case CosmeticKind::Tokens: {
+        float radius = r.height * 0.42f;
+        DrawCircleV(c, radius, darker(base, 0.75f));
+        DrawCircleV(c, radius * 0.82f, {30, 30, 34, 255});
+        Color dashes = mix(base, {255, 255, 255, 255}, 0.35f);
+        for (int i = 0; i < 12; i++) {
+            DrawRing(c, radius * 0.86f, radius * 0.96f, i * 30.0f, i * 30.0f + 15, 4, dashes);
+        }
+        break;
+    }
+    case CosmeticKind::Frame: {
+        Rectangle inner = {r.x + 10, r.y + 8, r.width - 20, r.height - 16};
+        rounded(inner, 6, panel(app, 90));
+        draw_frame(cosmetic, inner, 6);
+        break;
+    }
+    case CosmeticKind::Avatar:
+        draw_avatar(cosmetic, c, r.height * 0.42f);
+        break;
+    case CosmeticKind::Title:
+    case CosmeticKind::Reaction: {
+        float size = 15;
+        std::string name = fit(app, cosmetic_name(cosmetic, app.lang), r.width - 8, size, 9);
+        if (cosmetic.kind == CosmeticKind::Reaction) {
+            rounded({r.x + 4, c.y - 13, r.width - 8, 26}, 13, {255, 255, 255, 230});
+            text_centered(app, name, c.x, c.y, size, true, {30, 30, 30, 255});
+        } else {
+            // Titre : un bandeau de sa couleur (le nom est écrit à côté)
+            Rectangle band = {c.x - r.width * 0.4f, c.y - 11, r.width * 0.8f, 22};
+            DrawTriangle({band.x - 8, band.y}, {band.x - 8 + 6, band.y + 11}, {band.x, band.y}, darker(base, 0.6f));
+            DrawTriangle({band.x - 8 + 6, band.y + 11}, {band.x - 8, band.y + 22}, {band.x, band.y + 22}, darker(base, 0.6f));
+            DrawRectangleRec({band.x - 8 + 6, band.y, 8, 22}, darker(base, 0.6f));
+            rounded(band, 4, title_color(cosmetic));
+            text_centered(app, "Aa", c.x, c.y, 14, true, darker(base, 0.5f));
+        }
+        break;
+    }
+    }
+}
+
+std::vector<std::string> owned_items(const OnlineState& online, CosmeticKind kind)
+{
+    std::vector<std::string> items;
+    for (const std::string& code : online.owned) {
+        Cosmetic cosmetic;
+        if (find_cosmetic(code, cosmetic) && cosmetic.kind == kind) {
+            items.push_back(code);
+        }
+    }
+    return items;
+}
+
+std::string worn_code(const App& app, CosmeticKind kind)
+{
+    switch (kind) {
+    case CosmeticKind::Theme: return app.look_theme;
+    case CosmeticKind::CardBack: return app.look_cardback;
+    case CosmeticKind::Tokens: return app.look_tokens;
+    case CosmeticKind::Frame: return app.online.look.frame;
+    case CosmeticKind::Title: return app.online.look.title;
+    case CosmeticKind::Avatar: return app.online.look.avatar;
+    case CosmeticKind::Reaction: return "";
+    }
+    return "";
+}
+
 
 static void draw_deck(const App& app, int level, int count, bool selected)
 {
@@ -856,6 +1094,13 @@ static void draw_players(const App& app)
         // Bande de couleur du joueur ; son tour : tout le panneau est entouré de sa couleur
         rounded({r.x, r.y, 14, r.height}, 7, own);
         DrawRectangleRec({r.x + 7, r.y, 7, r.height}, panel(app, static_cast<unsigned char>(current ? 115 : 70)));
+        // Passe de saison (parties en ligne) : cadre, avatar et titre portés par le joueur
+        Look look = app.online.in_game && p < static_cast<int>(app.online.seat_looks.size()) ? app.online.seat_looks[p]
+                                                                                           : Look();
+        Cosmetic item;
+        if (worn(look.frame, item)) {
+            draw_frame(item, r, 10);
+        }
         if (current) {
             outline(r, 10, 4, own, 0);
         }
@@ -864,6 +1109,14 @@ static void draw_players(const App& app)
         if (current) {
             DrawTriangle({r.x + 20, r.y + 13}, {r.x + 20, r.y + 31}, {r.x + 34, r.y + 22}, own);
             name_x += 22;
+        }
+        if (worn(look.avatar, item)) {
+            draw_avatar(item, {name_x + 12, r.y + 22}, 12);
+            name_x += 30;
+        }
+        if (worn(look.title, item)) {
+            float size = 11;
+            text(app, fit(app, cosmetic_name(item, app.lang), 220, size, 8), name_x, r.y + 33, size, false, title_color(item));
         }
         text(app, player.name, name_x, r.y + 10, 21, true, own);
         if (app.online.in_game && p < static_cast<int>(app.online.seat_elos.size())) {
@@ -1169,6 +1422,10 @@ std::string chat_text(const App& app, const ChatLine& line)
     if (line.reaction >= 0 && line.reaction < REACTION_COUNT) {
         return T(app, REACTIONS[line.reaction]);
     }
+    Cosmetic reaction;
+    if (line.reaction == PASS_REACTION && find_cosmetic(line.text, reaction)) {
+        return cosmetic_name(reaction, app.lang);
+    }
     return line.text;
 }
 
@@ -1312,6 +1569,25 @@ static void draw_results(const App& app, Vector2 mouse)
         float size = 15;
         text_centered(app, fit(app, T(app, "Achievement unlocked: {0}", {names}), 520, size, 11), 640, 525, size, true,
                       GOLD_UI);
+    }
+    // En ligne : passe de saison (XP gagnée, palier, objets débloqués)
+    if (app.online.in_game && app.online.gain_xp >= 0) {
+        std::string line = T(app, "Season pass: +{0} XP", {std::to_string(app.online.gain_xp)});
+        if (app.online.gain_tier_after > app.online.gain_tier_before) {
+            line += T(app, " · tier {0}!", {std::to_string(app.online.gain_tier_after)});
+        }
+        std::string items;
+        for (const std::string& code : app.online.gain_unlocked) {
+            Cosmetic cosmetic;
+            if (find_cosmetic(code, cosmetic)) {
+                items += (items.empty() ? "" : ", ") + cosmetic_name(cosmetic, app.lang);
+            }
+        }
+        if (!items.empty()) {
+            line += T(app, " · new: {0}", {items});
+        }
+        float size = 15;
+        text_centered(app, fit(app, line, 520, size, 10), 640, 500, size, true, WHITE_TEXT);
     }
     for (const Button& button : board_buttons(app)) {
         draw_button(app, button, mouse);
@@ -1672,7 +1948,22 @@ static void draw_online(const App& app, Vector2 mouse)
     // Carte du compte
     Rectangle card = {760, 50, 320, 110};
     rounded(card, 12, panel(app, 90));
-    text(app, online.pseudo, card.x + 20, card.y + 14, 24, true, ink(app));
+    // Avatar et titre du passe portés
+    float pseudo_x = card.x + 20;
+    Cosmetic worn_item;
+    if (worn(online.look.avatar, worn_item)) {
+        draw_avatar(worn_item, {pseudo_x + 13, card.y + 27}, 13);
+        pseudo_x += 32;
+    }
+    if (worn(online.look.frame, worn_item)) {
+        draw_frame(worn_item, card, 12);
+    }
+    text(app, online.pseudo, pseudo_x, card.y + 14, 24, true, ink(app));
+    if (worn(online.look.title, worn_item)) {
+        float title_size = 11;
+        text(app, fit(app, cosmetic_name(worn_item, app.lang), 170, title_size, 8), pseudo_x, card.y + 40, title_size,
+             false, title_color(worn_item));
+    }
     text(app, "Elo " + std::to_string(online.elo) + (online.rank > 0 ? "  #" + std::to_string(online.rank) : ""),
          card.x + 20, card.y + 50, 20, true, accent(app));
     text(app, T(app, "{0} games, {1} wins", {std::to_string(online.games), std::to_string(online.wins)}), card.x + 20,
@@ -1748,7 +2039,22 @@ static void draw_lobby(const App& app, Vector2 mouse)
         rounded(row, 10, panel(app, static_cast<unsigned char>(i < static_cast<int>(online.lobby_members.size()) ? 100 : 40)));
         if (i < static_cast<int>(online.lobby_members.size())) {
             DrawCircleV({row.x + 26, row.y + 26}, 9, PLAYER_COLORS[i % PLAYER_COLOR_COUNT].color);
-            text(app, online.lobby_members[i] + (i == 0 ? "  (host)" : ""), row.x + 48, row.y + 14, 20, true, ink(app));
+            float name_x = row.x + 48;
+            Look look = i < static_cast<int>(online.lobby_looks.size()) ? online.lobby_looks[i] : Look();
+            Cosmetic item;
+            if (worn(look.frame, item)) {
+                draw_frame(item, row, 10);
+            }
+            if (worn(look.avatar, item)) {
+                draw_avatar(item, {name_x + 12, row.y + 26}, 13);
+                name_x += 32;
+            }
+            text(app, online.lobby_members[i] + (i == 0 ? "  (host)" : ""), name_x, row.y + 8, 20, true, ink(app));
+            if (worn(look.title, item)) {
+                float size = 11;
+                text(app, fit(app, cosmetic_name(item, app.lang), 200, size, 8), name_x, row.y + 32, size, false,
+                     title_color(item));
+            }
             text(app, "Elo " + std::to_string(online.lobby_elos[i]), row.x + row.width - 16, row.y + 16, 17, false,
                  accent(app), Align::Right);
         } else {
@@ -1866,6 +2172,108 @@ static void draw_friends(const App& app, Vector2 mouse)
     draw_message_line(app, 760);
 }
 
+// Passe de saison : palier, XP, les 25 récompenses de la saison, défis de la semaine
+static void draw_pass(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt(app);
+    text_centered(app, T(app, "Season pass — Season {0}", {std::to_string(std::max(online.pass_season, 1))}), 640, 34,
+                  34, true, accent(app));
+    if (!online.pass_loaded) {
+        text_centered(app, "Loading…", 640, 380, 18, false, soft(app));
+        draw_buttons_of(app, visible_buttons(app), mouse);
+        draw_message_line(app, 700);
+        return;
+    }
+    int tier = pass_tier(online.pass_xp);
+    int in_tier = tier >= PASS_TIERS ? PASS_XP_PER_TIER : online.pass_xp % PASS_XP_PER_TIER;
+    text(app, T(app, "Tier {0} / {1}", {std::to_string(tier), std::to_string(PASS_TIERS)}), 150, 72, 22, true, ink(app));
+    text(app, T(app, "{0} / {1} XP to the next tier", {std::to_string(in_tier), std::to_string(PASS_XP_PER_TIER)}),
+         1130, 78, 15, false, soft(app), Align::Right);
+    Rectangle bar = {150, 106, 980, 14};
+    rounded(bar, 7, panel(app, 110));
+    rounded({bar.x, bar.y, bar.width * in_tier / PASS_XP_PER_TIER, bar.height}, 7, GOLD_UI);
+    // Les 25 récompenses (paliers pairs)
+    std::vector<std::pair<int, Cosmetic>> rewards = season_rewards(std::max(online.pass_season, 1));
+    for (int i = 0; i < static_cast<int>(rewards.size()); i++) {
+        Rectangle tile = pass_tile(i, 132, 84);
+        const Cosmetic& reward = rewards[i].second;
+        bool owned = std::find(online.owned.begin(), online.owned.end(), reward.code) != online.owned.end();
+        rounded(tile, 10, panel(app, owned ? 120 : 60));
+        if (owned) {
+            outline(tile, 10, 2, GOLD_UI, 0);
+        }
+        text(app, T(app, "Tier {0}", {std::to_string(rewards[i].first)}), tile.x + 8, tile.y + 6, 12, true,
+             owned ? accent(app) : soft(app));
+        draw_cosmetic_preview(app, reward, {tile.x + 6, tile.y + 24, 74, 54});
+        float size = 13;
+        text(app, fit(app, cosmetic_name(reward, app.lang), 100, size, 9), tile.x + 86, tile.y + 32, size, true, ink(app));
+        text(app, kind_name(reward.kind, app.lang), tile.x + 86, tile.y + 52, 12, false, soft(app));
+        if (!owned) {
+            rounded(tile, 10, {0, 0, 0, 80});
+        }
+    }
+    // Défis de la semaine
+    long long left = online.week_ends_at - static_cast<long long>(std::time(nullptr));
+    int days = left > 0 ? static_cast<int>((left + 86399) / 86400) : 0;
+    text(app, T(app, "Challenges of the week · {0} day(s) left", {std::to_string(days)}), 150, 588, 17, true, ink(app));
+    for (int i = 0; i < static_cast<int>(online.challenges.size()); i++) {
+        const ChallengeLine& line = online.challenges[i];
+        const ChallengeInfo* info = find_challenge(line.code);
+        if (info == nullptr) {
+            continue;
+        }
+        float y = 616 + i * 34.0f;
+        Color color = line.done ? accent(app) : ink(app);
+        text(app, challenge_text(*info, app.lang), 170, y, 16, line.done, color);
+        text(app, "+" + std::to_string(line.xp) + " XP", 860, y, 15, true, soft(app), Align::Right);
+        Rectangle progress = {880, y + 3, 200, 12};
+        rounded(progress, 6, panel(app, 110));
+        float done = line.target > 0 ? static_cast<float>(std::min(line.progress, line.target)) / line.target : 0;
+        rounded({progress.x, progress.y, progress.width * done, progress.height}, 6, line.done ? GOLD_UI : ink(app));
+        text(app, line.done ? T(app, "Done") : std::to_string(line.progress) + " / " + std::to_string(line.target),
+             1130, y, 14, false, soft(app), Align::Right);
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+    draw_message_line(app, 712);
+}
+
+// Apparence : choisir les objets du passe portés, sorte par sorte
+static void draw_appearance(const App& app, Vector2 mouse)
+{
+    const OnlineState& online = app.online;
+    draw_felt(app);
+    text_centered(app, "Appearance", 640, 40, 34, true, accent(app));
+    CosmeticKind kind = static_cast<CosmeticKind>(online.appearance_tab);
+    bool shared = kind == CosmeticKind::Frame || kind == CosmeticKind::Title || kind == CosmeticKind::Avatar;
+    text_centered(app, shared ? "Seen by the other players in online games." : "Only on your screen, online and offline.",
+                  640, 140, 14, false, soft(app));
+    std::vector<std::string> items = owned_items(online, kind);
+    int count = std::min(static_cast<int>(items.size()), APPEARANCE_SHOWN);
+    for (int i = -1; i < count; i++) {
+        Rectangle tile = pass_tile(i + 1, 150, 110);
+        rounded(tile, 10, panel(app, 90));
+        if (i < 0) {
+            text_centered(app, "Normal", tile.x + tile.width / 2, tile.y + 36, 18, true, soft(app));
+            continue;
+        }
+        Cosmetic cosmetic;
+        if (!find_cosmetic(items[i], cosmetic)) {
+            continue;
+        }
+        draw_cosmetic_preview(app, cosmetic, {tile.x + 8, tile.y + 6, 70, 62});
+        float size = 13;
+        text(app, fit(app, cosmetic_name(cosmetic, app.lang), 104, size, 9), tile.x + 82, tile.y + 18, size, true,
+             ink(app));
+        text(app, T(app, "Season {0}", {std::to_string(cosmetic.season)}), tile.x + 82, tile.y + 40, 12, false, soft(app));
+    }
+    if (items.empty()) {
+        text_centered(app, "Earn items with the season pass by playing online.", 640, 330, 17, false, soft(app));
+    }
+    draw_buttons_of(app, visible_buttons(app), mouse);
+    draw_message_line(app, 712);
+}
+
 void draw_app(const App& app, Vector2 mouse)
 {
     switch (app.screen) {
@@ -1883,6 +2291,8 @@ void draw_app(const App& app, Vector2 mouse)
     case Screen::History: draw_history(app, mouse); break;
     case Screen::Matchmaking: draw_matchmaking(app, mouse); break;
     case Screen::Update: draw_update(app, mouse); break;
+    case Screen::Pass: draw_pass(app, mouse); break;
+    case Screen::Appearance: draw_appearance(app, mouse); break;
     case Screen::Board:
         if (app.game) {
             draw_board(app, mouse);

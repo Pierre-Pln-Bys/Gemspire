@@ -4,6 +4,18 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [Unreleased]
+
+### Added
+- **Season pass** (free for everyone): 50 tiers per season, a reward every
+  2 tiers. Earn XP with online games (more for a win), a bonus for your first
+  game of the day and 3 weekly challenges.
+- **Cosmetic rewards**, new each season: board themes, card backs, token
+  skins, profile frames, titles, avatars and chat reactions. No gameplay
+  advantage.
+- **Appearance** screen to choose what you wear. Frames, titles and avatars
+  are seen by the other players (lobbies, games, Discord `/profile`).
+
 ## [4.1.0] - 2026-11-25
 
 ### Added
