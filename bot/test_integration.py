@@ -99,8 +99,14 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(ApiError):
             api.challenge(999, 902, "classique")  # pas de compte lié
         self.assertEqual(api.ranks(), [])        # personne n'a encore joué
+        board = api.rankings()
+        self.assertEqual((board["players"], board["season_players"], board["season"]), ([], [], 1))
+        self.assertGreater(board["season_ends_at"], 0)
         season = api.end_season()
         self.assertEqual((season["ended"], season["season"], season["top"]), (1, 2, []))
+        # Le bot reçoit l'annonce par les événements
+        events = api.events(0)["events"]
+        self.assertTrue(any(event.get("type") == "season_end" and event["ended"] == 1 for event in events))
 
     def test_moderation(self):
         login = "y" * 24

@@ -133,21 +133,48 @@ def win_rate(player):
     return player.get("wins", 0) * 100 // games if games else 0
 
 
-def format_ranking(players, updated_at=None, lang="en"):
-    """Texte du top 10 (salon #classement et /leaderboard)."""
-    lines = [tr("ranking_title", lang, size=RANKING_SIZE), ""]
-    if not players:
-        lines.append(tr("ranking_empty", lang))
+def ranking_lines(players, lang="en"):
+    """Lignes d'un top 10 (médailles pour les trois premiers)."""
+    lines = []
     for index, player in enumerate(players[:RANKING_SIZE]):
         place = MEDALS[index] if index < len(MEDALS) else "`{:>2}.`".format(index + 1)
         lines.append(tr("ranking_line", lang, place=place, pseudo=player.get("pseudo", "?"), elo=player.get("elo", 0),
                         games=player.get("games", 0), rate=win_rate(player)))
+    return lines
+
+
+def format_ranking(players, updated_at=None, lang="en", season=None):
+    """Texte des classements (salon #classement et /leaderboard) : celui de la
+    saison si `season` est donné ({"season", "season_ends_at", "season_players",
+    "season_min_games"} : la réponse de /leaderboard), puis le top 10 global."""
+    lines = []
+    if season is not None:
+        lines.append(tr("season_title", lang, season=season.get("season", 0),
+                        when="<t:{}:R>".format(int(season.get("season_ends_at", 0)))))
+        lines.append("")
+        season_players = season.get("season_players") or []
+        if not season_players:
+            lines.append(tr("season_empty", lang, games=season.get("season_min_games", 10)))
+        lines.extend(ranking_lines(season_players, lang))
+        lines.append("")
+    lines.append(tr("ranking_title", lang, size=RANKING_SIZE))
+    lines.append("")
+    if not players:
+        lines.append(tr("ranking_empty", lang))
+    lines.extend(ranking_lines(players, lang))
     lines.append("")
     footer = tr("ranking_footer", lang, url=site_page("leaderboard", lang))
     if updated_at is not None:
         footer += tr("ranking_updated", lang, when="<t:{}:R>".format(int(updated_at)))
     lines.append(footer)
     return "\n".join(lines)
+
+
+def format_season_end(event, lang="en"):
+    """Annonce d'une fin de saison (événement « season_end » du serveur)."""
+    return tr("season_end", lang, ended=event.get("ended"), season=event.get("season"),
+              podium=format_podium(event.get("top", [])),
+              when="<t:{}:R>".format(int(event.get("ends_at", 0))))
 
 
 def format_podium(top):
@@ -195,6 +222,10 @@ def format_profile(profile, lang="en"):
                                        tr("profile_rank", lang, rank=rank) if rank else ""),
              tr("profile_stats", lang, games=profile.get("games", 0), wins=profile.get("wins", 0),
                 rate=win_rate(profile))]
+    if profile.get("season_games"):
+        season_rank = profile.get("season_rank", 0)
+        lines.append(tr("profile_season", lang, elo=profile.get("season_elo", 1000), games=profile["season_games"],
+                        rank=tr("profile_season_rank", lang, rank=season_rank) if season_rank else ""))
     extras = []
     if profile.get("achievements"):
         extras.append(tr("profile_achievements", lang, count=profile["achievements"]))

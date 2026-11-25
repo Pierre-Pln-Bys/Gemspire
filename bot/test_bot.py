@@ -17,7 +17,7 @@ import tempfile  # noqa: E402
 
 from api import ApiError  # noqa: E402
 from logic import (TempChannel, format_podium, rank_role_changes, rank_tier, apply_event, can_moderate, channel_matches, format_history, parse_id,  # noqa: E402
-                   format_profile, format_ranking, frequent_opponents, is_create_channel, load_state, offer_message,
+                   format_profile, format_ranking, format_season_end, frequent_opponents, is_create_channel, load_state, offer_message,
                    save_state, should_delete, temp_channel_name)
 
 
@@ -103,6 +103,24 @@ class LogicTests(unittest.TestCase):
         self.assertIn("/leaderboard?lang=fr>", french)
         self.assertIn("Be the first", format_ranking([]))
         self.assertIn("Soyez le premier", format_ranking([], lang="fr"))
+        # Classement de la saison au-dessus du global
+        board = {"season": 3, "season_ends_at": 1800000000, "season_min_games": 10,
+                 "season_players": [{"pseudo": "S0", "elo": 1050, "games": 10, "wins": 6}]}
+        both = format_ranking(players, None, "en", season=board)
+        self.assertIn("**Season 3** — ends <t:1800000000:R>", both)
+        self.assertLess(both.index("🥇 **S0**"), both.index("Global leaderboard"))
+        self.assertIn("10 season games needed", format_ranking(players, season=dict(board, season_players=[])))
+        self.assertIn("**Saison 3**", format_ranking(players, lang="fr", season=board))
+        ended = format_season_end({"ended": 2, "season": 3, "ends_at": 1800000000,
+                                   "top": [{"pseudo": "A", "elo": 1100}]})
+        self.assertIn("Season 2 is over", ended)
+        self.assertIn("🥇 **A** (1100)", ended)
+        self.assertIn("<t:1800000000:R>", ended)
+        self.assertIn("La saison 2 est terminée", format_season_end({"ended": 2, "season": 3, "ends_at": 1}, "fr"))
+        seasonal = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 12, "wins": 7, "rank": 2,
+                    "season_elo": 1020, "season_games": 11, "season_rank": 3}
+        self.assertIn("This season: 1020 Elo · 11 games · #3", format_profile(seasonal))
+        self.assertIn("Cette saison : 1020 Elo · 11 parties · 3ᵉ", format_profile(seasonal, "fr"))
         profile = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 10, "wins": 7, "rank": 2}
         self.assertIn("#2 on the leaderboard", format_profile(profile))
         self.assertIn("2ᵉ au classement", format_profile(profile, "fr"))

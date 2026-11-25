@@ -58,8 +58,13 @@ class SplendorApi:
 
     # --- Classement et profils
     def leaderboard(self):
-        """[{"pseudo", "elo", "games", "wins"}, ...] (50 meilleurs)"""
+        """[{"pseudo", "elo", "games", "wins"}, ...] (50 meilleurs, classement global)"""
         return self._request("GET", "/leaderboard").get("players", [])
+
+    def rankings(self):
+        """Les deux classements : {"players" (global), "season_players", "season",
+        "season_ends_at", "season_min_games"}"""
+        return self._request("GET", "/leaderboard")
 
     def profile(self, pseudo=None, discord_id=None):
         """{"found", "pseudo", "elo", "games", "wins", "rank", "banned", "banned_until", "ban_reason"}"""

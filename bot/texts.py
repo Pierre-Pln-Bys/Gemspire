@@ -46,9 +46,13 @@ TEXTS = {
         "fr": "Partie Gemspire créée : code **{code}** ({seats} places). Rejoignez ce salon vocal, puis dans "
               "Gemspire : Jouer en ligne > Rejoindre."},
     # --- Classement et profils
-    "ranking_title": {"en": "🏆 **Gemspire leaderboard** — top {size}", "fr": "🏆 **Classement Gemspire** — top {size}"},
-    "ranking_empty": {"en": "Nobody has finished an online game yet. Be the first!",
-                      "fr": "Personne n'a encore terminé de partie en ligne. Soyez le premier !"},
+    "ranking_title": {"en": "🌍 **Global leaderboard** — top {size}", "fr": "🌍 **Classement global** — top {size}"},
+    "ranking_empty": {"en": "Nobody has finished a ranked game yet. Be the first!",
+                      "fr": "Personne n'a encore terminé de partie classée. Soyez le premier !"},
+    "season_title": {"en": "🏆 **Season {season}** — ends {when}", "fr": "🏆 **Saison {season}** — fin {when}"},
+    "season_empty": {"en": "Nobody is ranked yet this season ({games} season games needed). Be the first!",
+                     "fr": "Personne n'est encore classé cette saison ({games} parties de saison minimum). "
+                           "Soyez le premier !"},
     "ranking_line": {"en": "{place} **{pseudo}** — {elo} Elo · {games} games · {rate}% wins",
                      "fr": "{place} **{pseudo}** — {elo} Elo · {games} parties · {rate} % de victoires"},
     "ranking_footer": {"en": "Full leaderboard: <{url}>", "fr": "Classement complet : <{url}>"},
@@ -58,6 +62,9 @@ TEXTS = {
     "profile_stats": {"en": "{games} games · {wins} wins ({rate}%)", "fr": "{games} parties · {wins} victoires ({rate} %)"},
     "profile_achievements": {"en": "🏅 {count} achievement(s)", "fr": "🏅 {count} succès"},
     "profile_badges": {"en": "🏆 Seasons: {badges}", "fr": "🏆 Saisons : {badges}"},
+    "profile_season": {"en": "This season: {elo} Elo · {games} games{rank}",
+                       "fr": "Cette saison : {elo} Elo · {games} parties{rank}"},
+    "profile_season_rank": {"en": " · #{rank}", "fr": " · {rank}ᵉ"},
     "banned_forever": {"en": "⛔ Account suspended permanently", "fr": "⛔ Compte suspendu définitivement"},
     "banned_until": {"en": "⛔ Account suspended until {date}", "fr": "⛔ Compte suspendu jusqu'au {date}"},
     "not_linked_member": {
@@ -117,15 +124,17 @@ TEXTS = {
     "mode_classic": {"en": "classic", "fr": "classique"},
     "mode_quick": {"en": "quick", "fr": "rapide"},
     "season_confirm": {
-        "en": "This ends the season for everyone (Elo brought halfway back to 1000). Run it again with "
-              "`confirm: True`.",
-        "fr": "Cela termine la saison pour tout le monde (Elo ramenés à mi-chemin de 1000). Relancez avec "
-              "`confirmer: True`."},
+        "en": "This ends the season now for everyone (season Elo back to 1000; seasons also change by themselves "
+              "every two months). Run it again with `confirm: True`.",
+        "fr": "Cela termine la saison tout de suite pour tout le monde (Elo de saison remis à 1000 ; les saisons "
+              "changent aussi toutes seules tous les deux mois). Relancez avec `confirmer: True`."},
     "season_end": {
-        "en": "🏁 **Season {ended} is over!**\n{podium}\nSeason {season} starts now: everyone's Elo moved halfway "
-              "back to 1000. Good luck!",
-        "fr": "🏁 **La saison {ended} est terminée !**\n{podium}\nLa saison {season} commence : les Elo sont ramenés "
-              "à mi-chemin de 1000. Bonne chance !"},
+        "en": "🏁 **Season {ended} is over!**\n{podium}\nSeason {season} starts now: everyone's season Elo is "
+              "back to 1000 (the global Elo doesn't change). It ends {when}. Good luck!",
+        "fr": "🏁 **La saison {ended} est terminée !**\n{podium}\nLa saison {season} commence : l'Elo de saison de "
+              "chacun repart à 1000 (l'Elo global ne change pas). Fin {when}. Bonne chance !"},
+    "season_ended_ok": {"en": "Season {ended} ended: the announcement is posted in the leaderboard channel.",
+                        "fr": "Saison {ended} terminée : l'annonce est publiée dans le salon du classement."},
     "season_log": {"en": "🏁 {user} ended season {ended}", "fr": "🏁 {user} a terminé la saison {ended}"},
     "report_log": {"en": "🚩 **Report** from {user} against **{pseudo}**: {reason}",
                    "fr": "🚩 **Signalement** de {user} contre **{pseudo}** : {reason}"},
@@ -148,7 +157,7 @@ TEXTS = {
 # (Discord affiche la traduction aux membres dont Discord est en français)
 COMMAND_FR = {
     "leaderboard": "classement",
-    "Top 10 Gemspire online players": "Top 10 des joueurs Gemspire en ligne",
+    "Season and global top 10 of Gemspire": "Top 10 de la saison et global de Gemspire",
     "profile": "profil",
     "Elo, rank and wins of a player": "Elo, rang et victoires d'un joueur",
     "member": "membre",
