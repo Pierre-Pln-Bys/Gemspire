@@ -196,7 +196,7 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Corrections des failles trouvées (relues). Nouveau test complet : plus tard.
 - [x] Empreintes SHA-256 publiées avec chaque release.
 
-## v4.1 — Saisons et visibilité
+## v4.1 — Saisons et visibilité — publiée le 25/11/2026
 
 - [x] Saisons automatiques (tous les deux mois, 1er janvier, mars, mai...) ;
   Elo de saison remis à 1000, Elo global jamais remis à zéro ; classement de
