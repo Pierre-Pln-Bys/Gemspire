@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../src/move_json.hpp"
+#include "../src/season_pass.hpp"
 #include "../src/version.hpp"
 #include "favicon.hpp"
 #include "pages.hpp"
@@ -150,6 +151,18 @@ static json badges_json(Store& store, int id)
     return list;
 }
 
+// Objets du passe visibles par les autres (cadre, titre, avatar) : sorte -> code
+static json look_json(Store& store, int id)
+{
+    json look = json::object();
+    for (const auto& entry : store.equipped(id)) {
+        if (entry.first == "frame" || entry.first == "title" || entry.first == "avatar") {
+            look[entry.first] = entry.second;
+        }
+    }
+    return look;
+}
+
 static json account_json(Store& store, int id)
 {
     Account account;
@@ -169,6 +182,7 @@ static json account_json(Store& store, int id)
             {"season_games", account.season_games},
             {"season_wins", account.season_wins},
             {"season_rank", store.season_rank_of(id)},
+            {"look", look_json(store, id)},
             {"achievements", store.achievements(id).size()},
             {"badges", badges_json(store, id)},
             {"banned", account.banned()},
@@ -489,7 +503,7 @@ bool ServerApp::seat_for(int account, Seat& seat, std::string& error)
         error = "Choose a username first.";
         return false;
     }
-    seat = {data.id, data.pseudo, data.elo, data.season_elo};
+    seat = {data.id, data.pseudo, data.elo, data.season_elo, look_json(store_, data.id)};
     return true;
 }
 
@@ -809,10 +823,51 @@ void ServerApp::setup_routes(httplib::Server& server)
                               {"ranked_wins", account.ranked_wins}, {"season_elo", account.season_elo},
                               {"season_games", account.season_games}, {"season_wins", account.season_wins},
                               {"season_rank", store_.season_rank_of(id)}, {"season_min_games", SEASON_MIN_GAMES},
+                              {"look", look_json(store_, id)},
                               {"achievements", store_.achievements(id)}, {"badges", badges_json(store_, id)},
                               {"season", season.number}, {"season_ends_at", season.ends_at},
                               {"providers", store_.providers(id)},
                               {"announcement", store_.setting("announcement")}});
+    });
+
+    // --- Passe de saison (v4.2) : XP, palier, objets, défis de la semaine
+    server.Get("/me/pass", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        PassState state = store_.pass_state(id, store_.current_season(), std::time(nullptr));
+        json challenges = json::array();
+        for (const ChallengeState& challenge : state.challenges) {
+            const ChallengeInfo* info = find_challenge(challenge.code);
+            challenges.push_back({{"code", challenge.code}, {"progress", challenge.progress}, {"done", challenge.done},
+                                  {"target", info != nullptr ? info->target : 0},
+                                  {"xp", info != nullptr ? info->xp : 0}});
+        }
+        reply(response, 200, {{"season", state.season}, {"xp", state.xp}, {"tier", pass_tier(state.xp)},
+                              {"tiers", PASS_TIERS}, {"xp_per_tier", PASS_XP_PER_TIER}, {"owned", state.owned},
+                              {"equipped", state.equipped}, {"challenges", challenges},
+                              {"week_ends_at", state.week_ends_at}});
+    });
+    server.Post("/me/equip", [this](const httplib::Request& request, httplib::Response& response) {
+        int id = authenticate(request);
+        if (id == 0) {
+            reply_error(response, 401, "Not signed in.");
+            return;
+        }
+        json body;
+        if (!parse_body(request, body) || !body.is_object() || !body.contains("kind") || !body["kind"].is_string()
+            || (body.contains("code") && !body["code"].is_string())) {
+            reply_error(response, 400, "Malformed request.");
+            return;
+        }
+        std::string error = store_.equip(id, body["kind"].get<std::string>(), body.value("code", std::string()));
+        if (!error.empty()) {
+            reply_error(response, 400, error);
+            return;
+        }
+        reply(response, 200, {{"equipped", store_.equipped(id)}});
     });
 
     // v4 : ajouter une connexion (Google ou Discord) au compte. Le jeu ouvre
@@ -1246,6 +1301,17 @@ void ServerApp::setup_routes(httplib::Server& server)
         }
         std::string text = body.contains("text") && body["text"].is_string() ? body["text"].get<std::string>() : "";
         int reaction = body.contains("reaction") && body["reaction"].is_number_integer() ? body["reaction"].get<int>() : -1;
+        // Réaction du passe de saison : seulement un objet « réaction » que le joueur possède
+        if (body.contains("reaction_code")) {
+            Cosmetic cosmetic;
+            std::string code = body["reaction_code"].is_string() ? body["reaction_code"].get<std::string>() : "";
+            if (!find_cosmetic(code, cosmetic) || cosmetic.kind != CosmeticKind::Reaction || !store_.owns(id, code)) {
+                reply_error(response, 400, "You don't have this reaction.");
+                return;
+            }
+            text = code;
+            reaction = PASS_REACTION;
+        }
         std::string error = text.size() > 2000 ? "Invalid message (1 to 120 characters)."
                                                 : rooms_.chat(std::stoi(request.matches[1]), id, text, reaction);
         if (!error.empty()) {

@@ -390,7 +390,8 @@ bool Rooms::lobby_json(const std::string& code, long since, nlohmann::json& out)
     out["game_id"] = lobby.game_id;
     out["members"] = nlohmann::json::array();
     for (const Seat& seat : lobby.members) {
-        out["members"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo}});
+        out["members"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo},
+                                  {"look", seat.look}});
     }
     return true;
 }
@@ -438,6 +439,19 @@ void Rooms::finish_game(OnlineGame& online)
                 online.new_achievements[i].push_back(code);
             }
         }
+    }
+    // Passe de saison : XP de la partie, bonus du jour, défis, objets débloqués
+    int season = store_.current_season();
+    long long now = static_cast<long long>(std::time(nullptr));
+    online.pass_gains.assign(online.seats.size(), nlohmann::json::object());
+    for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
+        PassGain gain = store_.add_game_to_pass(online.seats[i].account, season, kind_name(online.kind), places[i] == 0,
+                                                *online.game, i, now);
+        online.pass_gains[i] = {{"xp", gain.xp},
+                                {"tier_before", gain.tier_before},
+                                {"tier_after", gain.tier_after},
+                                {"unlocked", gain.unlocked},
+                                {"challenges", gain.challenges_done}};
     }
 }
 
@@ -641,8 +655,12 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
     out["kind"] = kind_name(online.kind);
     out["seats"] = nlohmann::json::array();
     for (const Seat& seat : online.seats) {
-        out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", rating(seat, online.kind)}});
+        out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", rating(seat, online.kind)},
+                                {"look", seat.look}});
     }
+    // Passe de saison : ce que la partie a rapporté à ce joueur
+    out["pass"] = my_seat >= 0 && my_seat < static_cast<int>(online.pass_gains.size()) ? online.pass_gains[my_seat]
+                                                                                        : nlohmann::json(nullptr);
     out["achievements"] = online.new_achievements;
     out["replay_id"] = online.record_id;
     out["chat"] = nlohmann::json::array();
@@ -689,8 +707,9 @@ static std::string clean_chat_text(const std::string& text)
 
 std::string Rooms::chat(int game_id, int account, const std::string& text, int reaction)
 {
-    std::string cleaned = reaction >= 0 ? "" : clean_chat_text(text);
-    if (reaction >= REACTION_COUNT || (reaction < 0 && cleaned.empty())) {
+    // Réaction du passe : `text` est le code de l'objet (vérifié par l'appelant)
+    std::string cleaned = reaction == PASS_REACTION ? text : reaction >= 0 ? "" : clean_chat_text(text);
+    if ((reaction >= REACTION_COUNT && reaction != PASS_REACTION) || (reaction < 0 && cleaned.empty())) {
         return "Invalid message (1 to 120 characters).";
     }
     {
