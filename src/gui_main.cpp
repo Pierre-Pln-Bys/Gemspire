@@ -245,7 +245,7 @@ static void play_move(App& app, const std::function<std::string()>& move)
 
 // Repères des requêtes envoyées au serveur
 enum NetTag { TagMe, TagPseudo, TagAuthPoll, TagCreate, TagJoin, TagLeave, TagStart, TagLobby, TagGame, TagMove,
-              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave, TagLink, TagBegin };
+              TagLeaderboard, TagLogout, TagDevStart, TagConfig, TagNotes, TagMeQuiet, TagActivity, TagActivityLobby, TagChat, TagFriends, TagFriendChange, TagLive, TagHistory, TagReplay, TagMatch, TagMatchLeave, TagLink, TagBegin, TagPass, TagEquip };
 
 const char* const DOWNLOAD_URL = "https://github.com/Pierre-Pln-Bys/Gemspire/releases/latest";
 
@@ -253,6 +253,7 @@ const char* const SESSION_FILE = "session.txt";   // jeton de connexion
 const char* const SERVER_FILE = "serveur.txt";    // adresse du serveur (facultatif)
 const char* const LANGUAGE_FILE = "langue.txt";   // langue choisie ("en" ou "fr")
 const char* const THEME_FILE = "theme.txt";       // thème choisi (numéro)
+const char* const LOOK_FILE = "apparence.txt";    // objets du passe portés sur cet écran (thème, dos, jetons)
 
 // Un coup du joueur devant l'écran : appliqué tout de suite en local, envoyé
 // au serveur en ligne (le serveur vérifie et renvoie la nouvelle partie)
@@ -379,6 +380,48 @@ static void set_theme(App& app, int theme)
 #endif
 }
 
+// Objets du passe qui ne concernent que cet écran (thème, dos de cartes,
+// jetons) : appliqués et gardés dans apparence.txt pour jouer hors ligne
+static void set_local_look(App& app, const std::string& theme, const std::string& cardback, const std::string& tokens)
+{
+    Cosmetic cosmetic;
+    app.look_theme = find_cosmetic(theme, cosmetic) && cosmetic.kind == CosmeticKind::Theme ? theme : "";
+    if (!app.look_theme.empty()) {
+        app.pass_theme = theme_from_cosmetic(cosmetic);
+    }
+    app.look_cardback = find_cosmetic(cardback, cosmetic) && cosmetic.kind == CosmeticKind::CardBack ? cardback : "";
+    app.look_tokens = find_cosmetic(tokens, cosmetic) && cosmetic.kind == CosmeticKind::Tokens ? tokens : "";
+    {
+        std::ofstream file(LOOK_FILE);
+        file << app.look_theme << "\n" << app.look_cardback << "\n" << app.look_tokens << "\n";
+    }
+#ifdef __EMSCRIPTEN__
+    web_save_files();
+#endif
+}
+
+// Objets portés envoyés par le serveur ({"frame": code, ...})
+static Look look_from_json(const nlohmann::json& body)
+{
+    Look look;
+    if (body.is_object()) {
+        look.frame = body.value("frame", std::string());
+        look.title = body.value("title", std::string());
+        look.avatar = body.value("avatar", std::string());
+    }
+    return look;
+}
+
+// Tout ce que je porte, d'après la liste du serveur (GET /me/pass, POST /me/equip)
+static void apply_equipped(App& app, const nlohmann::json& equipped)
+{
+    app.online.look = look_from_json(equipped);
+    if (equipped.is_object()) {
+        set_local_look(app, equipped.value("theme", std::string()), equipped.value("cardback", std::string()),
+                       equipped.value("tokens", std::string()));
+    }
+}
+
 static void press_menu_button(App& app, const Button& button)
 {
     Setup& setup = app.setup;
@@ -401,7 +444,15 @@ static void press_menu_button(App& app, const Button& button)
         app.screen = Screen::Rules;
         break;
     case ButtonId::NextTheme:
-        set_theme(app, (app.theme + 1) % THEME_COUNT);
+        // Thème du passe porté : on revient d'abord aux thèmes de base
+        if (!app.look_theme.empty()) {
+            set_local_look(app, "", app.look_cardback, app.look_tokens);
+            if (!app.online.pseudo.empty()) {
+                app.net.send(TagEquip, "POST", "/me/equip", nlohmann::json({{"kind", "theme"}, {"code", ""}}).dump());
+            }
+        } else {
+            set_theme(app, (app.theme + 1) % THEME_COUNT);
+        }
         break;
     case ButtonId::Mode:
         setup.mode = button.value == 1 ? Mode::Classic : Mode::Quick;
@@ -609,13 +660,30 @@ static void apply_game_state(App& app, const nlohmann::json& body)
     online.game_kind = body.value("kind", std::string("friendly"));
     online.replay_id = body.value("replay_id", 0);
     online.new_achievements.clear();
+    // Passe de saison : ce que la partie m'a rapporté (à la fin)
+    online.gain_xp = -1;
+    online.gain_unlocked.clear();
+    if (body.contains("pass") && body["pass"].is_object()) {
+        const nlohmann::json& gain = body["pass"];
+        online.gain_xp = gain.value("xp", 0);
+        online.gain_tier_before = gain.value("tier_before", 0);
+        online.gain_tier_after = gain.value("tier_after", 0);
+        online.gain_unlocked = gain.value("unlocked", std::vector<std::string>());
+        for (const std::string& code : online.gain_unlocked) {
+            if (std::find(online.owned.begin(), online.owned.end(), code) == online.owned.end()) {
+                online.owned.push_back(code);
+            }
+        }
+    }
     if (body.contains("achievements") && body["achievements"].is_array() && online.my_seat >= 0
         && online.my_seat < static_cast<int>(body["achievements"].size())) {
         online.new_achievements = body["achievements"][online.my_seat].get<std::vector<std::string>>();
     }
     online.seat_elos.clear();
+    online.seat_looks.clear();
     for (const nlohmann::json& seat : body["seats"]) {
         online.seat_elos.push_back(seat.value("elo", 1000));
+        online.seat_looks.push_back(look_from_json(seat.value("look", nlohmann::json::object())));
     }
     std::vector<std::string> log = body.value("log", std::vector<std::string>());
     std::vector<std::string> log_fr = body.value("log_fr", std::vector<std::string>());
@@ -810,6 +878,8 @@ static void handle_responses(App& app)
             break;
         case TagMe:
             if (ok) {
+                online.look = look_from_json(body.value("look", nlohmann::json::object()));
+                app.net.send(TagPass, "GET", "/me/pass");  // objets gagnés et portés
                 online.account = body.value("id", 0);
                 online.pseudo = body.value("pseudo", std::string());
                 online.elo = body.value("elo", 1000);
@@ -897,6 +967,31 @@ static void handle_responses(App& app)
 #endif
             } else {
                 online.login_id.clear();
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagPass:
+            if (ok) {
+                online.pass_loaded = true;
+                online.pass_season = body.value("season", 0);
+                online.pass_xp = body.value("xp", 0);
+                online.owned = body.value("owned", std::vector<std::string>());
+                online.week_ends_at = body.value("week_ends_at", 0LL);
+                online.challenges.clear();
+                for (const nlohmann::json& entry : body.value("challenges", nlohmann::json::array())) {
+                    online.challenges.push_back({entry.value("code", std::string()), entry.value("progress", 0),
+                                                 entry.value("target", 0), entry.value("xp", 0),
+                                                 entry.value("done", false)});
+                }
+                apply_equipped(app, body.value("equipped", nlohmann::json::object()));
+            } else if (app.screen == Screen::Pass) {
+                set_message(app, error_of(response, body, app), true);
+            }
+            break;
+        case TagEquip:
+            if (ok) {
+                apply_equipped(app, body.value("equipped", nlohmann::json::object()));
+            } else {
                 set_message(app, error_of(response, body, app), true);
             }
             break;
@@ -1042,9 +1137,11 @@ static void handle_responses(App& app)
             online.lobby_mode = body.value("mode", std::string());
             online.lobby_members.clear();
             online.lobby_elos.clear();
+            online.lobby_looks.clear();
             for (const nlohmann::json& member : body["members"]) {
                 online.lobby_members.push_back(member.value("pseudo", std::string()));
                 online.lobby_elos.push_back(member.value("elo", 1000));
+                online.lobby_looks.push_back(look_from_json(member.value("look", nlohmann::json::object())));
             }
             if (body.value("game_id", 0) > 0) {
                 enter_online_game(app, body.value("game_id", 0));
@@ -1281,11 +1378,32 @@ static void press_online_button(App& app, const Button& button)
     case ButtonId::LeaderboardTab:
         online.board_show_season = button.value == 1;
         break;
+    case ButtonId::ShowPass:
+        app.screen = Screen::Pass;
+        app.message.clear();
+        app.net.send(TagPass, "GET", "/me/pass");
+        break;
+    case ButtonId::ShowAppearance:
+        app.screen = Screen::Appearance;
+        app.message.clear();
+        break;
+    case ButtonId::AppearanceTab:
+        online.appearance_tab = std::max(0, std::min(button.value, APPEARANCE_TABS - 1));
+        break;
+    case ButtonId::EquipItem: {
+        // value -1 : apparence normale ; sinon le n-ième objet de la sorte affichée
+        CosmeticKind kind = static_cast<CosmeticKind>(online.appearance_tab);
+        std::vector<std::string> items = owned_items(online, kind);
+        std::string code = button.value >= 0 && button.value < static_cast<int>(items.size()) ? items[button.value] : "";
+        app.net.send(TagEquip, "POST", "/me/equip", nlohmann::json({{"kind", kind_code(kind)}, {"code", code}}).dump());
+        break;
+    }
     case ButtonId::Logout:
         app.net.send(TagLogout, "POST", "/auth/logout");
         save_session("");
         app.net.set_token("");
         online = OnlineState();
+        set_local_look(app, "", "", "");  // les objets du passe sont ceux du compte
         configure_network(app);
         app.screen = Screen::Home;
         set_message(app, "You are signed out.", false);
@@ -1386,6 +1504,14 @@ static void press_chat_button(App& app, const Button& button)
     case ButtonId::ChatReaction:
         send_chat(app, "", button.value);
         break;
+    case ButtonId::ChatPassReaction: {
+        std::vector<std::string> reactions = owned_items(online, CosmeticKind::Reaction);
+        if (button.value >= 0 && button.value < static_cast<int>(reactions.size())) {
+            app.net.send(TagChat, "POST", "/games/" + std::to_string(online.game_id) + "/chat",
+                         nlohmann::json({{"reaction_code", reactions[button.value]}}).dump());
+        }
+        break;
+    }
     case ButtonId::ChatMute:
         if (button.value >= 0 && button.value < 4) {
             online.muted[button.value] = !online.muted[button.value];
@@ -2045,7 +2171,7 @@ static void draw_frame(void* data)
     update(app, mouse);
 
     BeginDrawing();
-    ClearBackground(THEMES[app.theme].background);
+    ClearBackground(current_theme(app).background);
     BeginMode2D(camera);
     draw_app(app, mouse);
     EndMode2D();
@@ -2087,6 +2213,21 @@ int main()
     std::string saved_theme = read_first_line(THEME_FILE);
     if (saved_theme.size() == 1 && saved_theme[0] >= '0' && saved_theme[0] < '0' + THEME_COUNT) {
         app.theme = saved_theme[0] - '0';
+    }
+    // Objets du passe portés la dernière fois (thème, dos de cartes, jetons)
+    {
+        std::ifstream file(LOOK_FILE);
+        std::string theme, cardback, tokens;
+        std::getline(file, theme);
+        std::getline(file, cardback);
+        std::getline(file, tokens);
+        Cosmetic cosmetic;
+        app.look_theme = find_cosmetic(theme, cosmetic) && cosmetic.kind == CosmeticKind::Theme ? theme : "";
+        if (!app.look_theme.empty()) {
+            app.pass_theme = theme_from_cosmetic(cosmetic);
+        }
+        app.look_cardback = find_cosmetic(cardback, cosmetic) && cosmetic.kind == CosmeticKind::CardBack ? cardback : "";
+        app.look_tokens = find_cosmetic(tokens, cosmetic) && cosmetic.kind == CosmeticKind::Tokens ? tokens : "";
     }
     configure_network(app);
     app.screen_start = static_cast<long long>(std::time(nullptr));

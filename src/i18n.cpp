@@ -444,6 +444,25 @@ static const std::map<std::string, std::string>& french_table()
 
         // --- Recherche de partie
         {"Find an opponent", "Trouver un adversaire"},
+        // v4.2 : passe de saison
+        {"Season pass", "Passe de saison"},
+        {"Appearance", "Apparence"},
+        {"Equip", "Porter"},
+        {"Equipped", "Porté"},
+        {"Normal", "Normal"},
+        {"Season pass — Season {0}", "Passe de saison — saison {0}"},
+        {"Tier {0} / {1}", "Palier {0} / {1}"},
+        {"{0} / {1} XP to the next tier", "{0} / {1} XP jusqu'au palier suivant"},
+        {"Tier {0}", "Palier {0}"},
+        {"Challenges of the week · {0} day(s) left", "Défis de la semaine · encore {0} jour(s)"},
+        {"Done", "Fait"},
+        {"Seen by the other players in online games.", "Visible par les autres joueurs dans les parties en ligne."},
+        {"Only on your screen, online and offline.", "Seulement sur votre écran, en ligne et hors ligne."},
+        {"Earn items with the season pass by playing online.",
+         "Gagnez des objets avec le passe de saison en jouant en ligne."},
+        {"Season pass: +{0} XP", "Passe de saison : +{0} XP"},
+        {" · tier {0}!", " · palier {0} !"},
+        {" · new: {0}", " · nouveau : {0}"},
         // v4.1 : saisons, deux Elo, parties amicales, défis
         {"Ranked", "Classée"},
         {"Friendly game: no Elo change", "Partie amicale : l'Elo ne change pas"},
