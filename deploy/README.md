@@ -9,6 +9,7 @@ Ce dossier installe le **serveur** (`splendor-server`) et le **bot Discord**
 | `splendor.env.example` | modèle des réglages et secrets (copié dans `/etc/splendor/splendor.env`) |
 | `splendor-server.service` | service du serveur (durci : n'écrit que dans `/var/lib/splendor`) |
 | `splendor-bot.service` | service du bot (démarré seulement si son jeton est renseigné) |
+| `wifi-powersave-off.service` | Pi en Wi-Fi : coupe l'économie d'énergie du Wi-Fi à chaque démarrage (sinon le Pi peut devenir injoignable en local, SSH compris) ; installé seulement si `wlan0` existe |
 
 ## 1. Installer
 

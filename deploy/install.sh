@@ -84,6 +84,22 @@ else
     echo "Bot non démarré : renseignez DISCORD_BOT_TOKEN dans /etc/splendor/splendor.env puis relancez ce script."
 fi
 
+# Pi en Wi-Fi : économie d'énergie coupée (sinon il peut devenir injoignable
+# en local, SSH compris, tout en gardant Internet)
+if [ -e /sys/class/net/wlan0 ]; then
+    echo "== Wi-Fi : économie d'énergie coupée"
+    apt-get install -y -qq iw
+    install -m 644 deploy/wifi-powersave-off.service /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now wifi-powersave-off.service
+    systemctl restart wifi-powersave-off.service
+    # NetworkManager (s'il gère le Wi-Fi) la remettrait à chaque reconnexion
+    if [ -d /etc/NetworkManager/conf.d ]; then
+        printf '[connection]\nwifi.powersave = 2\n' > /etc/NetworkManager/conf.d/wifi-powersave-off.conf
+    fi
+    iw dev wlan0 get power_save || true
+fi
+
 echo "== État"
 systemctl --no-pager --lines=3 status splendor-server.service || true
 # Le serveur met un instant à ouvrir son port : quelques essais

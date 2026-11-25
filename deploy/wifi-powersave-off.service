@@ -1,0 +1,16 @@
+# Raspberry Pi en Wi-Fi : l'économie d'énergie du Wi-Fi peut rendre le Pi
+# injoignable sur le réseau local (SSH) alors qu'il garde Internet (le site
+# marche par le tunnel). Ce service la coupe à chaque démarrage.
+# Installé par deploy/install.sh seulement si l'interface wlan0 existe.
+[Unit]
+Description=Gemspire : Wi-Fi sans économie d'énergie (Pi joignable en local)
+After=network-online.target sys-subsystem-net-devices-wlan0.device
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/iw dev wlan0 set power_save off
+
+[Install]
+WantedBy=multi-user.target
