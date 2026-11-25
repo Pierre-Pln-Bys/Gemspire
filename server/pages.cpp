@@ -164,10 +164,9 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
     out << "<a class=\"lang\" href=\"" << href(current.empty() ? "/" : current, other) << "\" hreflang=\""
         << T(other, "en", "fr") << "\">" << T(lang, "Français", "English") << "</a>";
     out << "</nav></header><main>" << body << "</main><footer>"
-        << T(lang, "© 2026 Gemspire. All rights reserved. Student project (ENSEIRB-MATMECA), independent game, not "
-                   "affiliated with any board game publisher.",
-             "© 2026 Gemspire. Tous droits réservés. Projet étudiant (ENSEIRB-MATMECA), jeu indépendant, sans lien "
-             "avec un éditeur de jeux de société.")
+        << T(lang, "© 2026 Gemspire. All rights reserved. Independent game, not affiliated with any board game "
+                   "publisher.",
+             "© 2026 Gemspire. Tous droits réservés. Jeu indépendant, sans lien avec un éditeur de jeux de société.")
         << " · <a href=\"" << href("/terms", lang) << "\">" << T(lang, "Terms", "Conditions") << "</a> · <a href=\""
         << href("/privacy", lang) << "\">" << T(lang, "Privacy", "Confidentialité") << "</a>";
     if (!site.discord_invite.empty()) {
@@ -221,12 +220,12 @@ std::string page_home(const SiteInfo& site, Lang lang)
          << "<a class=\"button ghost\" href=\"" << href("/leaderboard", lang) << "\">"
          << T(lang, "See the leaderboard", "Voir le classement") << "</a></section>";
     body << "<section class=\"card\"><h2>" << T(lang, "What Gemspire is", "Qu'est-ce que Gemspire ?") << "</h2><p>"
-         << T(lang, "Gemspire is a free strategy board game for 2 to 4 players, made as a student project. You can play "
-                    "it <strong>without any account</strong>: download it or open it in your browser and play against "
-                    "the computer or with friends on the same screen.",
-              "Gemspire est un jeu de plateau de stratégie gratuit, de 2 à 4 joueurs, réalisé dans le cadre d'un projet "
-              "étudiant. On peut y jouer <strong>sans aucun compte</strong> : téléchargez-le ou ouvrez-le dans le "
-              "navigateur, et jouez contre l'ordinateur ou entre amis sur le même écran.")
+         << T(lang, "Gemspire is a free strategy board game for 2 to 4 players. You can play it <strong>without any "
+                    "account</strong>: download it or open it in your browser and play against the computer or with "
+                    "friends on the same screen.",
+              "Gemspire est un jeu de plateau de stratégie gratuit, de 2 à 4 joueurs. On peut y jouer <strong>sans "
+              "aucun compte</strong> : téléchargez-le ou ouvrez-le dans le navigateur, et jouez contre l'ordinateur "
+              "ou entre amis sur le même écran.")
          << "</p><p>"
          << T(lang, "An account is only needed to <strong>play online</strong> (games against other players, Elo "
                     "leaderboard, friends). You create it with <strong>Sign in with Google</strong> or with Discord: "
@@ -397,12 +396,12 @@ std::string page_terms(const SiteInfo& site, Lang lang)
     body << "<h1>" << T(lang, "Terms of use", "Conditions d'utilisation") << "</h1><p class=\"soft\">"
          << T(lang, "Last updated: November 25, 2026", "Dernière mise à jour : 25 novembre 2026")
          << "</p><div class=\"card\"><h2>" << T(lang, "1. The service", "1. Le service") << "</h2><p>"
-         << T(lang, "Gemspire is a free-to-play student project: a game (Windows, Linux, browser), an online game "
-                    "server, this website and a Discord bot. It is an independent project, not affiliated with any "
-                    "board game author or publisher.",
-              "Gemspire est un projet étudiant gratuit : un jeu (Windows, Linux, navigateur), un serveur de parties "
-              "en ligne, ce site et un bot Discord. C'est un projet indépendant, sans lien avec un auteur ou un "
-              "éditeur de jeux de société.")
+         << T(lang, "Gemspire is a free-to-play game: a game (Windows, Linux, browser), an online game server, this "
+                    "website and a Discord bot. It is an independent game, not affiliated with any board game author "
+                    "or publisher.",
+              "Gemspire est un jeu gratuit : un jeu (Windows, Linux, navigateur), un serveur de parties en ligne, ce "
+              "site et un bot Discord. C'est un jeu indépendant, sans lien avec un auteur ou un éditeur de jeux de "
+              "société.")
          << "</p><p>"
          << T(lang, "<strong>Intellectual property.</strong> The game, its source code, graphics, texts and this "
                     "website are protected by copyright: © 2026 Gemspire, all rights reserved. You may download "
@@ -466,11 +465,11 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
 
          << "<h2>" << T(lang, "1. Who we are", "1. Qui sommes-nous") << "</h2><p>"
          << T(lang, "Gemspire (the game, the website gemspire.epsilon-forge.fr, the online game server and the "
-                    "Discord bot) is a free student project developed at ENSEIRB-MATMECA (Bordeaux, France). It is "
-                    "responsible for the data described here. Contact: ",
+                    "Discord bot) is a free, independent game developed in France. It is responsible for the data "
+                    "described here. Contact: ",
               "Gemspire (le jeu, le site gemspire.epsilon-forge.fr, le serveur de jeu en ligne et le bot Discord) "
-              "est un projet étudiant gratuit développé à l'ENSEIRB-MATMECA (Bordeaux, France). Il est responsable "
-              "des données décrites ici. Contact : ")
+              "est un jeu gratuit et indépendant développé en France. Il est responsable des données décrites ici. "
+              "Contact : ")
          << contact_html(site, lang) << ".</p><p>"
          << T(lang, "Playing offline (against the computer or on the same screen) requires no account and sends "
                     "nothing to our server. This policy only concerns online play, the website and the Discord bot.",
