@@ -4,6 +4,27 @@ All notable changes to the project. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [SemVer](https://semver.org/). Until 3.5, the game was called Splendor.
 
+## [Unreleased]
+
+### Added
+- **Automatic seasons**: a season lasts two months and changes by itself on
+  January 1, March 1, May 1, July 1, September 1 and November 1 at midnight
+  (Paris time). The end of each season is announced on Discord.
+- **Two Elo ratings**: the **global Elo** (never reset) and the **season Elo**
+  (back to 1000 at the start of each season).
+- **Two matchmaking queues**: **Ranked** (matched on the global Elo, changes
+  it) and **Season** (matched on the season Elo, changes it).
+- **Season leaderboard**: at least 10 season games to be ranked; the top 10
+  earn a badge. The leaderboard (game, site, Discord) shows the season and the
+  global ranking.
+- **Challenge a friend**: a "Challenge" button in the friends list creates a
+  friendly 2-player lobby; your friend gets a notification with the code.
+
+### Changed
+- Games in a private lobby (code, Discord voice channel, Activity,
+  `/challenge`) are now **friendly**: no Elo change.
+- The end of a season no longer brings the global Elo halfway back to 1000.
+
 ## [4.0.0] - 2026-11-25
 
 ### Changed

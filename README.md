@@ -103,25 +103,32 @@ Depuis l'accueil, « Jouer en ligne » :
    **pseudo** unique.
 2. **Créer un salon** (mode, 2 à 4 joueurs) : un code de 5 lettres s'affiche,
    à donner à ses amis (bouton « Copier le code »). Ou **rejoindre** avec un
-   code.
+   code. Les parties en salon (et les défis entre amis) sont **amicales** :
+   l'Elo ne change pas.
 3. L'hôte lance la partie. Le serveur arbitre chaque coup ; chacun ne voit
    que ses propres cartes réservées.
 4. Chaque tour dure au plus **2 minutes** (temps affiché en haut à gauche) ;
    ensuite le tour passe. **3 tours manqués d'affilée** ou le bouton
-   « Abandonner » (deux clics) : le joueur est classé dernier et perd de l'Elo,
-   les autres continuent.
-5. En fin de partie, l'**Elo** de chaque joueur change ; le **classement**
-   est visible depuis le menu en ligne et sur
+   « Abandonner » (deux clics) : le joueur est classé dernier (il perd de
+   l'Elo dans une partie classée), les autres continuent.
+5. **Trouver un adversaire** (partie à 2, Elo proche), deux files :
+   - **Classée** : change l'**Elo global**, jamais remis à zéro ;
+   - **Saison** : change l'**Elo de saison**, qui repart à 1000 à chaque
+     saison. Une saison dure deux mois et change toute seule le 1er janvier,
+     mars, mai, juillet, septembre et novembre à minuit (heure de Paris). Il
+     faut 10 parties de saison pour être classé ; le top 10 gagne un badge.
+
+   Les deux **classements** (onglets Saison et Global) sont visibles depuis le
+   menu en ligne et sur
    [gemspire.epsilon-forge.fr/classement](https://gemspire.epsilon-forge.fr/classement).
 6. **Chat** pendant la partie (bouton « Chat ») : messages courts, réactions
    rapides, sourdine d'un joueur. **Amis** (menu en ligne) : ajout par
-   pseudo, statut en ligne / en partie. **Succès** : 11 à débloquer, liste
-   dans le menu en ligne.
+   pseudo, statut en ligne / en partie, **Défier** un ami connecté (partie
+   amicale à 2). **Succès** : 11 à débloquer, liste dans le menu en ligne.
 7. **Lier Google / Discord** (menu en ligne) : ajoute l'autre mode de
    connexion au même compte (même pseudo, même Elo).
-8. **Compétition** : « Trouver un adversaire » (Elo proche), « En cours »
-   pour regarder une partie, « Mes parties » pour revoir les siennes coup par
-   coup, saisons classées avec badges pour le top 10.
+8. **Spectateurs et rediffusions** : « En cours » pour regarder une partie,
+   « Mes parties » pour revoir les siennes coup par coup.
 
 **Discord** :
 
@@ -134,8 +141,10 @@ Depuis l'accueil, « Jouer en ligne » :
   crée un salon vocal temporaire ; si Gemspire est ouvert (connecté avec
   Discord), le jeu propose de créer la partie, et le salon vocal est limité au
   nombre de places.
-- **Bot** : `/challenge @membre` crée un salon à 2 places et prévient le
-  membre défié ; rôles de rang selon l'Elo (Pearl, Ruby, Sapphire, Emerald,
+- **Bot** : `/challenge @membre` crée un salon à 2 places (partie amicale) et
+  prévient le membre défié ; le salon du classement montre le top 10 de la
+  saison et le top 10 global, et annonce chaque fin de saison ; rôles de rang
+  selon l'Elo global (Pearl, Ruby, Sapphire, Emerald,
   Diamond). Les administrateurs ont `/dev` (état du serveur, inscriptions,
   pause des parties, annonce, gestion d'un joueur) et le panel web
   `/panel-admin` (voir [server/README.md](server/README.md)).
