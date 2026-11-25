@@ -27,7 +27,10 @@ std::string html_escape(const std::string& text);
 
 std::string page_home(const SiteInfo& site, Lang lang);
 // `season` : numéro de la saison classée en cours
-std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players, int season);
+// Classement : celui de la saison en cours (Elo de saison, au moins
+// SEASON_MIN_GAMES parties) puis le classement global
+std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players,
+                             const std::vector<Account>& season_players, const SeasonInfo& season);
 std::string page_terms(const SiteInfo& site, Lang lang);
 std::string page_privacy(const SiteInfo& site, Lang lang);
 std::string page_not_found(const SiteInfo& site, Lang lang);

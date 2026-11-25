@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -63,8 +64,27 @@ static std::string login(httplib::Client& client, const std::string& name, const
     return poll["token"];
 }
 
+// Calendrier des saisons : minuit à Paris le 1er janvier, mars, mai, juillet,
+// septembre et novembre (heure d'hiver ou d'été), strictement après `now`
+static void test_season_calendar()
+{
+    assert(next_season_change(1795561200) == 1798758000);  // 25/11/2026 -> 1/1/2027 (23 h UTC)
+    assert(next_season_change(1803852000) == 1803855600);  // 28/2/2027 23 h -> 1/3/2027
+    assert(next_season_change(1809118800) == 1809122400);  // 30/4/2027 23 h -> 1/5/2027 (22 h UTC, été)
+    assert(next_season_change(1809122400) == 1814392800);  // pile au changement -> le suivant (1/7)
+    assert(next_season_change(1851368400) == 1851372000);  // 31/8/2028 -> 1/9/2028
+    assert(next_season_change(1825020000) == 1825023600);  // 31/10/2027 23 h -> 1/11/2027 (hiver)
+    assert(next_season_change(1830290400) == 1830294000);  // 31/12/2027 23 h -> 1/1/2028
+    // Toujours deux mois au plus
+    for (long long now = 1795561200; now < 1795561200 + 3LL * 365 * 86400; now += 86400 * 7) {
+        long long change = next_season_change(now);
+        assert(change > now && change - now <= 62LL * 86400);
+    }
+}
+
 int main()
 {
+    test_season_calendar();
     std::remove("tests/test_server.db");
     ServerConfig config;
     config.port = PORT;
@@ -261,7 +281,19 @@ int main()
         assert(mine.size() == 1 && mine[0]["relation"] == "friend" && mine[0]["pseudo"] == "Bébert");
         assert(mine[0]["status"] == "online");                                       // il vient de jouer une requête
     }
+    // Défi amical : salon de 2 créé, l'ami reçoit une notification avec le code
+    {
+        long before = get(client, "/me/notifications", bob)["last"];
+        std::string duel = post(client, "/friends/challenge", alice, {{"pseudo", "bébert"}, {"mode", "rapide"}})["code"];
+        assert(duel.size() == 5 && get(client, "/lobbies/" + duel, alice)["members"].size() == 1);
+        json notes = get(client, "/me/notifications?since=" + std::to_string(before), bob)["notifications"];
+        assert(notes.size() == 1 && notes[0]["type"] == "challenge" && notes[0]["code"] == duel
+               && notes[0]["from"] == "Alice");
+        post(client, "/friends/challenge", alice, {{"pseudo", "personne"}}, 404);
+        post(client, "/lobbies/" + duel + "/leave", alice, json::object());
+    }
     post(client, "/friends/remove", bob, {{"pseudo", "Alice"}});
+    post(client, "/friends/challenge", alice, {{"pseudo", "bébert"}}, 404);  // plus amis
     assert(get(client, "/friends", alice)["friends"].empty());
 
     // --- Activité Discord : la même instance donne le même salon (4 places)
@@ -347,15 +379,9 @@ int main()
     }
     json final_state = get(client, path, alice);
     assert(final_state["over"] == true);
+    // Partie de salon : amicale, aucun Elo ne change
     std::vector<int> changes = final_state["elo_changes"];
-    assert(changes.size() == 2 && changes[0] + changes[1] >= -1 && changes[0] + changes[1] <= 1);
-    // Elo modifié, sauf égalité parfaite (même place pour les deux)
-    {
-        std::unique_ptr<Game> ended;
-        assert(load_game(final_state["save"], ended).empty());
-        std::vector<int> ended_places = final_places(*ended);
-        assert((ended_places[0] == ended_places[1]) == (changes[0] == 0));
-    }
+    assert(final_state["kind"] == "friendly" && changes.size() == 2 && changes[0] == 0 && changes[1] == 0);
     post(client, path + "/move", alice, {{"type", "take"}, {"tokens", {1, 1, 1, 0, 0}}}, 400);  // terminée
     // Rediffusion : rejouer les actions enregistrées redonne exactement la même fin
     {
@@ -387,11 +413,13 @@ int main()
                != finished["achievements"][0].end());
     }
 
+    // Pas encore de partie classée : classements vides ; la partie amicale compte
+    // quand même dans les parties jouées
     json leaderboard = get(client, "/leaderboard", "");
-    assert(leaderboard["players"].size() == 2);
-    assert(leaderboard["players"][0]["games"] == 1);
-    int elo_alice = get(client, "/me", alice)["elo"];
-    assert(elo_alice == 1000 + changes[0]);
+    assert(leaderboard["players"].empty() && leaderboard["season_players"].empty());
+    assert(leaderboard["season_min_games"] == SEASON_MIN_GAMES && leaderboard["season_ends_at"] > 0);
+    json me_after = get(client, "/me", alice);
+    assert(me_after["elo"] == 1000 && me_after["games"] == 1 && me_after["rank"] == 0);
 
     // --- Temps écoulé et abandon : 3 tours manqués d'affilée = forfait
     {
@@ -416,7 +444,7 @@ int main()
         view = get(client, timed_path, alice);
         assert(view["over"] == true && view["missed"][0] == 3 && view["missed"][1] == 1);
         std::vector<int> timed_changes = view["elo_changes"];
-        assert(timed_changes[0] < 0 && timed_changes[1] > 0);
+        assert(timed_changes[0] == 0 && timed_changes[1] == 0);  // amicale
 
         // Abandon volontaire
         std::string quit = post(client, "/lobbies", alice, {{"mode", "classique"}, {"seats", 2}})["code"];
@@ -428,7 +456,7 @@ int main()
         json quit_view = get(client, quit_path, alice);
         assert(quit_view["over"] == true);
         std::vector<int> quit_changes = quit_view["elo_changes"];
-        assert(quit_changes[0] > 0 && quit_changes[1] < 0);
+        assert(quit_changes[0] == 0 && quit_changes[1] == 0);  // amicale
         post(client, quit_path + "/forfeit", alice, json::object(), 400);  // déjà finie
     }
 
@@ -456,38 +484,105 @@ int main()
         assert(count > 0);
     }
 
-    // --- Recherche de partie : deux joueurs du même mode, d'Elo proche, partie lancée
+    // --- Recherche de partie : deux joueurs du même mode et de la même file,
+    //     d'Elo proche, partie lancée. File « Classé » : Elo global seulement.
+    auto queue_game = [&](const std::string& kind, bool bob_loses = true) {
+        post(client, "/matchmaking/join", alice, {{"mode", "rapide"}, {"kind", kind}});
+        json matched = post(client, "/matchmaking/join", bob, {{"mode", "rapide"}, {"kind", kind}});
+        assert(matched["status"] == "matched");
+        assert(get(client, "/matchmaking", alice)["game_id"] == matched["game_id"]);
+        std::string match_path = "/games/" + std::to_string(matched["game_id"].get<int>());
+        post(client, match_path + "/forfeit", bob_loses ? bob : alice, json::object());  // abandon : l'autre gagne
+        return get(client, match_path, alice);
+    };
     {
         assert(get(client, "/matchmaking", alice)["status"] == "idle");
         json waiting = post(client, "/matchmaking/join", alice, {{"mode", "rapide"}});
-        assert(waiting["status"] == "waiting");
+        assert(waiting["status"] == "waiting" && waiting["kind"] == "ranked");
         post(client, "/matchmaking/leave", alice, json::object());
         assert(get(client, "/matchmaking", alice)["status"] == "idle");
+        post(client, "/matchmaking/join", alice, {{"mode", "rapide"}, {"kind", "friendly"}}, 400);  // pas de file amicale
+        post(client, "/matchmaking/join", alice, {{"mode", "rapide"}, {"kind", 3}}, 400);
         post(client, "/matchmaking/join", alice, {{"mode", "rapide"}});
         assert(post(client, "/matchmaking/join", bob, {{"mode", "classique"}})["status"] == "waiting");  // autre mode
+        assert(post(client, "/matchmaking/join", bob, {{"mode", "rapide"}, {"kind", "season"}})["status"]
+               == "waiting");                                                                          // autre file
         json matched = post(client, "/matchmaking/join", bob, {{"mode", "rapide"}});
         assert(matched["status"] == "matched");
         json found = get(client, "/matchmaking", alice);
         assert(found["status"] == "matched" && found["game_id"] == matched["game_id"]);
         std::string match_path = "/games/" + std::to_string(found["game_id"].get<int>());
-        assert(get(client, match_path, alice)["your_seat"] >= 0);
+        assert(get(client, match_path, alice)["your_seat"] >= 0 && get(client, match_path, alice)["kind"] == "ranked");
         post(client, match_path + "/forfeit", bob, json::object());  // on la termine
+        json ranked_end = get(client, match_path, alice);
+        std::vector<int> ranked_changes = ranked_end["elo_changes"];
+        assert(ranked_changes[0] > 0 && ranked_changes[1] < 0);
+        json me = get(client, "/me", alice);
+        assert(me["elo"] == 1000 + ranked_changes[0] && me["season_elo"] == 1000 && me["rank"] == 1);
+        json board = get(client, "/leaderboard", "");
+        assert(board["players"].size() == 2 && board["players"][0]["pseudo"] == "Alice"
+               && board["players"][0]["games"] == 1);
     }
 
-    // --- Saisons : fin de saison par le bot, badges, Elo rapprochés de 1000
+    // --- File « Saison » : seul l'Elo de saison change ; classement de la
+    //     saison à partir de SEASON_MIN_GAMES parties
+    int global_alice = get(client, "/me", alice)["elo"];
+    {
+        json first = queue_game("season");
+        std::vector<int> season_changes = first["elo_changes"];
+        assert(first["kind"] == "season" && season_changes[0] > 0 && season_changes[1] < 0);
+        json me = get(client, "/me", alice);
+        assert(me["elo"] == global_alice && me["season_elo"] == 1000 + season_changes[0]);
+        assert(me["season_games"] == 1 && me["season_rank"] == 0);  // pas encore 10 parties
+        assert(get(client, "/leaderboard", "")["season_players"].empty());
+        // Gagnants alternés (sinon l'écart d'Elo empêche de se retrouver) ;
+        // Alice finit devant (6 victoires sur 10)
+        for (int i = 1; i < SEASON_MIN_GAMES; i++) {
+            queue_game("season", i % 2 == 1);
+        }
+        me = get(client, "/me", alice);
+        assert(me["season_games"] == SEASON_MIN_GAMES && me["season_rank"] == 1 && me["elo"] == global_alice);
+        json board = get(client, "/leaderboard", "");
+        assert(board["season_players"].size() == 2 && board["season_players"][0]["pseudo"] == "Alice"
+               && board["season_players"][0]["elo"] == me["season_elo"]);
+    }
+
+    // --- Saisons : fin de saison (ici par le bot ; sinon automatique au
+    //     calendrier), badges, Elo de saison remis à 1000, Elo global intact
     {
         assert(get(client, "/me", alice)["season"] == 1);
-        int alice_elo = get(client, "/me", alice)["elo"];
+        int alice_season_elo = get(client, "/me", alice)["season_elo"];
         httplib::Headers season_bot = {{"X-Bot-Key", "cle-de-test-du-bot"}};
         auto ended = client.Post("/bot/season/end", season_bot, "{}", "application/json");
         assert(ended && ended->status == 200);
         json result = json::parse(ended->body);
-        assert(result["ended"] == 1 && result["season"] == 2 && !result["top"].empty());
+        assert(result["ended"] == 1 && result["season"] == 2 && result["top"].size() == 2);
+        assert(result["top"][0]["pseudo"] == "Alice" && result["top"][0]["elo"] == alice_season_elo);
+        assert(result["ends_at"].get<long long>() > static_cast<long long>(std::time(nullptr)));
         json me = get(client, "/me", alice);
-        assert(me["season"] == 2 && me["elo"] == 1000 + (alice_elo - 1000) / 2);
-        assert(!me["badges"].empty() && me["badges"][0]["season"] == 1);
+        assert(me["season"] == 2 && me["elo"] == global_alice && me["season_elo"] == 1000 && me["season_games"] == 0);
+        assert(!me["badges"].empty() && me["badges"][0]["season"] == 1 && me["badges"][0]["rank"] == 1);
+        assert(get(client, "/leaderboard", "")["season_players"].empty());
+        // Page du site : classement de la saison puis classement global
+        auto page = client.Get("/leaderboard", {{"Accept", "text/html"}});
+        assert(page && page->body.find("Season 2") != std::string::npos
+               && page->body.find("Global ranking") != std::string::npos
+               && page->body.find("Alice") != std::string::npos);
+        auto page_fr = client.Get("/classement?lang=fr");
+        assert(page_fr && page_fr->body.find("Classement global") != std::string::npos
+               && page_fr->body.find("1er ") != std::string::npos);  // « se termine le 1er ... »
+        // Le bot reçoit l'événement « season_end » pour l'annoncer
+        auto events = client.Get("/bot/events?since=0", season_bot);
+        bool announced = false;
+        json event_list = json::parse(events->body)["events"];
+        for (const json& event : event_list) {
+            announced = announced || (event.value("type", std::string()) == "season_end" && event["ended"] == 1);
+        }
+        assert(announced);
         auto refused_season = client.Post("/bot/season/end", "{}", "application/json");
         assert(refused_season && refused_season->status == 403);
+        // Une partie classée de plus (la dernière de l'historique, annulée plus bas)
+        queue_game("ranked");
     }
 
     // --- Discord : présence, proposition du bot, salon lié au vocal
@@ -547,10 +642,9 @@ int main()
         assert(bot_get("/bot/profile?pseudo=personne")["found"] == false);
         assert(bot_get("/bot/profile?discord_id=123456")["pseudo"] == "Carole");
 
-        // Historique : 4 parties pour Alice (dont celle de la recherche de partie),
-        // avec les pseudos des joueurs
+        // Historique : les dernières parties d'Alice, avec les pseudos des joueurs
         json history = bot_get("/bot/history?pseudo=Alice");
-        assert(history["games_list"].size() == 4);
+        assert(history["games_list"].size() >= 4);
         json last_game = history["games_list"][0];
         assert(last_game["players"].size() == 2);
         int elo_before_cancel = bot_get("/bot/profile?pseudo=Alice")["elo"];
@@ -658,6 +752,7 @@ int main()
         for (const json& notification : notifications["notifications"]) {
             announced = announced || notification["type"] == "announcement";
         }
+        if (!announced) { std::cerr << events->status << " " << events->body << "\n"; }
         assert(announced);
 
         // Gestion d'un compte

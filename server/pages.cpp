@@ -247,33 +247,97 @@ std::string page_home(const SiteInfo& site, Lang lang)
     return layout(site, lang, T(lang, "Home", "Accueil"), "/", body.str());
 }
 
-std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players, int season)
+// Date (jour, mois, année) d'un instant donné en temps UTC, sans fonction du
+// système (algorithme classique « civil from days »)
+static void civil_date(long long seconds, int& year, int& month, int& day)
+{
+    long long days = (seconds >= 0 ? seconds : seconds - 86399) / 86400 + 719468;
+    long long era = (days >= 0 ? days : days - 146096) / 146097;
+    long long day_of_era = days - era * 146097;
+    long long year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    long long day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    long long mp = (5 * day_of_year + 2) / 153;
+    day = static_cast<int>(day_of_year - (153 * mp + 2) / 5 + 1);
+    month = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+    year = static_cast<int>(year_of_era + era * 400 + (month <= 2 ? 1 : 0));
+}
+
+// Fin d'une saison en toutes lettres : « January 1, 2027 » / « 1er janvier 2027 »
+// (le changement a lieu à minuit à Paris : 22 h ou 23 h UTC la veille)
+static std::string season_end_text(Lang lang, long long ends_at)
+{
+    int year = 0;
+    int month = 1;
+    int day = 1;
+    civil_date(ends_at + 3 * 3600, year, month, day);
+    const char* months_en[12] = {"January", "February", "March",     "April",   "May",      "June",
+                                 "July",    "August",   "September", "October", "November", "December"};
+    const char* months_fr[12] = {"janvier", "février", "mars",      "avril",   "mai",      "juin",
+                                 "juillet", "août",    "septembre", "octobre", "novembre", "décembre"};
+    if (lang == Lang::French) {
+        return (day == 1 ? std::string("1er") : std::to_string(day)) + " " + months_fr[month - 1] + " "
+               + std::to_string(year);
+    }
+    return std::string(months_en[month - 1]) + " " + std::to_string(day) + ", " + std::to_string(year);
+}
+
+// Un tableau de classement ; `season` : colonnes de la saison (Elo, parties, victoires de saison)
+static void ranking_table(std::ostringstream& body, Lang lang, const std::vector<Account>& players, bool season)
+{
+    body << "<table><thead><tr><th>#</th><th>" << T(lang, "Player", "Joueur") << "</th><th class=\"num\">Elo</th>"
+         << "<th class=\"num hide-small\">" << T(lang, "Games", "Parties") << "</th><th class=\"num\">"
+         << T(lang, "Wins", "Victoires") << "</th></tr></thead><tbody>";
+    const char* medals[] = {"🥇", "🥈", "🥉"};
+    for (size_t i = 0; i < players.size(); i++) {
+        const Account& player = players[i];
+        int elo = season ? player.season_elo : player.elo;
+        int games = season ? player.season_games : player.ranked_games;
+        int wins = season ? player.season_wins : player.ranked_wins;
+        int rate = games > 0 ? wins * 100 / games : 0;
+        body << "<tr" << (i < 3 ? " class=\"top\"" : "") << "><td>" << (i < 3 ? medals[i] : std::to_string(i + 1))
+             << "</td><td>" << html_escape(player.pseudo) << "</td><td class=\"num\"><strong>" << elo
+             << "</strong></td><td class=\"num hide-small\">" << games << "</td><td class=\"num\">" << wins
+             << " <span class=\"soft\">(" << rate << T(lang, "%", " %") << ")</span></td></tr>";
+    }
+    body << "</tbody></table>";
+}
+
+std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<Account>& players,
+                             const std::vector<Account>& season_players, const SeasonInfo& season)
 {
     std::ostringstream body;
-    body << "<h1>" << T(lang, "Leaderboard", "Classement") << "</h1><p class=\"soft\">"
-         << T(lang, "Season ", "Saison ") << season << " · "
-         << T(lang, "Elo ranking of online games (updated after every finished game).",
-              "Classement Elo des parties en ligne (mis à jour à chaque partie terminée).")
+    body << "<h1>" << T(lang, "Leaderboard", "Classement") << "</h1>";
+    // Saison en cours : file « Saison » de la recherche de partie
+    body << "<h2>" << T(lang, "Season ", "Saison ") << season.number << "</h2><p class=\"soft\">"
+         << T(lang, "Season games (matchmaking, Season queue). Everyone starts the season at 1000 Elo; at least ",
+              "Parties de saison (recherche de partie, file Saison). Tout le monde commence la saison à 1000 Elo ; ")
+         << SEASON_MIN_GAMES
+         << T(lang, " games to be ranked. The season ends on ", " parties minimum pour être classé. La saison se termine le ")
+         << season_end_text(lang, season.ends_at)
+         << T(lang, ": the top 10 earn a badge.", " : les 10 premiers gagnent un badge.") << "</p><div class=\"card\">";
+    if (season_players.empty()) {
+        body << "<p>"
+             << T(lang, "Nobody is ranked yet this season. Play season games to get in!",
+                  "Personne n'est encore classé cette saison. Jouez des parties de saison pour y entrer !")
+             << "</p>";
+    } else {
+        ranking_table(body, lang, season_players, true);
+    }
+    body << "</div>";
+    // Classement global : file « Classé », jamais remis à zéro
+    body << "<h2>" << T(lang, "Global ranking", "Classement global") << "</h2><p class=\"soft\">"
+         << T(lang, "Ranked games (matchmaking, Ranked queue). This Elo is never reset. Games in a private lobby are "
+                    "friendly and do not count.",
+              "Parties classées (recherche de partie, file Classé). Cet Elo n'est jamais remis à zéro. Les parties "
+              "en salon privé sont amicales et ne comptent pas.")
          << "</p><div class=\"card\">";
     if (players.empty()) {
         body << "<p>"
-             << T(lang, "Nobody has finished an online game yet. Be the first!",
-                  "Personne n'a encore terminé de partie en ligne. Soyez le premier !")
+             << T(lang, "Nobody has finished a ranked game yet. Be the first!",
+                  "Personne n'a encore terminé de partie classée. Soyez le premier !")
              << "</p>";
     } else {
-        body << "<table><thead><tr><th>#</th><th>" << T(lang, "Player", "Joueur") << "</th><th class=\"num\">Elo</th>"
-             << "<th class=\"num hide-small\">" << T(lang, "Games", "Parties") << "</th><th class=\"num\">"
-             << T(lang, "Wins", "Victoires") << "</th></tr></thead><tbody>";
-        const char* medals[] = {"🥇", "🥈", "🥉"};
-        for (size_t i = 0; i < players.size(); i++) {
-            const Account& player = players[i];
-            int rate = player.games > 0 ? player.wins * 100 / player.games : 0;
-            body << "<tr" << (i < 3 ? " class=\"top\"" : "") << "><td>" << (i < 3 ? medals[i] : std::to_string(i + 1))
-                 << "</td><td>" << html_escape(player.pseudo) << "</td><td class=\"num\"><strong>" << player.elo
-                 << "</strong></td><td class=\"num hide-small\">" << player.games << "</td><td class=\"num\">"
-                 << player.wins << " <span class=\"soft\">(" << rate << T(lang, "%", " %") << ")</span></td></tr>";
-        }
-        body << "</tbody></table>";
+        ranking_table(body, lang, players, false);
     }
     body << "</div>";
     return layout(site, lang, T(lang, "Leaderboard", "Classement"), "/leaderboard", body.str());

@@ -231,7 +231,7 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
         if (lobby.members.size() < 2) {
             return "At least 2 players are needed.";
         }
-        game_id = new_game(lobby.members, lobby.mode);
+        game_id = new_game(lobby.members, lobby.mode, GameKind::Friendly);  // salons : toujours amicale
         lobby.game_id = game_id;
         lobby.version++;
         lobby_changed(lobby, false);
@@ -240,7 +240,19 @@ std::string Rooms::start_lobby(const std::string& code, int account, int& game_i
     return "";
 }
 
-int Rooms::new_game(const std::vector<Seat>& seats, Mode mode)
+// Elo d'un joueur qui compte pour ce type de partie (Elo global pour une amicale :
+// seulement affiché)
+static int rating(const Seat& seat, GameKind kind)
+{
+    return kind == GameKind::Season ? seat.season_elo : seat.elo;
+}
+
+static int rating(const Account& account, GameKind kind)
+{
+    return kind == GameKind::Season ? account.season_elo : account.elo;
+}
+
+int Rooms::new_game(const std::vector<Seat>& seats, Mode mode, GameKind kind)
 {
     std::vector<std::string> names;
     for (const Seat& seat : seats) {
@@ -251,6 +263,7 @@ int Rooms::new_game(const std::vector<Seat>& seats, Mode mode)
     online.seed = random_();
     online.game.reset(new Game(names, online.seed, mode));
     online.seats = seats;
+    online.kind = kind;
     online.missed.assign(seats.size(), 0);
     online.turn_start = now_seconds();
     return next_game_++;
@@ -281,10 +294,11 @@ void Rooms::try_match()
         int best_gap = 0;
         for (int a = 0; a < static_cast<int>(queue_.size()); a++) {
             for (int b = a + 1; b < static_cast<int>(queue_.size()); b++) {
-                if (queue_[a].mode != queue_[b].mode) {
+                if (queue_[a].mode != queue_[b].mode || queue_[a].kind != queue_[b].kind) {
                     continue;
                 }
-                int gap = std::abs(queue_[a].seat.elo - queue_[b].seat.elo);
+                GameKind kind = queue_[a].kind;
+                int gap = std::abs(rating(queue_[a].seat, kind) - rating(queue_[b].seat, kind));
                 long long waited = now - std::min(queue_[a].since, queue_[b].since);
                 if (gap <= allowed_gap(waited) && (best_a < 0 || gap < best_gap)) {
                     best_a = a;
@@ -296,7 +310,7 @@ void Rooms::try_match()
         if (best_a >= 0) {
             QueueEntry first = queue_[best_a];
             QueueEntry second = queue_[best_b];
-            int game_id = new_game({first.seat, second.seat}, first.mode);
+            int game_id = new_game({first.seat, second.seat}, first.mode, first.kind);
             matched_[first.seat.account] = game_id;
             matched_[second.seat.account] = game_id;
             queue_.erase(queue_.begin() + best_b);
@@ -306,7 +320,7 @@ void Rooms::try_match()
     }
 }
 
-void Rooms::join_queue(const Seat& me, Mode mode)
+void Rooms::join_queue(const Seat& me, Mode mode, GameKind kind)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -318,7 +332,7 @@ void Rooms::join_queue(const Seat& me, Mode mode)
                 break;
             }
         }
-        queue_.push_back({me, mode, now_seconds()});
+        queue_.push_back({me, mode, now_seconds(), kind});
         try_match();
     }
     changed_.notify_all();
@@ -346,8 +360,12 @@ void Rooms::queue_json(int account, nlohmann::json& out)
     }
     for (const QueueEntry& entry : queue_) {
         if (entry.seat.account == account) {
+            int same_queue = 0;
+            for (const QueueEntry& other : queue_) {
+                same_queue += other.kind == entry.kind ? 1 : 0;
+            }
             out = {{"status", "waiting"}, {"waited", now_seconds() - entry.since},
-                   {"players_waiting", static_cast<int>(queue_.size())}};
+                   {"players_waiting", same_queue}, {"kind", kind_name(entry.kind)}};
             return;
         }
     }
@@ -381,14 +399,18 @@ bool Rooms::lobby_json(const std::string& code, long since, nlohmann::json& out)
 
 void Rooms::finish_game(OnlineGame& online)
 {
-    // Elo actuel de chaque joueur (il a pu changer pendant la partie)
+    // Elo actuel de chaque joueur (il a pu changer pendant la partie), celui
+    // du type de partie : global (classée), de saison, ou global pour une
+    // amicale (qui ne le change pas)
     std::vector<int> ratings;
     for (const Seat& seat : online.seats) {
         Account account;
-        ratings.push_back(store_.get_account(seat.account, account) ? account.elo : seat.elo);
+        ratings.push_back(store_.get_account(seat.account, account) ? rating(account, online.kind)
+                                                                    : rating(seat, online.kind));
     }
     std::vector<int> places = final_places(*online.game);
-    online.elo_changes = elo_changes(ratings, places);
+    online.elo_changes = online.kind == GameKind::Friendly ? std::vector<int>(ratings.size(), 0)
+                                                           : elo_changes(ratings, places);
     std::vector<GameResult> results;
     for (int i = 0; i < static_cast<int>(online.seats.size()); i++) {
         results.push_back({online.seats[i].account, places[i], online.game->players()[i].score(), ratings[i],
@@ -401,7 +423,7 @@ void Rooms::finish_game(OnlineGame& online)
     }
     nlohmann::json replay = {{"seed", online.seed}, {"mode", online.game->mode() == Mode::Classic ? "classique" : "rapide"},
                              {"names", names}, {"actions", online.actions}};
-    online.record_id = store_.record_game(online.game->mode(), results, replay.dump());
+    online.record_id = store_.record_game(online.game->mode(), online.kind, results, replay.dump());
     online.recorded = true;
     // Succès : seuls les nouveaux sont gardés pour l'écran de fin
     online.new_achievements.assign(online.seats.size(), {});
@@ -616,9 +638,10 @@ bool Rooms::game_json(int game_id, int account, long since, nlohmann::json& out)
     out["turn_seconds_left"] = online.game->is_over() ? 0 : (left < 0 ? 0 : left);
     out["missed"] = online.missed;
     out["elo_changes"] = online.elo_changes;
+    out["kind"] = kind_name(online.kind);
     out["seats"] = nlohmann::json::array();
     for (const Seat& seat : online.seats) {
-        out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", seat.elo}});
+        out["seats"].push_back({{"account", seat.account}, {"pseudo", seat.pseudo}, {"elo", rating(seat, online.kind)}});
     }
     out["achievements"] = online.new_achievements;
     out["replay_id"] = online.record_id;
@@ -773,7 +796,7 @@ void Rooms::live_games_json(nlohmann::json& out)
                                {"score", online.game->players()[p].score()}});
         }
         out.push_back({{"id", online.id}, {"mode", online.game->mode() == Mode::Classic ? "classique" : "rapide"},
-                       {"round", online.game->round()}, {"players", players}});
+                       {"round", online.game->round()}, {"players", players}, {"kind", kind_name(online.kind)}});
     }
 }
 
@@ -859,6 +882,19 @@ void Rooms::notifications_json(int account, long since, nlohmann::json& out)
             }
         }
     }
+}
+
+void Rooms::add_bot_event(nlohmann::json event)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        event["id"] = next_bot_event_++;
+        bot_events_.push_back(event);
+        if (bot_events_.size() > 200) {
+            bot_events_.erase(bot_events_.begin());
+        }
+    }
+    changed_.notify_all();
 }
 
 void Rooms::bot_events_json(long since, nlohmann::json& out)
