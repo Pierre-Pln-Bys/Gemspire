@@ -120,6 +120,9 @@ class LogicTests(unittest.TestCase):
         seasonal = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 12, "wins": 7, "rank": 2,
                     "season_elo": 1020, "season_games": 11, "season_rank": 3}
         self.assertIn("This season: 1020 Elo · 11 games · #3", format_profile(seasonal))
+        titled = dict(seasonal, title={"en": "Tycoon", "fr": "Magnat"})
+        self.assertIn("**Pierre** « Tycoon »", format_profile(titled))
+        self.assertIn("**Pierre** « Magnat »", format_profile(titled, "fr"))
         self.assertIn("Cette saison : 1020 Elo · 11 parties · 3ᵉ", format_profile(seasonal, "fr"))
         profile = {"found": True, "pseudo": "Pierre", "elo": 1043, "games": 10, "wins": 7, "rank": 2}
         self.assertIn("#2 on the leaderboard", format_profile(profile))

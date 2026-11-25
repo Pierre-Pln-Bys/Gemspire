@@ -129,6 +129,11 @@ Depuis l'accueil, « Jouer en ligne » :
    connexion au même compte (même pseudo, même Elo).
 8. **Spectateurs et rediffusions** : « En cours » pour regarder une partie,
    « Mes parties » pour revoir les siennes coup par coup.
+9. **Passe de saison** (gratuit) : 50 paliers par saison, une récompense
+   cosmétique tous les 2 paliers (thèmes, dos de cartes, jetons, cadres,
+   titres, avatars, réactions du chat). XP gagnée avec les parties en ligne,
+   le bonus du jour et 3 défis par semaine ; écran « Apparence » pour choisir
+   ce qu'on porte. Détails : [docs/passe-de-saison.md](docs/passe-de-saison.md).
 
 **Discord** :
 

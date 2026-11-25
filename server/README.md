@@ -122,7 +122,7 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/games/ID?since=V` | état de la partie vu par ce joueur (pioches et réservées des autres cachées) |
 | POST | `/games/ID/move` | un coup (voir `src/move_json.hpp`) |
 | POST | `/games/ID/forfeit` | abandon (classé dernier ; Elo perdu si la partie est classée ou de saison) |
-| POST | `/games/ID/chat` | `{"text": "..."}` (1 à 120 caractères) ou `{"reaction": 0..5}` ; 1 message par seconde, 6 par 20 s |
+| POST | `/games/ID/chat` | `{"text": "..."}` (1 à 120 caractères), `{"reaction": 0..5}` ou `{"reaction_code": "s1.reaction.0"}` (réaction du passe possédée) ; 1 message par seconde, 6 par 20 s |
 | GET | `/games/live` | parties en cours à regarder (20 au plus, les mieux classées d'abord) ; un non-joueur qui lit `/games/ID` est spectateur (tout caché) |
 | GET | `/me/games` | mes 15 dernières parties (`kind` : `friendly`, `ranked`, `season` ; `replay` : rediffusion disponible) |
 | GET | `/replays/ID` | rediffusion : `seed`, `mode`, `names`, `actions` (`move`, `skip`, `forfeit`), rejouée par `replay_game` |
@@ -131,6 +131,8 @@ Authentification : en-tête `Authorization: Bearer <jeton>`.
 | GET | `/friends` | amis (`relation` : `friend`, `incoming`, `outgoing` ; `status` des amis : `playing`, `online`, `offline`) |
 | POST | `/friends/add` · `/friends/remove` | `{"pseudo": "..."}` : demande ou acceptation, retrait |
 | POST | `/friends/challenge` | `{"pseudo", "mode"}` : défi amical à un ami (salon de 2, notification `challenge` avec le code) → `{"code"}` |
+| GET | `/me/pass` | passe de saison : `season`, `xp`, `tier`, `owned` (codes des objets), `equipped` (sorte → code), `challenges` (code, progress, target, done, xp), `week_ends_at` |
+| POST | `/me/equip` | `{"kind": "theme"\|"cardback"\|"tokens"\|"frame"\|"title"\|"avatar", "code": "..."}` (code vide : apparence normale) ; seulement un objet possédé |
 | GET | `/leaderboard` | `players` (50 meilleurs Elo globaux), `season_players` (50 meilleurs de la saison, au moins `season_min_games` parties), `season`, `season_ends_at` |
 | POST | `/me/link` | `{"provider": "google"\|"discord"}` → `{"login"}` : ouvrir ensuite `/auth/<provider>/start?login=…` ; `/auth/poll` répond `done` + `linked` (pas de nouveau jeton) |
 

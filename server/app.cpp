@@ -163,6 +163,17 @@ static json look_json(Store& store, int id)
     return look;
 }
 
+// Titre du passe porté, en anglais et en français ({} : aucun) pour le bot
+static json title_names(Store& store, int id)
+{
+    std::map<std::string, std::string> worn = store.equipped(id);
+    Cosmetic title;
+    if (worn.count("title") == 0 || !find_cosmetic(worn["title"], title)) {
+        return json::object();
+    }
+    return {{"en", cosmetic_name(title, Lang::English)}, {"fr", cosmetic_name(title, Lang::French)}};
+}
+
 static json account_json(Store& store, int id)
 {
     Account account;
@@ -183,6 +194,7 @@ static json account_json(Store& store, int id)
             {"season_wins", account.season_wins},
             {"season_rank", store.season_rank_of(id)},
             {"look", look_json(store, id)},
+            {"title", title_names(store, id)},
             {"achievements", store.achievements(id).size()},
             {"badges", badges_json(store, id)},
             {"banned", account.banned()},
