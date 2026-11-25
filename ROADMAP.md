@@ -204,7 +204,9 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - [x] Recherche de partie en deux files : Classé (Elo global) et Saison.
 - [x] Parties amicales (salons, défis) sans Elo ; défi d'un ami depuis la
   liste d'amis.
-- [ ] SEO du site.
+- [x] SEO du site : titre et description par page, adresses par langue
+  (canonical, hreflang), aperçu de partage (Open Graph), fiche `VideoGame`,
+  `sitemap.xml`.
 - [ ] Passe de saison : à cadrer (voir plus bas).
 
 ## Plus tard
@@ -212,9 +214,6 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 - Signature des exécutables Windows (plus d'avertissement SmartScreen) :
   reportée (l'offre gratuite de SignPath Foundation exige un code source
   public, ce qui n'est pas souhaité pour l'instant).
-- **SEO du site** : balises de titre et de description par page, données
-  structurées (`VideoGame`), `sitemap.xml`, images de partage (Open Graph),
-  liens entre les versions anglaise et française (`hreflang`).
 - **Publication sur des boutiques** : itch.io d'abord (simple, gratuit, jeu
   navigateur et téléchargements), puis Steam (frais d'inscription, page
   boutique, SDK facultatif).

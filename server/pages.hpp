@@ -16,7 +16,11 @@ struct SiteInfo {
     std::string contact_email;    // SPLENDOR_CONTACT_EMAIL ("" : pas d'adresse affichée)
     std::string discord_invite;   // SPLENDOR_DISCORD_INVITE (lien d'invitation du serveur Discord)
     bool web_game = false;        // le jeu dans le navigateur est installé (/play)
+    std::string public_url;       // adresse publique du site (liens absolus : canonical, partage, sitemap)
 };
+
+// Plan du site pour les moteurs de recherche (pages en anglais et en français)
+std::string sitemap_xml(const SiteInfo& site);
 
 // Langue d'une page : ?lang=fr|en, sinon l'en-tête Accept-Language du
 // navigateur (français s'il commence par « fr »), sinon `fallback`

@@ -59,10 +59,27 @@ static std::string tokens_html()
            "<span class=\"t red\">■</span><span class=\"t black\">⬢</span></div>";
 }
 
-// Cadre commun : en-tête, menu, choix de la langue, pied de page
-static std::string layout(const SiteInfo& site, Lang lang, const std::string& title, const std::string& current,
-                          const std::string& body)
+// Description par défaut d'une page (moteurs de recherche, aperçus de partage)
+static std::string default_description(Lang lang)
 {
+    return T(lang,
+             "Gemspire, a free board game of gems and nobles: 2 to 4 players, against the computer or online with "
+             "seasons and an Elo leaderboard. In your browser, on Windows or Linux.",
+             "Gemspire, jeu de plateau gratuit de gemmes et de nobles : 2 à 4 joueurs, contre l'ordinateur ou en "
+             "ligne avec saisons et classement Elo. Dans le navigateur, sur Windows ou Linux.");
+}
+
+// Cadre commun : en-tête, menu, choix de la langue, pied de page. Dans
+// l'en-tête : titre et description, adresse officielle de la page (une par
+// langue, avec ?lang=), lien vers l'autre langue (hreflang) et aperçu de
+// partage (Open Graph). `current` vide : page d'erreur, pas indexée.
+static std::string layout(const SiteInfo& site, Lang lang, const std::string& title, const std::string& current,
+                          const std::string& body, const std::string& description = "")
+{
+    std::string full_title = title.rfind("Gemspire", 0) == 0 ? title : title + " · Gemspire";
+    std::string summary = html_escape(description.empty() ? default_description(lang) : description);
+    std::string path = current.empty() ? "/" : current;
+    std::string canonical = site.public_url + href(path, lang);
     std::ostringstream out;
     out << "<!doctype html><html lang=\"" << T(lang, "en", "fr")
         << "\"><head><meta charset=\"utf-8\">"
@@ -70,12 +87,25 @@ static std::string layout(const SiteInfo& site, Lang lang, const std::string& ti
            "<link rel=\"icon\" href=\"/favicon.ico\" sizes=\"48x48\">"
            "<link rel=\"apple-touch-icon\" href=\"/apple-touch-icon.png\">"
            "<title>"
-        << html_escape(title) << " · Gemspire</title><meta name=\"description\" content=\""
-        << T(lang, "Gemspire online: a game of gems and nobles, 2 to 4 players, against the computer or online with "
-                   "an Elo leaderboard.",
-             "Gemspire en ligne : jeu de gemmes et de nobles, 2 à 4 joueurs, contre l'ordinateur ou en ligne avec "
-             "classement Elo.")
-        << "\"><style>"
+        << html_escape(full_title) << "</title><meta name=\"description\" content=\"" << summary << "\">";
+    if (current.empty()) {
+        out << "<meta name=\"robots\" content=\"noindex\">";
+    } else {
+        out << "<link rel=\"canonical\" href=\"" << canonical << "\">"
+            << "<link rel=\"alternate\" hreflang=\"en\" href=\"" << site.public_url << href(path, Lang::English) << "\">"
+            << "<link rel=\"alternate\" hreflang=\"fr\" href=\"" << site.public_url << href(path, Lang::French) << "\">"
+            << "<link rel=\"alternate\" hreflang=\"x-default\" href=\"" << site.public_url << path << "\">";
+    }
+    out << "<meta property=\"og:type\" content=\"website\"><meta property=\"og:site_name\" content=\"Gemspire\">"
+        << "<meta property=\"og:title\" content=\"" << html_escape(full_title) << "\">"
+        << "<meta property=\"og:description\" content=\"" << summary << "\">"
+        << "<meta property=\"og:url\" content=\"" << canonical << "\">"
+        << "<meta property=\"og:image\" content=\"" << site.public_url << "/og-image.jpg\">"
+        << "<meta property=\"og:image:width\" content=\"1024\"><meta property=\"og:image:height\" content=\"576\">"
+        << "<meta property=\"og:locale\" content=\"" << T(lang, "en_US", "fr_FR") << "\">"
+        << "<meta name=\"twitter:card\" content=\"summary_large_image\">"
+        << "<meta name=\"theme-color\" content=\"#0f3d28\">"
+        << "<style>"
            ":root{--felt:#0f3d28;--felt2:#165636;--gold:#ffd140;--text:#eef3ef;--soft:#b9d2c2}"
            "*{box-sizing:border-box}"
            "body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--text);"
@@ -244,7 +274,21 @@ std::string page_home(const SiteInfo& site, Lang lang)
              << "</p><a class=\"button\" href=\"" << html_escape(site.discord_invite) << "\">"
              << T(lang, "Join the Discord", "Rejoindre le Discord") << "</a></section>";
     }
-    return layout(site, lang, T(lang, "Home", "Accueil"), "/", body.str());
+    // Données structurées : fiche « jeu vidéo » pour les moteurs de recherche
+    std::string url = site.public_url + "/";
+    body << "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"VideoGame\","
+            "\"name\":\"Gemspire\",\"url\":\"" << url << "\",\"image\":\"" << site.public_url << "/og-image.jpg\","
+         << "\"description\":\"" << default_description(lang) << "\","
+         << "\"genre\":[\"Board game\",\"Strategy\"],\"gamePlatform\":[\"Web browser\",\"Windows\",\"Linux\"],"
+            "\"operatingSystem\":\"Windows, Linux, web browser\",\"applicationCategory\":\"Game\","
+            "\"playMode\":[\"SinglePlayer\",\"MultiPlayer\"],"
+            "\"numberOfPlayers\":{\"@type\":\"QuantitativeValue\",\"minValue\":2,\"maxValue\":4},"
+            "\"inLanguage\":[\"en\",\"fr\"],"
+            "\"offers\":{\"@type\":\"Offer\",\"price\":\"0\",\"priceCurrency\":\"EUR\"}}</script>";
+    return layout(site, lang,
+                  T(lang, "Gemspire — free online board game of gems and nobles",
+                    "Gemspire — jeu de plateau gratuit en ligne : gemmes et nobles"),
+                  "/", body.str());
 }
 
 // Date (jour, mois, année) d'un instant donné en temps UTC, sans fonction du
@@ -340,7 +384,11 @@ std::string page_leaderboard(const SiteInfo& site, Lang lang, const std::vector<
         ranking_table(body, lang, players, false);
     }
     body << "</div>";
-    return layout(site, lang, T(lang, "Leaderboard", "Classement"), "/leaderboard", body.str());
+    return layout(site, lang, T(lang, "Leaderboard", "Classement"), "/leaderboard", body.str(),
+                  T(lang, "Gemspire leaderboard: the ranking of the current season and the global Elo ranking of online "
+                          "players.",
+                    "Classement Gemspire : le classement de la saison en cours et le classement Elo global des "
+                    "joueurs en ligne."));
 }
 
 std::string page_terms(const SiteInfo& site, Lang lang)
@@ -404,7 +452,9 @@ std::string page_terms(const SiteInfo& site, Lang lang)
          << T(lang, "privacy policy", "politique de confidentialité") << "</a>.</p><h2>"
          << T(lang, "8. Contact", "8. Contact") << "</h2><p>" << T(lang, "For any question: ", "Pour toute question : ")
          << contact_html(site, lang) << ".</p></div>";
-    return layout(site, lang, T(lang, "Terms of use", "Conditions d'utilisation"), "/terms", body.str());
+    return layout(site, lang, T(lang, "Terms of use", "Conditions d'utilisation"), "/terms", body.str(),
+                  T(lang, "Terms of use of Gemspire, the game, its website and its online service.",
+                    "Conditions d'utilisation de Gemspire : le jeu, son site et son service en ligne."));
 }
 
 std::string page_privacy(const SiteInfo& site, Lang lang)
@@ -598,7 +648,10 @@ std::string page_privacy(const SiteInfo& site, Lang lang)
               "Si cette politique change, la nouvelle version est publiée sur cette page avec sa date. Les "
               "changements importants sont aussi annoncés dans le jeu et sur le serveur Discord.")
          << "</p></div>";
-    return layout(site, lang, T(lang, "Privacy policy", "Politique de confidentialité"), "/privacy", body.str());
+    return layout(site, lang, T(lang, "Privacy policy", "Politique de confidentialité"), "/privacy", body.str(),
+                  T(lang, "How Gemspire handles your data: Discord or Google sign-in, games, leaderboard, your rights.",
+                    "Comment Gemspire traite vos données : connexion Discord ou Google, parties, classement, vos "
+                    "droits."));
 }
 
 std::string page_not_found(const SiteInfo& site, Lang lang)
@@ -607,4 +660,32 @@ std::string page_not_found(const SiteInfo& site, Lang lang)
                   "<h1>" + T(lang, "Page not found", "Page introuvable") + "</h1><p>" +
                       T(lang, "This page doesn't exist. ", "Cette page n'existe pas. ") + "<a href=\"" +
                       href("/", lang) + "\">" + T(lang, "Back to home", "Retour à l'accueil") + "</a>.</p>");
+}
+
+std::string sitemap_xml(const SiteInfo& site)
+{
+    std::vector<std::string> paths = {"/", "/leaderboard", "/terms", "/privacy"};
+    if (site.web_game) {
+        paths.insert(paths.begin() + 1, "/play");
+    }
+    std::ostringstream out;
+    out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+           "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">\n";
+    for (const std::string& path : paths) {
+        // /play est le jeu lui-même (une seule page, sans langue dans l'adresse)
+        if (path == "/play") {
+            out << "<url><loc>" << site.public_url << "/play/</loc></url>\n";
+            continue;
+        }
+        for (Lang lang : {Lang::English, Lang::French}) {
+            out << "<url><loc>" << site.public_url << href(path, lang) << "</loc>";
+            for (Lang other : {Lang::English, Lang::French}) {
+                out << "<xhtml:link rel=\"alternate\" hreflang=\"" << T(other, "en", "fr") << "\" href=\""
+                    << site.public_url << href(path, other) << "\"/>";
+            }
+            out << "</url>\n";
+        }
+    }
+    out << "</urlset>\n";
+    return out.str();
 }

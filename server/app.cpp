@@ -185,6 +185,8 @@ static void reply_site(httplib::Response& response, const std::string& html, int
     response.set_header("X-Content-Type-Options", "nosniff");
     response.set_header("Referrer-Policy", "no-referrer");
     response.set_header("Cache-Control", "public, max-age=60");
+    // Sans ?lang=, la langue dépend du navigateur (Accept-Language)
+    response.set_header("Vary", "Accept-Language");
     // HSTS : le navigateur reste en HTTPS (ignoré sur une connexion en clair)
     response.set_header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     response.set_content(html, "text/html; charset=utf-8");
@@ -1549,7 +1551,7 @@ void ServerApp::setup_routes(httplib::Server& server)
 
     // --- Site web, en anglais et en français (?lang=, sinon langue du navigateur).
     //     Les adresses françaises d'origine restent valables.
-    SiteInfo site = {config_.contact_email, config_.discord_invite, false};
+    SiteInfo site = {config_.contact_email, config_.discord_invite, false, config_.public_url};
     // Jeu dans le navigateur : fichiers de `make web` (index.html, .js, .wasm)
     if (server.set_mount_point("/play/", config_.web_dir)) {
         site.web_game = true;
@@ -1633,8 +1635,20 @@ void ServerApp::setup_routes(httplib::Server& server)
                              "image/png");
         response.set_header("Cache-Control", "public, max-age=604800");
     });
-    server.Get("/robots.txt", [](const httplib::Request&, httplib::Response& response) {
-        response.set_content("User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\n",
-                             "text/plain");
+    // Image d'aperçu des liens partagés (Open Graph)
+    server.Get("/og-image.jpg", [](const httplib::Request&, httplib::Response& response) {
+        response.set_content(reinterpret_cast<const char*>(OG_IMAGE_JPG), sizeof(OG_IMAGE_JPG), "image/jpeg");
+        response.set_header("Cache-Control", "public, max-age=604800");
+    });
+    // Moteurs de recherche : pages du site seulement, plan du site
+    std::string robots = "User-agent: *\nDisallow: /auth/\nDisallow: /games/\nDisallow: /bot/\nDisallow: /api/\n"
+                         "Disallow: /panel-admin\nDisallow: /me\nDisallow: /lobbies\nDisallow: /matchmaking\n"
+                         "Disallow: /friends\nDisallow: /replays/\nSitemap: "
+                         + config_.public_url + "/sitemap.xml\n";
+    server.Get("/robots.txt", [robots](const httplib::Request&, httplib::Response& response) {
+        response.set_content(robots, "text/plain");
+    });
+    server.Get("/sitemap.xml", [site](const httplib::Request&, httplib::Response& response) {
+        response.set_content(sitemap_xml(site), "application/xml");
     });
 }

@@ -19,6 +19,8 @@ All notable changes to the project. Format based on
   global ranking.
 - **Challenge a friend**: a "Challenge" button in the friends list creates a
   friendly 2-player lobby; your friend gets a notification with the code.
+- **Website**: better search engine and link previews (page titles and
+  descriptions, English and French addresses, share image, sitemap).
 
 ### Changed
 - Games in a private lobby (code, Discord voice channel, Activity,

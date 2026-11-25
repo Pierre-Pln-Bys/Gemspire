@@ -129,6 +129,22 @@ int main()
         auto touch_icon = old_game.Get("/apple-touch-icon.png");
         assert(touch_icon && touch_icon->status == 200 && touch_icon->body.substr(1, 3) == "PNG");
         assert(old_game.Get("/")->body.find("/favicon.ico") != std::string::npos);
+        // Référencement : adresse officielle par langue, hreflang, aperçu de partage,
+        // fiche « jeu vidéo », plan du site et robots.txt
+        std::string home = old_game.Get("/?lang=fr")->body;
+        assert(home.find("<link rel=\"canonical\" href=\"" + config.public_url + "/?lang=fr\">") != std::string::npos);
+        assert(home.find("hreflang=\"en\" href=\"" + config.public_url + "/?lang=en\"") != std::string::npos);
+        assert(home.find("hreflang=\"x-default\"") != std::string::npos);
+        assert(home.find("og:image\" content=\"" + config.public_url + "/og-image.jpg") != std::string::npos);
+        assert(home.find("\"@type\":\"VideoGame\"") != std::string::npos);
+        auto og = old_game.Get("/og-image.jpg");
+        assert(og && og->status == 200 && og->get_header_value("Content-Type") == "image/jpeg"
+               && og->body.substr(0, 3) == "\xFF\xD8\xFF");
+        std::string sitemap = old_game.Get("/sitemap.xml")->body;
+        assert(sitemap.find("<loc>" + config.public_url + "/leaderboard?lang=fr</loc>") != std::string::npos
+               && sitemap.find("<loc>" + config.public_url + "/play/</loc>") != std::string::npos);
+        assert(old_game.Get("/robots.txt")->body.find("Sitemap: " + config.public_url + "/sitemap.xml")
+               != std::string::npos);
         // /play : redirection vers /play/ (paramètres gardés) ; dans l'Activité
         // Discord (frame_id), la page est servie directement, sans redirection
         old_game.set_follow_location(false);
