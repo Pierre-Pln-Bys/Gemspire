@@ -13,6 +13,7 @@
 #include "../src/i18n.hpp"
 #include "../src/rules.hpp"
 #include "../src/save.hpp"
+#include "../src/season_pass.hpp"
 
 static void test_data()
 {
@@ -488,6 +489,75 @@ static void test_achievements()
     assert(find_achievement("inconnu") == nullptr);
 }
 
+// Passe de saison : 25 récompenses par saison, codes retrouvés, noms, XP, défis
+static void test_season_pass()
+{
+    for (int season = 1; season <= 30; season++) {
+        std::vector<std::pair<int, Cosmetic>> rewards = season_rewards(season);
+        assert(rewards.size() == PASS_TIERS / 2);
+        int counts[COSMETIC_KIND_COUNT] = {0, 0, 0, 0, 0, 0, 0};
+        for (const auto& reward : rewards) {
+            assert(reward.first % 2 == 0 && reward.first >= 2 && reward.first <= PASS_TIERS);
+            Cosmetic found;
+            assert(find_cosmetic(reward.second.code, found) && found.code == reward.second.code);
+            assert(found.color.r == reward.second.color.r && found.kind == reward.second.kind);
+            assert(!cosmetic_name(found, Lang::English).empty() && !cosmetic_name(found, Lang::French).empty());
+            counts[static_cast<int>(found.kind)]++;
+            // Deux objets d'une même saison n'ont jamais le même code
+            for (const auto& other : rewards) {
+                assert(&other == &reward || other.second.code != reward.second.code);
+            }
+        }
+        for (int count : counts) {
+            assert(count >= 2);  // toutes les sortes d'objets à chaque saison
+        }
+    }
+    Cosmetic cosmetic;
+    assert(pass_reward(1, 10, cosmetic) && cosmetic.kind == CosmeticKind::Theme && cosmetic.code == "s1.theme.0");
+    assert(!pass_reward(1, 3, cosmetic) && !pass_reward(1, 52, cosmetic) && !pass_reward(0, 2, cosmetic));
+    for (const char* bad : {"", "s1", "s1.theme", "s0.theme.0", "s1.hat.0", "s1.theme.9", "s01.theme.0",
+                            "s1.theme.00", "s1.theme.-1", "x1.theme.0", "s1.theme.0 "}) {
+        assert(!find_cosmetic(bad, cosmetic));
+    }
+    // Les objets d'une saison diffèrent de ceux de la suivante (au moins par la couleur ou le nom)
+    Cosmetic s1, s2;
+    assert(pass_reward(1, 50, s1) && pass_reward(2, 50, s2));
+    assert(s1.code != s2.code && cosmetic_name(s1, Lang::English) != cosmetic_name(s2, Lang::English));
+    assert(pass_tier(0) == 0 && pass_tier(PASS_XP_PER_TIER - 1) == 0 && pass_tier(PASS_XP_PER_TIER) == 1
+           && pass_tier(1000000) == PASS_TIERS);
+    assert(game_xp("ranked", true, false) == 150 && game_xp("season", false, false) == 100
+           && game_xp("friendly", true, false) == 50 && game_xp("ranked", true, true) == 0);
+    // Semaines : lundi 0 h UTC ; 23/11/2026 est un lundi
+    assert(week_number(1795392000) == week_number(1795392000 + 7 * 86400 - 1));
+    assert(week_number(1795392000) == week_number(1795392000 - 1) + 1);
+    assert(week_end(week_number(1795392000)) == 1795392000 + 7 * 86400);
+    for (int week = 2900; week < 2960; week++) {
+        std::vector<const ChallengeInfo*> challenges = weekly_challenges(week);
+        assert(challenges.size() == PASS_CHALLENGES_PER_WEEK);
+        assert(challenges[0] != challenges[1] && challenges[1] != challenges[2] && challenges[0] != challenges[2]);
+        for (const ChallengeInfo* challenge : challenges) {
+            assert(find_challenge(challenge->code) == challenge);
+            assert(challenge_text(*challenge, Lang::French).find("{0}") == std::string::npos);
+        }
+    }
+    // Avancée des défis sur une partie jouée par l'IA
+    Game game({"Alice", "Bob"}, 5, Mode::Quick);
+    game.set_controller(0, Controller::AiMedium);
+    game.set_controller(1, Controller::AiMedium);
+    while (!game.is_over()) {
+        assert(ai_play(game).empty());
+    }
+    int winner = final_places(game)[0] == 0 ? 0 : 1;
+    assert(challenge_progress(*find_challenge("play_online"), game, 0, "friendly", false) == 1);
+    assert(challenge_progress(*find_challenge("win_season"), game, winner, "season", true) == 1);
+    assert(challenge_progress(*find_challenge("win_season"), game, winner, "ranked", true) == 0);
+    assert(challenge_progress(*find_challenge("friendly"), game, 1, "friendly", false) == 1);
+    assert(challenge_progress(*find_challenge("cards_blue"), game, 0, "ranked", false)
+           == game.players()[0].bonuses()[1]);
+    assert(challenge_progress(*find_challenge("nobles"), game, winner, "ranked", true)
+           == static_cast<int>(game.players()[winner].nobles.size()));
+}
+
 int main()
 {
     test_data();
@@ -503,6 +573,7 @@ int main()
     test_timeout_and_forfeit();
     test_i18n();
     test_achievements();
+    test_season_pass();
     std::cout << "Tous les tests passent.\n";
     return 0;
 }
