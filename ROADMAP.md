@@ -218,16 +218,20 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 ## Plus tard
 
 - **IA très difficile et impossible** (contre l'ordinateur) : dans les deux
-  cas, l'IA connaît le chemin le plus rapide vers la victoire.
-  - **Très difficile** : elle laisse au joueur **2 façons** de gagner.
-  - **Impossible** : elle ne lui en laisse qu'**une seule** ; disponible
-    **uniquement en partie classique** (pas en partie rapide).
+  cas, l'IA connaît et suit le chemin le plus rapide vers la victoire, sauf à
+  quelques **coups de battement** : des tours où elle relâche volontairement
+  sa pression et laisse une chance au joueur (une « façon de gagner »).
+  - **Très difficile** : **2** coups de battement par partie.
+  - **Impossible** : **1 seul** coup de battement ; disponible **uniquement en
+    partie classique** (pas en partie rapide).
+- **Publication sur itch.io** : page du jeu (description, captures, image de
+  couverture), jeu jouable dans le navigateur (archive web) et
+  téléchargements Windows / Linux de chaque release.
 - Signature des exécutables Windows (plus d'avertissement SmartScreen) :
   reportée (l'offre gratuite de SignPath Foundation exige un code source
   public, ce qui n'est pas souhaité pour l'instant).
-- **Publication sur des boutiques** : itch.io d'abord (simple, gratuit, jeu
-  navigateur et téléchargements), puis Steam (frais d'inscription, page
-  boutique, SDK facultatif).
+- **Publication sur Steam** (après itch.io) : frais d'inscription, page
+  boutique, SDK facultatif.
 - **Revendiquer le jeu sur Discord** (*Claim Your Game*) : possible seulement
   quand Discord détecte Gemspire comme jeu publié (assez de joueurs, ou
   sortie sur une boutique comme itch.io / Steam).
