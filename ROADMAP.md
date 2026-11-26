@@ -217,6 +217,11 @@ Suivi des tâches : [GitHub Project « Gemspire — Roadmap v3 »](https://githu
 
 ## Plus tard
 
+- **IA très difficile et impossible** (contre l'ordinateur) : dans les deux
+  cas, l'IA connaît le chemin le plus rapide vers la victoire.
+  - **Très difficile** : elle laisse au joueur **2 façons** de gagner.
+  - **Impossible** : elle ne lui en laisse qu'**une seule** ; disponible
+    **uniquement en partie classique** (pas en partie rapide).
 - Signature des exécutables Windows (plus d'avertissement SmartScreen) :
   reportée (l'offre gratuite de SignPath Foundation exige un code source
   public, ce qui n'est pas souhaité pour l'instant).
